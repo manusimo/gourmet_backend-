@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Employee" ADD COLUMN     "birthDate" TIMESTAMP(3) NOT NULL DEFAULT timestamp '1996-02-02 00:00:00',
+ADD COLUMN     "phoneNumber" TEXT NOT NULL DEFAULT '+56912345678';

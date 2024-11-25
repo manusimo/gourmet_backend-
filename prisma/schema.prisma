@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int      @id @default(autoincrement())
+  email            String   @unique
+  password         String
+  userType         String
+  name             String  @default("Juanito")
+  phoneNumber      String  @default("+56976212644")
+  role             String   @default("admin")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  employee         Employee?
+  restaurant       Restaurant?
+  sentMessages     Message[]      @relation("MessageSender")
+  receivedMessages Message[]      @relation("MessageReceiver")
+  restaurantUsers  RestaurantUser[] // Add this line to establish the opposite relation
+}
+
+model TokenDenyList {
+  id            Int      @id @default(autoincrement())
+  token         String   @unique
+  invalidatedAt DateTime @default(now())
+}
+
+model Employee {
+  id           Int         @id @default(autoincrement())
+  name         String
+  country      String
+  location     String
+  position     String
+  genre        String  @default("not declared")
+  civilState   String  @default("single")
+  aboutMe      String
+  schedule     String
+  region       String  @default("No hay")
+  comuna       String  @default("No hay")
+  available    String
+  profileImageUrl String  @default("No photo")
+  period       String  @default("No mencionado")
+  birthDate    DateTime @default(dbgenerated("timestamp '1996-02-02 00:00:00'"))
+  phoneNumber  String @default("+56912345678")
+  yearsOfExperience String @default("No experience")
+
+  skills       String[]    
+  userId       Int         @unique
+  user         User        @relation(fields: [userId], references: [id])
+  conversations Conversation[]
+  talentPools     TalentPool[]
+  favouriteJobs      FavouriteJob[]
+  applications Application[]
+  experiences  Experience[]
+  educations   Education[]
+}
+
+model Experience {
+  id           Int      @id @default(autoincrement())
+  companyName  String
+  description  String
+  startDate    DateTime
+  endDate      DateTime
+  role         String @default("No position")
+  employeeId   Int
+  employee     Employee @relation(fields: [employeeId], references: [id])
+}
+
+model Education {
+  id           Int         @id @default(autoincrement())
+  institution  String
+  startDate    DateTime
+  study        String      @default("")
+  endDate      DateTime
+  description  String
+  employeeId   Int
+  employee     Employee    @relation(fields: [employeeId], references: [id])
+}
+
+model Restaurant {
+  id                   Int       @id @default(autoincrement())
+  name                 String 
+  specialty            String
+  format               String
+  region               String   @default("No hay") 
+  comuna               String   @default("No hay")
+  description          String   @default("No description to show")
+  rut                  String   @default("No rut to show")
+  legalName            String   @default("No legal name to show")
+  numberOfRestaurants  Int
+  profileImageUrl String   @default("No photo")
+  workers              String
+  weeklyAverageClients String
+  benefits             String[]
+  locations            Location[]
+  jobOffers            JobOffer[]
+  userId               Int       @unique
+  user                 User      @relation(fields: [userId], references: [id])
+  restaurantUsers      RestaurantUser[] 
+  talentPools     TalentPool[]
+}
+
+model Location {
+  id           Int        @id @default(autoincrement())
+  address      String
+  longitude    String     @default("0")  
+  latitude     String     @default("0")  
+  restaurantId Int
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model JobOffer {
+  id                 Int              @id @default(autoincrement())
+  position           String
+  location           String
+  schedule           String
+  period             String           @default("Sin información")
+  contract           String
+  salary             Int              @default(0)
+  tips               Boolean          @default(true)
+  functions          String           @default("No functions to show")
+  requirements       String           @default("No requirements to show")
+  vacancies          Int
+  yearsOfExperience  Int
+  description        String
+  questions          Question[]
+  restaurantId       Int
+  restaurant         Restaurant       @relation(fields: [restaurantId], references: [id])
+  applications       Application[]
+  conversations      Conversation[]
+  favouriteJobs      FavouriteJob[]
+  createdAt  DateTime @default(now())
+  restaurantUserId   Int?
+  restaurantUser     RestaurantUser?  @relation(fields: [restaurantUserId], references: [id])
+}
+
+model Question {
+  id          Int     @id @default(autoincrement())
+  question    String  
+  jobOfferId  Int    
+  jobOffer    JobOffer @relation(fields: [jobOfferId], references: [id])
+  answers     Answer[]
+}
+
+model Application {
+  id            Int       @id @default(autoincrement())
+  jobPostId     Int
+  employeeId    Int
+  jobPost       JobOffer   @relation(fields: [jobPostId], references: [id])
+  employee      Employee   @relation(fields: [employeeId], references: [id])
+  answers       Answer[]
+}
+
+model Answer {
+  id            Int       @id @default(autoincrement())
+  questionId    Int
+  answer        String
+  application   Application @relation(fields: [applicationId], references: [id])
+  applicationId Int
+  question      Question @relation(fields: [questionId], references: [id])
+}
+
+model Conversation {
+  id               Int            @id @default(autoincrement())
+  messages         Message[]
+  employeeId       Int
+  restaurantUserId Int 
+  type             String         @default("none")
+  jobOfferId       Int?
+  jobOffer         JobOffer?      @relation(fields: [jobOfferId], references: [id])
+  
+  talentPoolId     Int?
+  talentPool       TalentPool?    @relation(fields: [talentPoolId], references: [id])
+
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  restaurantUser   RestaurantUser @relation(fields: [restaurantUserId], references: [id])
+}
+
+model Message {
+  id              Int          @id @default(autoincrement())
+  text            String
+  createdAt       DateTime     @default(now())
+  senderUserId    Int
+  receiverUserId  Int
+  conversationId  Int
+  senderUser      User         @relation(name: "MessageSender", fields: [senderUserId], references: [id])
+  receiverUser    User         @relation(name: "MessageReceiver", fields: [receiverUserId], references: [id])
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+}
+
+model RestaurantUser {
+  id            Int            @id @default(autoincrement())
+  userId        Int
+  restaurantId  Int
+  role          String         @default("staff")
+  user          User           @relation(fields: [userId], references: [id])
+  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id])
+  conversations Conversation[]
+  addedTalent   TalentPool[]   @relation("AddedByUser") 
+  jobOffers     JobOffer[]
+}
+
+model TalentPool {
+  id             Int           @id @default(autoincrement())
+  employeeId     Int
+  restaurantId   Int
+  addedByUserId  Int?
+  status         String       @default("pendent")
+  conversations      Conversation[]
+  createdAt      DateTime     @default(now())
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  restaurant     Restaurant   @relation(fields: [restaurantId], references: [id])
+  addedByUser    RestaurantUser? @relation("AddedByUser", fields: [addedByUserId], references: [id]) 
+}
+
+model FavouriteJob {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  jobOfferId  Int?
+  createdAt  DateTime  @default(now())
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  jobOffer   JobOffer?     @relation(fields: [jobOfferId], references: [id])
+}
+
+
+
+
+
+
+
+
+

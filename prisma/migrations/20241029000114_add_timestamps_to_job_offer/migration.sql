@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Employee" ALTER COLUMN "birthDate" SET DEFAULT timestamp '1996-02-02 00:00:00';
+
+-- AlterTable
+ALTER TABLE "JobOffer" ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
