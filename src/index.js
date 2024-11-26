@@ -15,7 +15,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 const corsOptions = {
-  origin: 'http://localhost:3001',
+  origin: process.env.FRONTEND_URL,
   optionsSuccessStatus: 200,
   credentials: true,
 };
@@ -31,7 +31,7 @@ app.use('/api', applicationRoutes);
 app.use('/api', chatRoutes)
 app.use('/api', poolRoutes)
 
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT; 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
