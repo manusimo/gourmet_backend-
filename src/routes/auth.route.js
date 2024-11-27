@@ -62,9 +62,10 @@ router.post('/signup', async (req, res) => {
 
     res.cookie('manu', token, {
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === 'production' ? 'Strict' : 'Lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'None',
+      secure: true, 
     });
+
     console.log('Setting cookie with token:', token);
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
@@ -132,8 +133,8 @@ router.post('/signin', async (req, res) => {
 
     res.cookie('manu', token, {
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === 'production' ? 'Strict' : 'Lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'None',
+      secure: true,
     });
 
     res.status(200).json({ message: 'Signin successful', userType: user.userType });
