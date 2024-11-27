@@ -146,22 +146,34 @@ router.post('/signin', async (req, res) => {
 
 router.post('/logout', async (req, res) => {
   try {
-    const token = req.cookies.manu;
+    // Log all available cookies to see what's sent with the request
+    console.log('Available cookies:', req.cookies);
 
-    console.log('logging out', token)
+    const token = req.cookies.manu;
+    console.log('Logging out user with token:', token);
 
     if (!token) {
+      console.log('No token found, user is not logged in.');
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // Clear the cookies
+    console.log('Clearing "manu" cookie');
     res.clearCookie('manu');
-    return res.status(200).json({ message: 'Logout successful' });
+    
+    console.log('Clearing "userInfo" cookie');
+    res.clearCookie('userInfo');
 
+    // Log the response to confirm the cookies have been cleared
+    console.log('Cookies cleared, sending logout response.');
+
+    return res.status(200).json({ message: 'Logout successful' });
   } catch (error) {
-    console.error(error);
+    console.error('Error during logout:', error);
     return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+
 
 router.get('/users', getRestaurantIdFromCookie, async (req, res) => {
   const { restaurantId } = req;
