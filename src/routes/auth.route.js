@@ -148,6 +148,8 @@ router.post('/logout', async (req, res) => {
   try {
     const token = req.cookies.manu;
 
+    console.log('logging out', token)
+
     if (!token) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
@@ -333,7 +335,6 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
 
 router.get('/user-info', getUserIdFromCookie, async (req, res) => {
   try {
