@@ -92,6 +92,8 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       },
     });
 
+    console.log('this is the employee profile', employeeProfile)
+
     const newToken = jwt.sign(
       {
         userId: req.userId, 
@@ -100,6 +102,8 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       },
       process.env.JWT_SECRET
     );
+
+    console.log('new token after employee profile creation', employeeProfile)
 
     res.cookie('manu', newToken, { httpOnly: true });
 
@@ -453,7 +457,6 @@ router.delete('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeI
   }
 });
 
-
 router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
     console.log('fetching the jobs saved as favouritess')
@@ -576,8 +579,6 @@ router.get('/employee/talent-pool/check', getEmployeeIdFromCookie, async (req, r
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
-
 
 export default router
 
