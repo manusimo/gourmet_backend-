@@ -314,7 +314,11 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       role: role, 
     }, process.env.JWT_SECRET);
 
-    res.cookie('manu', newToken, { httpOnly: true });
+    res.cookie('manu', newToken, {
+      httpOnly: true,
+      sameSite: 'None', 
+      secure: true,     
+    });
 
     res.status(201).json({ message: 'Company created successfully', companyProfile });
   } catch (error) {

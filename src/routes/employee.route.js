@@ -105,7 +105,11 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
 
     console.log('new token after employee profile creation', employeeProfile)
 
-    res.cookie('manu', newToken, { httpOnly: true });
+    res.cookie('manu', newToken, {
+      httpOnly: true,
+      sameSite: 'None', 
+      secure: true,     
+    });
 
     res.status(201).json({ message: 'Employee created successfully', employeeProfile });
   } catch (error) {
