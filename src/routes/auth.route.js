@@ -130,7 +130,11 @@ router.post('/signin', async (req, res) => {
 
     console.log('token created', token);
 
-    res.cookie('manu', token, { httpOnly: true, sameSite: 'Lax' });
+    res.cookie('manu', token, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'Strict' : 'Lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
 
     res.status(200).json({ message: 'Signin successful', userType: user.userType });
   } catch (error) {
