@@ -159,10 +159,24 @@ router.post('/logout', async (req, res) => {
 
     // Clear the cookies
     console.log('Clearing "manu" cookie');
-    res.clearCookie('manu');
+   
     
     console.log('Clearing "userInfo" cookie');
-    res.clearCookie('userInfo');
+
+
+    res.clearCookie('manu', {
+      httpOnly: true, // Match how you set the cookie
+      sameSite: 'None', // Match how you set the cookie
+      secure: true, // Match how you set the cookie
+    });
+    
+    res.clearCookie('userInfo', {
+      httpOnly: false, // If userInfo cookie is accessible via JavaScript
+      sameSite: 'None', // Match how you set the cookie
+      secure: true, // Match how you set the cookie
+    });
+    
+   
 
     // Log the response to confirm the cookies have been cleared
     console.log('Cookies cleared, sending logout response.');
