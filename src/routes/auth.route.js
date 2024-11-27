@@ -60,8 +60,12 @@ router.post('/signup', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    res.cookie('manu', token, { httpOnly: true, sameSite: 'Lax' });
-
+    res.cookie('manu', token, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'Strict' : 'Lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
+    console.log('Setting cookie with token:', token);
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
       console.log(decodedToken);

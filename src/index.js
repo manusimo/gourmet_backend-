@@ -22,7 +22,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Setup routes
 app.use('/api', authRoutes);
 app.use('/api', employeeRoutes);
 app.use('/api', companyRoutes);
