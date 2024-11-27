@@ -264,7 +264,7 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
     const benefitsArray = Object.keys(benefits).filter(benefit => benefits[benefit]);
     const userId = req.userId;
     const role = req.userRole
-å
+
     const companyProfile = await prisma.restaurant.create({
       data: {
         name,
