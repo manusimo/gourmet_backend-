@@ -33,7 +33,6 @@ router.post('/signup', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    console.log('creating the user with this types', userType)
 
     const newUser = await prisma.user.create({
       data: {
@@ -45,9 +44,6 @@ router.post('/signup', async (req, res) => {
         role: 'admin', 
       },
     });
-
-    console.log('creating the user with this types', newUser.userType)
-    console.log('creating the user with this role', newUser.role)
 
     const token = jwt.sign(
       {
@@ -66,7 +62,6 @@ router.post('/signup', async (req, res) => {
       secure: true, 
     });
 
-    console.log('Setting cookie with token:', token);
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
       console.log(decodedToken);
@@ -86,8 +81,6 @@ router.post('/signin', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    console.log('trying to log in with this body', email, password);
-
     const user = await prisma.user.findUnique({
       where: {
         email,
@@ -99,13 +92,11 @@ router.post('/signin', async (req, res) => {
       },
     });
 
-    console.log('this is the user we are logging in', user);
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    console.log('this is the user', user);
 
     const tokenPayload = {
       userId: user.id,
@@ -125,11 +116,8 @@ router.post('/signin', async (req, res) => {
       tokenPayload.restaurantUserId = restaurantUser.id;
     }
 
-    console.log('this is the payload', tokenPayload);
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-    console.log('token created', token);
 
     res.cookie('manu', token, {
       httpOnly: true,
@@ -137,7 +125,14 @@ router.post('/signin', async (req, res) => {
       secure: true,
     });
 
-    res.status(200).json({ message: 'Signin successful', userType: user.userType });
+    let profileImageUrl = 'defaultImage.jpg';
+    if (user.userType === 'profesionales' && user.employee) {
+      profileImageUrl = user.employee.profileImageUrl;
+    } else if (user.userType === 'empresas' && user.restaurant) {
+      profileImageUrl = user.restaurant.profileImageUrl;
+    }
+
+    res.status(200).json({ message: 'Signin successful', userType: user.userType, profileImageUrl: profileImageUrl, isAuthenticated:true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -333,7 +328,7 @@ router.post('/set-password', async (req, res) => {
 router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
   console.log('checking if the user is logged in');
   try {
-    const { userId } = req; // Extract userId from req
+    const { userId } = req; 
 
     if (!userId) {
       return res.status(401).json({ message: 'User not logged in', isLoggedIn: false });
@@ -349,12 +344,13 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
     }
 
     const profileImageUrl = user.employee ? user.employee.profileImageUrl : user.restaurant ? user.restaurant.profileImageUrl : null;
+    console.log('this is the dsdsd', profileImageUrl)
 
-    console.log('this is the login status', userId);
     res.status(200).json({
       message: "User logged in",
-      isLoggedIn: true,
-      profileImageUrl: profileImageUrl, // Include the profileImageUrl in the response
+      isAuthenticated: true,
+      profileImageUrl: profileImageUrl, 
+      userType: user.userType
     });
   } catch (error) {
     console.error(error);

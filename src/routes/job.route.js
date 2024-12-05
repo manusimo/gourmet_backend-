@@ -79,11 +79,9 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
 });
 
 router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
-  console.log('Getting top-rated jobs for carousel');
-
   const { limit = 4 } = req.query;
-  const userId = req.userId; // The user ID extracted from the cookie
-  const userType = req.userType; // The user type extracted from the cookie
+  const userId = req.userId; 
+  const userType = req.userType; 
 
   try {
     let formattedJobs;
@@ -101,59 +99,6 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
   }
 });
 
-// router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie,  async (req, res) => {
-    
-//   try {
-//     const jobId = parseInt(req.params.id, 10);
-  
-//     const {
-//       position,
-//       location,
-//       schedule,
-//       contract,
-//       period,
-//       vacancies,
-//       yearsOfExperience,
-//       description,
-//       questions,
-//       requirements,
-//       salary,
-//       propina, 
-//       functions,
-//     } = req.body;
-//     const restaurantId = req.restaurantId; 
-
-//     const tips = propina === 'Si' ? true : false;
-
-//     const updatedJobOffer = await prisma.jobOffer.update({
-//       where: { id: jobId },
-//       data: {
-//         position,
-//         location,
-//         schedule,
-//         period,
-//         contract,
-//         vacancies: parseInt(vacancies, 10),
-//         yearsOfExperience: isNaN(parseInt(yearsOfExperience, 10)) ? null : parseInt(yearsOfExperience, 10),
-//         description,
-//         restaurantId,
-//         requirements,
-//         functions,
-//         tips,
-//         salary: parseInt(salary, 10),
-//         questions: { set: questions } 
-//       },
-//     });
-
-    
-
-//     res.status(200).json({ message: 'Job offer updated successfully', updatedJobOffer });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
-
 
 router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
@@ -167,23 +112,20 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
       vacancies,
       yearsOfExperience,
       description,
-      questions, // Array of questions with `id` (existing) or `question` (new)
+      questions, 
       requirements,
       salary,
       propina,
       functions,
     } = req.body;
 
-    console.log('this questions', questions);
 
     const restaurantId = req.restaurantId;
     const tips = propina === 'Si';
 
-    // Separate questions into categories
-    const newQuestions = questions.filter((q) => !q.id); // New questions without `id`
-    const existingQuestions = questions.filter((q) => q.id); // Existing questions with `id`
+    const newQuestions = questions.filter((q) => !q.id); 
+    const existingQuestions = questions.filter((q) => q.id); 
 
-    // Step 1: Update existing questions
     for (const q of existingQuestions) {
       await prisma.question.update({
         where: { id: q.id },
@@ -191,7 +133,6 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
       });
     }
 
-    // Step 2: Update the job offer and create new questions
     const updatedJobOffer = await prisma.jobOffer.update({
       where: { id: jobId },
       data: {
@@ -209,11 +150,11 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
         tips,
         salary: parseInt(salary, 10),
         questions: {
-          create: newQuestions.map((q) => ({ question: q.question })), // Add new questions
+          create: newQuestions.map((q) => ({ question: q.question })), 
         },
       },
       include: {
-        questions: true, // Include the related questions in the response
+        questions: true, 
       },
     });
 
