@@ -92,8 +92,6 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       },
     });
 
-    console.log('this is the employee profile', employeeProfile)
-
     const newToken = jwt.sign(
       {
         userId: req.userId, 
@@ -102,8 +100,6 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       },
       process.env.JWT_SECRET
     );
-
-    console.log('new token after employee profile creation', employeeProfile)
 
     res.cookie('manu', newToken, {
       httpOnly: true,
@@ -122,7 +118,6 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
 });
 
 router.get('/employee', getEmployeeIdFromCookie, async (req, res) => {
-  console.log('Fetching the employee profile');
   try {
     const employeeId = req.employeeId;
 

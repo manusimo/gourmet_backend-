@@ -82,18 +82,17 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
 router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   const { employeeId, jobPostId, talentPoolId, type } = req.body;
   const userId = req.userId;
-  const restaurantUserId = req.restaurantUserId
-  
-  console.log('Creating conversation:', req.body);
-  console.log('User ID:', userId);
+  const restaurantUserId = req.restaurantUserId;
 
   try {
     let conversation;
+    
+    const parsedEmployeeId = parseInt(employeeId, 10);
 
     if (jobPostId) {
       conversation = await prisma.conversation.findFirst({
         where: {
-          employeeId,
+          employeeId: parsedEmployeeId,
           jobOfferId: jobPostId,
           restaurantUserId: restaurantUserId,
           type
@@ -104,18 +103,18 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
     if (talentPoolId) {
       conversation = await prisma.conversation.findFirst({
         where: {
-          employeeId,
+          employeeId: parsedEmployeeId,  
           talentPoolId,
           restaurantUserId: restaurantUserId,
           type
         },
       });
     }
-    // 
+
     if (!conversation) {
       conversation = await prisma.conversation.create({
         data: {
-          employeeId,
+          employeeId: parsedEmployeeId,  
           jobOfferId: jobPostId,
           talentPoolId: talentPoolId,
           restaurantUserId,
@@ -131,9 +130,10 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
   }
 });
 
+
 router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie, async (req, res) => {
   const { employeeId, type } = req.params;
-  const { restaurantUserId } = req.cookies; // Assuming you retrieve restaurantUserId from cookies
+  const { restaurantUserId } = req.cookies; 
   
   try {
     const conversations = await prisma.conversation.findMany({
@@ -232,7 +232,6 @@ router.get('/conversations/:conversationId/messages', getEmployeeIdFromCookie, g
       return res.status(404).json({ error: 'Employee not authorised for this conversation' });
     }
    
-    console.log('this is the conversation',conversation)
     res.status(200).json({ messages: conversation.messages });
   } catch (error) {
     console.error('Error fetching messages:', error);
@@ -252,19 +251,17 @@ router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRest
   try {
     const conversation = await prisma.conversation.findUnique({
       where: { id: parseInt(conversationId) },
-      include: { messages: true }, // Include messages related to the conversation
+      include: { messages: true }, 
     });
 
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found.' });
     }
 
-    // Delete messages associated with the conversation
     await prisma.message.deleteMany({
       where: { conversationId: parseInt(conversationId) },
     });
 
-    // Now delete the conversation itself
     const conversationDeleted = await prisma.conversation.delete({
       where: { id: parseInt(conversationId) },
     });
