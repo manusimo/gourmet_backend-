@@ -77,7 +77,7 @@ router.get('/applications/:applicationId', async (req, res) => {
                           include: {
                               answers: {
                                   where: {
-                                      applicationId: parseInt(applicationId), // Assuming you have the employee ID in req.employeeId
+                                      applicationId: parseInt(applicationId), 
                                   },
                               },
                           },
@@ -107,7 +107,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     const jobOffer = await prisma.jobOffer.findFirst({
       where: {
         id: parseInt(jobOfferId),
-        restaurantId: parseInt(restaurantId), // Ensure restaurantId is parsed as an integer
+        restaurantId: parseInt(restaurantId),
       },
     });
 
