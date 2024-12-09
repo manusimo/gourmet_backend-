@@ -320,13 +320,18 @@ router.get('/jobs/:jobId', async (req, res) => {
         id: parseInt(jobId),
       },
       include: {
-        questions: true, 
-        restaurant: true, 
+        questions: true,
+        restaurant: true,
+        applications: true, 
       },
     });
 
     if (jobOffer) {
-      res.json(jobOffer);
+      res.json({
+        ...jobOffer,
+        applicationsCount: jobOffer.applications.length, 
+        createdAt: jobOffer.createdAt.toISOString().slice(0, 10), 
+      });
     } else {
       res.status(404).send('Job offer not found');
     }
@@ -334,5 +339,7 @@ router.get('/jobs/:jobId', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+
 
 export default router
