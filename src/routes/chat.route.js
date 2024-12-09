@@ -130,7 +130,6 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
   }
 });
 
-
 router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie, async (req, res) => {
   const { employeeId, type } = req.params;
   const { restaurantUserId } = req.cookies; 
@@ -157,7 +156,6 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
     res.status(500).json({ error: 'Failed to fetch conversations.' });
   }
 });
-
 
 router.get('/conversations', getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
@@ -274,7 +272,6 @@ router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRest
     res.status(500).json({ error: 'Failed to delete conversation.' });
   }
 });
-
 
 export default router;
 
