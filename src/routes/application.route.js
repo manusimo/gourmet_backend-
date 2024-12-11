@@ -7,18 +7,21 @@ import { checkEmployee, checkCompany } from "../helpers/authenticateToken.js";
 
 const router = Router();
 
-router.post('/application', checkEmployee, getEmployeeIdFromCookie,  async (req, res) => {
+router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
     const { jobPostId, answers } = req.body;
     const employeeId = req.employeeId;
 
+    if (!employeeId) {
+      return res.status(401).json({ message: 'Debes hacer log in para postular' });
+    }
 
     const jobPost = await prisma.jobOffer.findUnique({
       where: { id: jobPostId },
     });
 
     if (!jobPost) {
-      return res.status(404).json({ message: 'Job post not found' });
+      return res.status(404).json({ message: 'Job post not found.' });
     }
 
     const existingApplication = await prisma.application.findFirst({
@@ -29,7 +32,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie,  async (req,
     });
 
     if (existingApplication) {
-      return res.status(400).json({ message: 'Ya postulaste a este trabajo' });
+      return res.status(409).json({ message: 'Ya postulaste a este trabajo.' });
     }
 
     const application = await prisma.application.create({
@@ -43,7 +46,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie,  async (req,
         answers: {
           create: answers.map(({ questionId, answer }) => ({
             question: { connect: { id: parseInt(questionId) } },
-            answer: answer.toString(), 
+            answer: answer.toString(),
           })),
         },
       },
@@ -52,19 +55,21 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie,  async (req,
       },
     });
 
-    res.status(201).json({ message: 'Application successfully created', application });
+    res.status(201).json({ message: 'Postulaste exitosamente.', application });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Error creating application:', error);
+
+    if (error.code === 'P2025') { 
+      return res.status(400).json({ message: 'Este trabajo ya no está disponible.' });
+    }
+
+    res.status(500).json({ message: 'Hemos tenido un error, intenta más tarde.' });
   }
 });
 
+
 router.get('/applications/:applicationId', async (req, res) => {
-  console.log('application submitted to the current job')
-  
-  const { applicationId } = req.params;
-  console.log('calling to get the application')
-  
+  const { applicationId } = req.params;  
   try {
       const application = await prisma.application.findUnique({
           where: {

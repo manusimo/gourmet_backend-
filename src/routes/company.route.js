@@ -175,8 +175,6 @@ router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => 
 });
 
 router.get('/company/top-rated-companies', async (req, res) => {
-  console.log('getting top-rated companies');
-
   const {
     page = 1,
     limit = 4,
@@ -212,7 +210,6 @@ router.get('/company/top-rated-companies', async (req, res) => {
       totalPages: Math.ceil(totalCompanies / limit),
     });
   } catch (error) {
-    console.error('Error fetching top-rated companies:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
