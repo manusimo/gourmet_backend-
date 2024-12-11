@@ -5,8 +5,7 @@ const getRestaurantIdFromCookie = (req, res, next) => {
   const token = req.cookies.manu;  
 
   if (!token) {
-    console.log('JWT token is missing or undefined');
-    return res.status(401).json({ message: 'JWT token is missing or undefined' });
+    return res.status(401).json({ message: 'Entra a tu cuenta para usar la plataforma' });
   }
 
   try {
@@ -15,7 +14,7 @@ const getRestaurantIdFromCookie = (req, res, next) => {
     const restaurantId = decodedToken.restaurantId;  
    
     req.restaurantId = restaurantId;
-    next();  // Pass the control to the next middleware/route handler
+    next();  
   } catch (error) {
     console.error('Error in getRestaurantIdFromCookie middleware:', error);
     if (error.name === 'JsonWebTokenError') {
@@ -29,7 +28,7 @@ const getEmployeeIdFromCookie = (req, res, next) => {
   const token = req.cookies.manu; 
  
   if (!token) {
-    return res.status(401).json({ message: 'JWT token is missing or undefined' });
+    return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
   }
 
   try {
@@ -42,7 +41,6 @@ const getEmployeeIdFromCookie = (req, res, next) => {
     req.employeeId = employeeId; 
     next();
   } catch (error) {
-    console.error('Error in getEmployeeIdFromCookie middleware:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
@@ -54,7 +52,7 @@ const getUserIdFromCookie = (req, res, next) => {
     const token = req.cookies.manu; 
 
     if (!token) {
-      return res.status(401).json({ message: 'JWT token is missing or undefined' });
+      return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
     }
 
     try {
@@ -76,10 +74,10 @@ const getUserIdFromCookie = (req, res, next) => {
 }
 
 const getRestaurantUserIdFromCookie = (req, res, next) => {
-  const token = req.cookies.manu; // Assuming the JWT token is stored in a cookie named 'manu'
+  const token = req.cookies.manu; 
 
   if (!token) {
-    return res.status(401).json({ message: 'JWT token is missing or undefined' });
+    return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
   }
 
   try {

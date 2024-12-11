@@ -5,7 +5,7 @@ const checkUserType = (requiredUserType) => (req, res, next) => {
 
 
   if (!token) {
-    return res.status(401).json({ message: 'JWT token is missing or undefined' });
+    return res.status(401).json({ message: 'Debes crear tu perfil para usar la plataforma' });
   }
 
   try {
