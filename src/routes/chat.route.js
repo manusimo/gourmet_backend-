@@ -6,6 +6,45 @@ import { prisma } from "../db.js";
 
 const router = express.Router();
 
+router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  const { conversationId } = req.params;
+  const employeeId = req.employeeId;
+  const restaurantUserId = req.restaurantUserId;
+
+  if (!employeeId && !restaurantUserId) {
+    return res.status(403).json({ error: 'Unauthorized access.' });
+  }
+
+  try {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: parseInt(conversationId) },
+      include: {
+        messages: true,
+        jobOffer: true,
+        talentPool: true,
+        employee: true,
+        restaurantUser: true,
+      },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    if (employeeId && conversation.employeeId !== employeeId) {
+      return res.status(404).json({ error: 'Employee not authorized for this conversation' });
+    }
+
+    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
+      return res.status(404).json({ error: 'Restaurant user not authorized for this conversation' });
+    }
+
+    res.status(200).json({ conversation });
+  } catch (error) {
+    console.error('Failed to fetch conversation:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 router.post('/send-message', checkSendMessageAuthorization, async (req, res) => {
     const { text, senderId, receiverId, conversationId } = req.body;

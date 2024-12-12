@@ -43,6 +43,7 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       name,
       position,
       experiences,
+      surname,
       skills,
       educations,
       aboutMe,
@@ -76,6 +77,7 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
         name,
         country,
         location,
+        surname,
         birthDate,
         phoneNumber,
         position,
@@ -147,6 +149,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
       name,
       position,
       experiences,
+      surname,
       period,
       yearsOfExperience,
       educations,
@@ -178,6 +181,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
       where: { id: employeeId },
       data: {
         name,
+        surname,
         country,
         location,
         birthDate: new Date(birthDate), 
@@ -210,9 +214,9 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
             where: { id: edu.id },
             data: {
               institution: edu.institution,
-              startDate: new Date(edu.startDate), // Parse date
+              startDate: new Date(edu.startDate),
               study: edu.study,
-              endDate: new Date(edu.endDate), // Parse date
+              endDate: new Date(edu.endDate), 
               description: edu.description,
             },
           })),
@@ -232,22 +236,19 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
           employeeId,
         },
       });
-      console.log('Creating new experience:', createExperience);
     }
 
-    // Create new educations
     for (const education of newEducations) {
       const createEducation = await prisma.education.create({
         data: {
           study: education.study,
           institution: education.institution,
-          startDate: new Date(education.startDate), // Parse date
-          endDate: new Date(education.endDate), // Parse date
+          startDate: new Date(education.startDate), 
+          endDate: new Date(education.endDate), 
           description: education.description,
           employeeId,
         },
       });
-      console.log('Creating new education:', createEducation);
     }
 
     const thisNewEmployee = await prisma.employee.findUnique({

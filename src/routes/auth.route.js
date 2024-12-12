@@ -128,7 +128,9 @@ router.post('/signin', async (req, res) => {
     let profileImageUrl = 'defaultImage.jpg';
     if (user.userType === 'profesionales' && user.employee) {
       profileImageUrl = user.employee.profileImageUrl;
-    } else if (user.userType === 'empresas' && user.restaurant) {
+    }
+    
+    if (user.userType === 'empresas' && user.restaurant) {
       profileImageUrl = user.restaurant.profileImageUrl;
     }
 
@@ -141,41 +143,26 @@ router.post('/signin', async (req, res) => {
 
 router.post('/logout', async (req, res) => {
   try {
-    // Log all available cookies to see what's sent with the request
-    console.log('Available cookies:', req.cookies);
-
     const token = req.cookies.manu;
-    console.log('Logging out user with token:', token);
-
+    
     if (!token) {
       console.log('No token found, user is not logged in.');
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // Clear the cookies
-    console.log('Clearing "manu" cookie');
-   
-    
-    console.log('Clearing "userInfo" cookie');
-
-
     res.clearCookie('manu', {
-      httpOnly: true, // Match how you set the cookie
-      sameSite: 'None', // Match how you set the cookie
-      secure: true, // Match how you set the cookie
+      httpOnly: true, 
+      sameSite: 'None', 
+      secure: true, 
     });
     
     res.clearCookie('userInfo', {
-      httpOnly: false, // If userInfo cookie is accessible via JavaScript
-      sameSite: 'None', // Match how you set the cookie
-      secure: true, // Match how you set the cookie
+      httpOnly: false, 
+      sameSite: 'None', 
+      secure: true, 
     });
     
-   
-
-    // Log the response to confirm the cookies have been cleared
-    console.log('Cookies cleared, sending logout response.');
-
+  
     return res.status(200).json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Error during logout:', error);
