@@ -13,6 +13,7 @@ model User {
   password         String
   userType         String
   name             String  @default("Juanito")
+  surname          String  @default("Pérez")
   phoneNumber      String  @default("+56976212644")
   role             String   @default("admin")
   createdAt        DateTime @default(now())
@@ -21,7 +22,7 @@ model User {
   restaurant       Restaurant?
   sentMessages     Message[]      @relation("MessageSender")
   receivedMessages Message[]      @relation("MessageReceiver")
-  restaurantUsers  RestaurantUser[] // Add this line to establish the opposite relation
+  restaurantUsers  RestaurantUser[] 
 }
 
 model TokenDenyList {
@@ -31,8 +32,9 @@ model TokenDenyList {
 }
 
 model Employee {
-  id           Int         @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
   name         String
+  surname      String   @default("Pérez")
   country      String
   location     String
   position     String
