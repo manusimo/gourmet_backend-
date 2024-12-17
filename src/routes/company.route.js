@@ -9,65 +9,6 @@ import {getOrderByCriteriaCompanies} from '../helpers/orderBy.js'
 
 const router = Router();
 
-// router.get('/companies', async (req, res) => {
-
-//   const {
-//     format,
-//     specialty,
-//     benefits,
-//     workers,
-//     weeklyAverageClients,
-//     region,
-//     comuna,
-//     q, 
-//     page = 1,
-//     limit = 10,
-//     orderBy
-//   } = req.query;
- 
-//   console.log('diz uery', req.query)
- 
-//   const filterFields = ['format', 'specialty', 'benefits', 'workers', 'weeklyAverageClients','region','comuna'];
-//   const filters = buildFilters(req.query, filterFields);
-//   const searchConditions = buildSearchConditions(q, 'name');
-//   const orderByCriteria = await getOrderByCriteriaCompanies(orderBy);
-
-//   console.log('this is the order by criteria')
-//   console.log('order', orderByCriteria)
-  
-  
-//   try {
-//     const companies = await prisma.restaurant.findMany({
-//       where: {
-//         ...filters,
-//         ...searchConditions,
-//       },
-//       take: parseInt(limit, 10),
-//       orderBy: orderByCriteria
-//     });
-
-//     console.log('this are the comp')
-//     console.log(companies)
-
-//     const totalCompanies = await prisma.restaurant.count({
-//       where: {
-//         ...filters,
-//         ...searchConditions,
-//       },
-//     });
-    
-//     res.json({
-//       companies,
-//       totalCompanies,
-//       currentPage: page,
-//       totalPages: Math.ceil(totalCompanies / limit),
-//     });
-//   } catch (error) {
-//     console.error('Error fetching companies:', error);
-//     res.status(500).json({ error: 'Internal Server Error' });
-//   }
-// });
-
 router.get('/companies', async (req, res) => {
   const {
     format,
@@ -133,6 +74,38 @@ router.get('/companies', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+router.get('/api/company/restaurantUser/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  // Validate userId
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid or missing userId' });
+  }
+
+  try {
+    const restaurantUser = await prisma.restaurantUser.findUnique({
+      where: {
+        userId: parseInt(userId), // Ensure userId is an integer
+      },
+      include: {
+        user: true,
+        restaurant: true,
+      },
+    });
+
+    if (!restaurantUser) {
+      return res.status(404).json({ error: 'Restaurant user not found' });
+    }
+
+    // Return the restaurant user data
+    return res.status(200).json({ data: restaurantUser });
+  } catch (error) {
+    console.error('Error fetching restaurant user:', error);
+    return res.status(500).json({ error: 'Failed to fetch restaurant user' });
+  }
+});
+
 
 
 router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => {

@@ -54,7 +54,6 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       region,
       genre,
       civilState,
-      location,
       available,
       schedule,
       profileImageUrl
@@ -76,7 +75,6 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       data: {
         name,
         country,
-        location,
         surname,
         birthDate,
         phoneNumber,
@@ -162,7 +160,6 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
       phoneNumber,
       genre,
       civilState,
-      location,
       available,
       schedule,
       profileImageUrl
@@ -183,7 +180,6 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
         name,
         surname,
         country,
-        location,
         birthDate: new Date(birthDate), 
         phoneNumber,
         position,

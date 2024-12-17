@@ -36,7 +36,7 @@ model Employee {
   name         String
   surname      String   @default("Pérez")
   country      String
-  location     String
+  location     String?
   position     String
   genre        String  @default("not declared")
   civilState   String  @default("single")

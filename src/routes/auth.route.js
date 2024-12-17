@@ -170,7 +170,6 @@ router.post('/logout', async (req, res) => {
   }
 });
 
-
 router.get('/users', getRestaurantIdFromCookie, async (req, res) => {
   const { restaurantId } = req;
   try {
@@ -313,7 +312,6 @@ router.post('/set-password', async (req, res) => {
 });
 
 router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
-  console.log('checking if the user is logged in');
   try {
     const { userId } = req; 
 
@@ -331,8 +329,7 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
     }
 
     const profileImageUrl = user.employee ? user.employee.profileImageUrl : user.restaurant ? user.restaurant.profileImageUrl : null;
-    console.log('this is the dsdsd', profileImageUrl)
-
+    
     res.status(200).json({
       message: "User logged in",
       isAuthenticated: true,
@@ -353,12 +350,30 @@ router.get('/user-info', getUserIdFromCookie, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: {
-        id: req.userId
-      }
+        id: req.userId,
+      },
+      include: {
+        restaurantUsers: {
+          where: {
+            userId: req.userId, 
+          },
+        },
+        employee: true, 
+      },
     });
-   
+
+    const restaurantUserId = user.restaurantUsers.length > 0
+      ? user.restaurantUsers[0].id
+      : null;
+
+    const responseData = { userId: user.id, restaurantUserId: restaurantUserId, employeeId: '' };
+
+    if (user.userType === 'profesionales' && user.employee) {
+      responseData.employeeId = user.employee.id; 
+    }
+
     if (user) {
-      res.json({ userId: user.id }); // Send user data in the response
+      res.json(responseData); 
     } else {
       res.status(404).json({ message: 'User not found' });
     }
