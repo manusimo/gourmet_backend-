@@ -127,23 +127,9 @@ const optionalAuth = (req, res, next) => {
   }
 };
 
-const getTokenFromCookie = (req) => {
-  const token = req.cookies.manu;
-  if (!token) {
-    throw new Error('No token found');
-  }
-
-  try {
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    return decodedToken;
-  } catch (error) {
-    throw new Error('Invalid token');
-  }
-};
-
 const validateTokenAndIdentifyUser = (req, res, next) => {
   try {
-    const token = getTokenFromCookie(req); 
+    const token = req.cookies.manu 
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }
@@ -160,6 +146,14 @@ const validateTokenAndIdentifyUser = (req, res, next) => {
   }
 };
 
+const validateToken = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET); 
+  } catch (error) {
+    console.error('Error in token validation:', error);
+    throw error;
+  }
+};
 
 export { 
   getRestaurantIdFromCookie, 
@@ -168,5 +162,4 @@ export {
   getUserIdFromCookie, 
   getRestaurantUserIdFromCookie, 
   optionalAuth,
-  getTokenFromCookie,
 };

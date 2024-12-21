@@ -12,14 +12,8 @@ import { prisma } from "../db.js";
 
 const router = express.Router();
 
-router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/conversations/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
-  const employeeId = req.employeeId;
-  const restaurantUserId = req.restaurantUserId;
-
-  if (!employeeId && !restaurantUserId) {
-    return res.status(403).json({ error: 'Unauthorized access.' });
-  }
 
   try {
     const conversation = await prisma.conversation.findUnique({
@@ -29,7 +23,7 @@ router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaur
         jobOffer: true,
         talentPool: true,
         employee: true,
-        restaurantUser: true,  
+        restaurantUser: true,
       },
     });
 
@@ -37,16 +31,15 @@ router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaur
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    if (employeeId && conversation.employeeId !== employeeId) {
-      return res.status(403).json({ error: 'Employee not authorized for this conversation' });
-    }
+    // if (employeeId && conversation.employeeId !== employeeId) {
+    //   console.log(`Employee with ID ${employeeId} is not authorized for conversation ${conversationId}`);
+    //   return res.status(403).json({ error: 'Employee not authorized for this conversation' });
+    // }
 
-    if (restaurantUserId) {
-      const isAuthorizedRestaurantUser = conversation.restaurantUser && conversation.restaurantUser.id === restaurantUserId;
-      if (!isAuthorizedRestaurantUser) {
-        return res.status(403).json({ error: 'Restaurant user not authorized for this conversation' });
-      }
-    }
+    // if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
+    //   console.log(`Restaurant user with ID ${restaurantUserId} is not authorized for conversation ${conversationId}`);
+    //   return res.status(403).json({ error: 'Restaurant user not authorized for this conversation' });
+    // }
 
     res.status(200).json({ conversation });
   } catch (error) {
@@ -55,13 +48,55 @@ router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaur
   }
 });
 
+router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUser, async (req, res) => {
+  const { conversationId } = req.params;
+  const { employeeId, restaurantUserId } = req;
+
+  if (!employeeId && !restaurantUserId) {
+    console.log('Unauthorized access: No valid user ID found');
+    return res.status(403).json({ error: 'Unauthorized access. You must be either an employee or a restaurant user.' });
+  }
+
+  try {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: parseInt(conversationId) },
+      include: { messages: true }
+    });
+
+    if (!conversation) {
+      console.log(`Conversation with ID ${conversationId} not found`);
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    if (employeeId && conversation.employeeId !== employeeId) {
+      console.log(`Employee with ID ${employeeId} is not authorized for conversation ${conversationId}`);
+      return res.status(404).json({ error: 'Employee not authorized for this conversation' });
+    }
+
+    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
+      console.log(`Restaurant user with ID ${restaurantUserId} is not authorized for conversation ${conversationId}`);
+      return res.status(404).json({ error: 'Restaurant user not authorized for this conversation' });
+    }
+
+    res.status(200).json({ messages: conversation.messages });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 router.post('/send-message', async (req, res) => {
-  const { text, senderEmployeeId, senderRestaurantUserId, receiverEmployeeId, receiverRestaurantUserId, conversationId, senderType, receiverType } = req.body;
+  const { text,
+          senderEmployeeId, 
+          senderRestaurantUserId, 
+          receiverEmployeeId, 
+          receiverRestaurantUserId, 
+          conversationId, 
+          senderType, 
+          receiverType 
+        } = req.body;
 
-  // Log the received request body
   console.log('Received:', req.body);
-
-  // Log individual values to ensure they are being passed correctly
   console.log('Sender Type:', senderType);
   console.log('Receiver Type:', receiverType);
   console.log('Sender Employee ID:', senderEmployeeId);
@@ -71,7 +106,6 @@ router.post('/send-message', async (req, res) => {
   console.log('Conversation ID:', conversationId);
 
   try {
-    // Log the conditions for sender and receiver relations
     const senderRelation = senderType === 'employee' 
       ? { senderEmployee: { connect: { id: senderEmployeeId } } } 
       : { senderRestaurantUser: { connect: { id: senderRestaurantUserId } } };
@@ -229,10 +263,12 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
 router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     if (req.employeeId) {
+      console.log(`Fetching conversations for employee with ID: ${req.employeeId}`);
+
       const employeeConversations = await prisma.conversation.findMany({
         where: { 
           employeeId: req.employeeId,
-          type: req.query.type || 'none' 
+          type: req.query.type || 'none',
         },
         include: { 
           messages: true, 
@@ -240,31 +276,38 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
           employee: true,
           restaurantUser: { 
             include: {
-              restaurant: true, 
+              restaurant: true,
             },
           },  
-        }, 
+        },
       });
-      
+
+      console.log(`Found ${employeeConversations.length} conversations for employee ${req.employeeId}`);
       res.status(200).json({ conversations: employeeConversations });
     }
 
     if (req.restaurantUserId) {
-      const restaurantUserId = req.restaurantUserId
-      
+      console.log(`Fetching conversations for restaurant user with ID: ${req.restaurantUserId}`);
+
+      const restaurantUserId = req.restaurantUserId;
+
       const restaurantConversations = await prisma.conversation.findMany({
         where: { 
           restaurantUserId: parseInt(restaurantUserId),
-          type: req.query.type || '' 
+          type: req.query.type || '', 
         },
         include: { 
           messages: true, 
           jobOffer: true,
-          employee: true  
-        }, 
+          employee: true,  
+        },
       });
 
+      console.log(`Found ${restaurantConversations.length} conversations for restaurant user ${restaurantUserId}`);
       res.status(200).json({ conversations: restaurantConversations });
+    } else {
+      console.log('No valid user type found in the request. Unable to fetch conversations.');
+      res.status(400).json({ message: 'Invalid user type or ID' });
     }
   } catch (error) {
     console.error('Error fetching conversations:', error);
@@ -272,39 +315,7 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   }
 });
 
-router.get('/conversations/:conversationId/messages', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
-  const { conversationId } = req.params;
-  const employeeId = req.employeeId;
-  const restaurantUserId = req.restaurantUserId;
 
-  if (!employeeId && !restaurantUserId) {
-    return res.status(403).json({ error: 'Unauthorized access.' });
-  }
-
-  try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: parseInt(conversationId) },
-      include: { messages: true }
-    });
-    
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found.' });
-    }
-    
-    if (employeeId && conversation.employeeId !== employeeId) {
-      return res.status(404).json({ error: 'Employee not authorised for this conversation' });
-    }
-
-    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
-      return res.status(404).json({ error: 'Employee not authorised for this conversation' });
-    }
-   
-    res.status(200).json({ messages: conversation.messages });
-  } catch (error) {
-    console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
 
 router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   const { conversationId } = req.params;
