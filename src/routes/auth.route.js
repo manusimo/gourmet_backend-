@@ -283,7 +283,6 @@ router.post('/set-password', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // cambiar esto para que no se asigne un nuevo usuario a este restaurante
     const newUser = await prisma.user.create({
       data: {
         email,
@@ -395,7 +394,6 @@ router.post('/reset-password', async (req, res) => {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     const { email } = decodedToken;
 
-    // Find the user in the database
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (!existingUser) {

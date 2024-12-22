@@ -86,33 +86,16 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
 });
 
 router.post('/send-message', async (req, res) => {
-  const { text,
-          senderEmployeeId, 
-          senderRestaurantUserId, 
-          receiverEmployeeId, 
-          receiverRestaurantUserId, 
-          conversationId, 
-          senderType, 
-          receiverType 
-        } = req.body;
-
-  console.log('Received:', req.body);
-  console.log('Sender Type:', senderType);
-  console.log('Receiver Type:', receiverType);
-  console.log('Sender Employee ID:', senderEmployeeId);
-  console.log('Sender Restaurant User ID:', senderRestaurantUserId);
-  console.log('Receiver Employee ID:', receiverEmployeeId);
-  console.log('Receiver Restaurant User ID:', receiverRestaurantUserId);
-  console.log('Conversation ID:', conversationId);
+  const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
 
   try {
     const senderRelation = senderType === 'employee' 
-      ? { senderEmployee: { connect: { id: senderEmployeeId } } } 
-      : { senderRestaurantUser: { connect: { id: senderRestaurantUserId } } };
+      ? { senderEmployee: { connect: { id: parseInt(senderUserId) } } } 
+      : { senderRestaurantUser: { connect: { id: parseInt(senderUserId) } } };
 
     const receiverRelation = receiverType === 'employee' 
-      ? { receiverEmployee: { connect: { id: receiverEmployeeId } } } 
-      : { receiverRestaurantUser: { connect: { id: receiverRestaurantUserId } } };
+      ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } } 
+      : { receiverRestaurantUser: { connect: { id: parseInt(receiverUserId) } } };
 
     console.log('Sender Relation:', senderRelation);
     console.log('Receiver Relation:', receiverRelation);
@@ -120,7 +103,7 @@ router.post('/send-message', async (req, res) => {
     const message = await prisma.message.create({
       data: {
         text,
-        conversation: { connect: { id: conversationId } },
+        conversation: { connect: { id: parseInt(conversationId) } },
         ...senderRelation,
         ...receiverRelation,
       },
@@ -283,17 +266,15 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
       });
 
       console.log(`Found ${employeeConversations.length} conversations for employee ${req.employeeId}`);
-      res.status(200).json({ conversations: employeeConversations });
+      return res.status(200).json({ conversations: employeeConversations });
     }
 
     if (req.restaurantUserId) {
       console.log(`Fetching conversations for restaurant user with ID: ${req.restaurantUserId}`);
 
-      const restaurantUserId = req.restaurantUserId;
-
       const restaurantConversations = await prisma.conversation.findMany({
         where: { 
-          restaurantUserId: parseInt(restaurantUserId),
+          restaurantUserId: parseInt(req.restaurantUserId),
           type: req.query.type || '', 
         },
         include: { 
@@ -303,19 +284,18 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
         },
       });
 
-      console.log(`Found ${restaurantConversations.length} conversations for restaurant user ${restaurantUserId}`);
-      res.status(200).json({ conversations: restaurantConversations });
-    } else {
-      console.log('No valid user type found in the request. Unable to fetch conversations.');
-      res.status(400).json({ message: 'Invalid user type or ID' });
+      console.log(`Found ${restaurantConversations.length} conversations for restaurant user ${req.restaurantUserId}`);
+      return res.status(200).json({ conversations: restaurantConversations });
     }
+
+    console.log('No valid user type found in the request. Unable to fetch conversations.');
+    return res.status(400).json({ message: 'Invalid user type or ID' });
+
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
-
 
 router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   const { conversationId } = req.params;
