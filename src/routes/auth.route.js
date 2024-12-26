@@ -328,8 +328,8 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
       where: { id: userId },
       include: { 
         employee: true,
-        restaurant: true,     // For restaurant owners
-        restaurantUsers: {    // For staff members
+        restaurant: true,     
+        restaurantUsers: {    
           include: {
             restaurant: true
           }
