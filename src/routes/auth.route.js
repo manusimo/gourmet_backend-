@@ -470,4 +470,56 @@ router.post('/reset-password-request', async (req, res) => {
   }
 });
 
+router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
+  try {
+    const { userId } = req;
+    
+    if (!userId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        employee: true,
+        restaurant: true,
+        restaurantUsers: {
+          include: {
+            restaurant: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const chatTokenPayload = {
+      userId: user.id,
+      userType: user.userType,
+      tokenType: 'socket',
+      ...(user.employee && { employeeId: user.employee.id }),
+      ...(user.restaurantUsers?.[0] && {
+        restaurantUserId: user.restaurantUsers[0].id,
+        restaurantId: user.restaurantUsers[0].restaurantId
+      }),
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + (60 * 60), 
+      aud: 'chat',
+      iss: 'api'
+    };
+
+    const chatToken = jwt.sign(
+      chatTokenPayload,
+      process.env.JWT_SECRET
+    );
+
+    res.json({ token: chatToken });
+  } catch (error) {
+    console.error('Chat token generation error:', error);
+    res.status(500).json({ message: 'Failed to generate chat token' });
+  }
+});
+
 export default router;
