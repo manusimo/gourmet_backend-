@@ -88,22 +88,23 @@ router.post('/signin', async (req, res) => {
       include: {
         employee: true,
         restaurant: true,
-        restaurantUsers: true,
+        restaurantUsers: {
+          include: {
+            restaurant: true
+          }
+        },
       },
     });
-
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
-
 
     const tokenPayload = {
       userId: user.id,
       email: user.email,
       userType: user.userType,
       role: user.role,
-      userType: user.userType
     };
 
     if (user.employee) {
@@ -116,7 +117,6 @@ router.post('/signin', async (req, res) => {
       tokenPayload.restaurantUserId = restaurantUser.id;
     }
 
-
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     res.cookie('manu', token, {
@@ -128,13 +128,19 @@ router.post('/signin', async (req, res) => {
     let profileImageUrl = 'defaultImage.jpg';
     if (user.userType === 'profesionales' && user.employee) {
       profileImageUrl = user.employee.profileImageUrl;
-    }
-    
-    if (user.userType === 'empresas' && user.restaurant) {
-      profileImageUrl = user.restaurant.profileImageUrl;
+    } else if (user.userType === 'empresas') {
+      const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
+      if (restaurant) {
+        profileImageUrl = restaurant.profileImageUrl;
+      }
     }
 
-    res.status(200).json({ message: 'Signin successful', userType: user.userType, profileImageUrl: profileImageUrl, isAuthenticated:true });
+    res.status(200).json({ 
+      message: 'Signin successful', 
+      userType: user.userType, 
+      profileImageUrl: profileImageUrl, 
+      isAuthenticated: true 
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -320,23 +326,39 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { employee: true, restaurant: true }, 
+      include: { 
+        employee: true,
+        restaurant: true,     // For restaurant owners
+        restaurantUsers: {    // For staff members
+          include: {
+            restaurant: true
+          }
+        }
+      }
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found', isLoggedIn: true });
+      return res.status(404).json({ message: 'User not found', isLoggedIn: false });
     }
 
-    const profileImageUrl = user.employee ? user.employee.profileImageUrl : user.restaurant ? user.restaurant.profileImageUrl : null;
-    
+    let profileImageUrl = 'No photo';
+    if (user.userType === 'profesionales' && user.employee) {
+      profileImageUrl = user.employee.profileImageUrl;
+    } else if (user.userType === 'empresas') {
+      const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
+      if (restaurant) {
+        profileImageUrl = restaurant.profileImageUrl;
+      }
+    }
+
     res.status(200).json({
       message: "User logged in",
       isAuthenticated: true,
-      profileImageUrl: profileImageUrl, 
+      profileImageUrl,
       userType: user.userType
     });
   } catch (error) {
-    console.error(error);
+    console.error('Full error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
