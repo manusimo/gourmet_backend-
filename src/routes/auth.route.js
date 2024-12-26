@@ -88,22 +88,23 @@ router.post('/signin', async (req, res) => {
       include: {
         employee: true,
         restaurant: true,
-        restaurantUsers: true,
+        restaurantUsers: {
+          include: {
+            restaurant: true
+          }
+        },
       },
     });
-
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
-
 
     const tokenPayload = {
       userId: user.id,
       email: user.email,
       userType: user.userType,
       role: user.role,
-      userType: user.userType
     };
 
     if (user.employee) {
@@ -116,7 +117,6 @@ router.post('/signin', async (req, res) => {
       tokenPayload.restaurantUserId = restaurantUser.id;
     }
 
-
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     res.cookie('manu', token, {
@@ -128,13 +128,19 @@ router.post('/signin', async (req, res) => {
     let profileImageUrl = 'defaultImage.jpg';
     if (user.userType === 'profesionales' && user.employee) {
       profileImageUrl = user.employee.profileImageUrl;
-    }
-    
-    if (user.userType === 'empresas' && user.restaurant) {
-      profileImageUrl = user.restaurant.profileImageUrl;
+    } else if (user.userType === 'empresas') {
+      const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
+      if (restaurant) {
+        profileImageUrl = restaurant.profileImageUrl;
+      }
     }
 
-    res.status(200).json({ message: 'Signin successful', userType: user.userType, profileImageUrl: profileImageUrl, isAuthenticated:true });
+    res.status(200).json({ 
+      message: 'Signin successful', 
+      userType: user.userType, 
+      profileImageUrl: profileImageUrl, 
+      isAuthenticated: true 
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -169,7 +175,6 @@ router.post('/logout', async (req, res) => {
     return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
 
 router.get('/users', getRestaurantIdFromCookie, async (req, res) => {
   const { restaurantId } = req;
@@ -284,7 +289,6 @@ router.post('/set-password', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    // cambiar esto para que no se asigne un nuevo usuario a este restaurante
     const newUser = await prisma.user.create({
       data: {
         email,
@@ -313,7 +317,6 @@ router.post('/set-password', async (req, res) => {
 });
 
 router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
-  console.log('checking if the user is logged in');
   try {
     const { userId } = req; 
 
@@ -323,24 +326,39 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { employee: true, restaurant: true }, 
+      include: { 
+        employee: true,
+        restaurant: true,     
+        restaurantUsers: {    
+          include: {
+            restaurant: true
+          }
+        }
+      }
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found', isLoggedIn: true });
+      return res.status(404).json({ message: 'User not found', isLoggedIn: false });
     }
 
-    const profileImageUrl = user.employee ? user.employee.profileImageUrl : user.restaurant ? user.restaurant.profileImageUrl : null;
-    console.log('this is the dsdsd', profileImageUrl)
+    let profileImageUrl = 'No photo';
+    if (user.userType === 'profesionales' && user.employee) {
+      profileImageUrl = user.employee.profileImageUrl;
+    } else if (user.userType === 'empresas') {
+      const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
+      if (restaurant) {
+        profileImageUrl = restaurant.profileImageUrl;
+      }
+    }
 
     res.status(200).json({
       message: "User logged in",
       isAuthenticated: true,
-      profileImageUrl: profileImageUrl, 
+      profileImageUrl,
       userType: user.userType
     });
   } catch (error) {
-    console.error(error);
+    console.error('Full error:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -353,12 +371,30 @@ router.get('/user-info', getUserIdFromCookie, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: {
-        id: req.userId
-      }
+        id: req.userId,
+      },
+      include: {
+        restaurantUsers: {
+          where: {
+            userId: req.userId, 
+          },
+        },
+        employee: true, 
+      },
     });
-   
+
+    const restaurantUserId = user.restaurantUsers.length > 0
+      ? user.restaurantUsers[0].id
+      : null;
+
+    const responseData = { userId: user.id, restaurantUserId: restaurantUserId, employeeId: '' };
+
+    if (user.userType === 'profesionales' && user.employee) {
+      responseData.employeeId = user.employee.id; 
+    }
+
     if (user) {
-      res.json({ userId: user.id }); // Send user data in the response
+      res.json(responseData); 
     } else {
       res.status(404).json({ message: 'User not found' });
     }
@@ -380,7 +416,6 @@ router.post('/reset-password', async (req, res) => {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     const { email } = decodedToken;
 
-    // Find the user in the database
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (!existingUser) {

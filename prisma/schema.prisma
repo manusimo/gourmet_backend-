@@ -20,8 +20,6 @@ model User {
   updatedAt        DateTime @updatedAt
   employee         Employee?
   restaurant       Restaurant?
-  sentMessages     Message[]      @relation("MessageSender")
-  receivedMessages Message[]      @relation("MessageReceiver")
   restaurantUsers  RestaurantUser[] 
 }
 
@@ -36,7 +34,7 @@ model Employee {
   name         String
   surname      String   @default("Pérez")
   country      String
-  location     String
+  location     String?
   position     String
   genre        String  @default("not declared")
   civilState   String  @default("single")
@@ -60,6 +58,8 @@ model Employee {
   applications Application[]
   experiences  Experience[]
   educations   Education[]
+  messagesSent  Message[] @relation("SenderEmployee")
+  messagesReceived Message[] @relation("ReceiverEmployee")
 }
 
 model Experience {
@@ -184,15 +184,24 @@ model Conversation {
 }
 
 model Message {
-  id              Int          @id @default(autoincrement())
-  text            String
-  createdAt       DateTime     @default(now())
-  senderUserId    Int
-  receiverUserId  Int
-  conversationId  Int
-  senderUser      User         @relation(name: "MessageSender", fields: [senderUserId], references: [id])
-  receiverUser    User         @relation(name: "MessageReceiver", fields: [receiverUserId], references: [id])
-  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  id                        Int              @id @default(autoincrement())
+  text                      String
+  conversationId            Int
+  conversation              Conversation     @relation(fields: [conversationId], references: [id])
+  
+  senderEmployeeId          Int?
+  senderEmployee            Employee?        @relation("SenderEmployee", fields: [senderEmployeeId], references: [id])
+
+  senderRestaurantUserId    Int?
+  senderRestaurantUser      RestaurantUser?  @relation("SenderRestaurantUser", fields: [senderRestaurantUserId], references: [id])
+
+  receiverEmployeeId        Int?
+  receiverEmployee          Employee?        @relation("ReceiverEmployee", fields: [receiverEmployeeId], references: [id])
+
+  receiverRestaurantUserId  Int?
+  receiverRestaurantUser    RestaurantUser?  @relation("ReceiverRestaurantUser", fields: [receiverRestaurantUserId], references: [id])
+
+  createdAt                 DateTime         @default(now())
 }
 
 model RestaurantUser {
@@ -205,7 +214,10 @@ model RestaurantUser {
   conversations Conversation[]
   addedTalent   TalentPool[]   @relation("AddedByUser") 
   jobOffers     JobOffer[]
+  messagesSent     Message[] @relation("SenderRestaurantUser")
+  messagesReceived Message[] @relation("ReceiverRestaurantUser")
 }
+
 
 model TalentPool {
   id             Int           @id @default(autoincrement())

@@ -1,19 +1,19 @@
 import express from 'express';
 import { checkJoinAuthorization, checkSendMessageAuthorization } from '../helpers/chat.js';
 import  { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
-import { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie } from '../helpers/cookies.js';
+import { 
+  getUserIdFromCookie, 
+  getRestaurantIdFromCookie, 
+  getEmployeeIdFromCookie, 
+  getRestaurantUserIdFromCookie,
+  validateTokenAndIdentifyUser 
+} from '../helpers/cookies.js';
 import { prisma } from "../db.js";
 
 const router = express.Router();
 
-router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/conversations/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
-  const employeeId = req.employeeId;
-  const restaurantUserId = req.restaurantUserId;
-
-  if (!employeeId && !restaurantUserId) {
-    return res.status(403).json({ error: 'Unauthorized access.' });
-  }
 
   try {
     const conversation = await prisma.conversation.findUnique({
@@ -31,13 +31,15 @@ router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaur
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    if (employeeId && conversation.employeeId !== employeeId) {
-      return res.status(404).json({ error: 'Employee not authorized for this conversation' });
-    }
+    // if (employeeId && conversation.employeeId !== employeeId) {
+    //   console.log(`Employee with ID ${employeeId} is not authorized for conversation ${conversationId}`);
+    //   return res.status(403).json({ error: 'Employee not authorized for this conversation' });
+    // }
 
-    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
-      return res.status(404).json({ error: 'Restaurant user not authorized for this conversation' });
-    }
+    // if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
+    //   console.log(`Restaurant user with ID ${restaurantUserId} is not authorized for conversation ${conversationId}`);
+    //   return res.status(403).json({ error: 'Restaurant user not authorized for this conversation' });
+    // }
 
     res.status(200).json({ conversation });
   } catch (error) {
@@ -46,30 +48,75 @@ router.get('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaur
   }
 });
 
-router.post('/send-message', checkSendMessageAuthorization, async (req, res) => {
-    const { text, senderId, receiverId, conversationId } = req.body;
-  
-    try {
-      const user = await prisma.user.findUnique({ where: { id: senderId }, include: { restaurant: true } });
-  
-      if (!user || !user.restaurant || user.restaurant.id !== conversationId) {
-        return res.status(403).json({ error: 'You are not authorized to send messages in this conversation.' });
-      }
-  
-      const message = await prisma.message.create({
-        data: {
-          text,
-          senderUserId: senderId,
-          receiverUserId: receiverId,
-          conversationId,
-        },
-      });
-  
-      res.status(200).json({ message: 'Message sent successfully.', data: message });
-    } catch (error) {
-      console.error('Error sending message:', error);
-      res.status(500).json({ error: 'Failed to send message.' });
+router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUser, async (req, res) => {
+  const { conversationId } = req.params;
+  const { employeeId, restaurantUserId } = req;
+
+  if (!employeeId && !restaurantUserId) {
+    console.log('Unauthorized access: No valid user ID found');
+    return res.status(403).json({ error: 'Unauthorized access. You must be either an employee or a restaurant user.' });
+  }
+
+  try {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: parseInt(conversationId) },
+      include: { messages: true }
+    });
+
+    if (!conversation) {
+      console.log(`Conversation with ID ${conversationId} not found`);
+      return res.status(404).json({ error: 'Conversation not found.' });
     }
+
+    if (employeeId && conversation.employeeId !== employeeId) {
+      console.log(`Employee with ID ${employeeId} is not authorized for conversation ${conversationId}`);
+      return res.status(404).json({ error: 'Employee not authorized for this conversation' });
+    }
+
+    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
+      console.log(`Restaurant user with ID ${restaurantUserId} is not authorized for conversation ${conversationId}`);
+      return res.status(404).json({ error: 'Restaurant user not authorized for this conversation' });
+    }
+
+    res.status(200).json({ messages: conversation.messages });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+router.post('/send-message', async (req, res) => {
+  const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
+
+  try {
+    const senderRelation = senderType === 'employee' 
+      ? { senderEmployee: { connect: { id: parseInt(senderUserId) } } } 
+      : { senderRestaurantUser: { connect: { id: parseInt(senderUserId) } } };
+
+    const receiverRelation = receiverType === 'employee' 
+      ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } } 
+      : { receiverRestaurantUser: { connect: { id: parseInt(receiverUserId) } } };
+
+    console.log('Sender Relation:', senderRelation);
+    console.log('Receiver Relation:', receiverRelation);
+
+    const message = await prisma.message.create({
+      data: {
+        text,
+        conversation: { connect: { id: parseInt(conversationId) } },
+        ...senderRelation,
+        ...receiverRelation,
+      },
+    });
+
+    console.log('Message Created:', message);
+
+    res.status(200).json({ message: 'Message sent successfully.', data: message });
+  } catch (error) {
+    console.error('Error sending message:', error);
+
+    res.status(500).json({ error: 'Failed to send message.' });
+  }
 });
 
 router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantUserIdFromCookie, async (req, res) => {
@@ -196,13 +243,15 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
   }
 });
 
-router.get('/conversations', getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     if (req.employeeId) {
+      console.log(`Fetching conversations for employee with ID: ${req.employeeId}`);
+
       const employeeConversations = await prisma.conversation.findMany({
         where: { 
           employeeId: req.employeeId,
-          type: req.query.type || 'none' 
+          type: req.query.type || 'none',
         },
         include: { 
           messages: true, 
@@ -210,69 +259,41 @@ router.get('/conversations', getEmployeeIdFromCookie, getRestaurantIdFromCookie,
           employee: true,
           restaurantUser: { 
             include: {
-              restaurant: true, 
+              restaurant: true,
             },
           },  
-        }, 
+        },
       });
-      
-      res.status(200).json({ conversations: employeeConversations });
+
+      console.log(`Found ${employeeConversations.length} conversations for employee ${req.employeeId}`);
+      return res.status(200).json({ conversations: employeeConversations });
     }
 
     if (req.restaurantUserId) {
-      const restaurantUserId = req.restaurantUserId
-      
+      console.log(`Fetching conversations for restaurant user with ID: ${req.restaurantUserId}`);
+
       const restaurantConversations = await prisma.conversation.findMany({
         where: { 
-          restaurantUserId: parseInt(restaurantUserId),
-          type: req.query.type || '' 
+          restaurantUserId: parseInt(req.restaurantUserId),
+          type: req.query.type || '', 
         },
         include: { 
           messages: true, 
           jobOffer: true,
-          employee: true  
-        }, 
+          employee: true,  
+        },
       });
 
-      res.status(200).json({ conversations: restaurantConversations });
+      console.log(`Found ${restaurantConversations.length} conversations for restaurant user ${req.restaurantUserId}`);
+      return res.status(200).json({ conversations: restaurantConversations });
     }
+
+    console.log('No valid user type found in the request. Unable to fetch conversations.');
+    return res.status(400).json({ message: 'Invalid user type or ID' });
+
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-router.get('/conversations/:conversationId/messages', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
-  const { conversationId } = req.params;
-  const employeeId = req.employeeId;
-  const restaurantUserId = req.restaurantUserId;
-
-  if (!employeeId && !restaurantUserId) {
-    return res.status(403).json({ error: 'Unauthorized access.' });
-  }
-
-  try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: parseInt(conversationId) },
-      include: { messages: true }
-    });
-    
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found.' });
-    }
-    
-    if (employeeId && conversation.employeeId !== employeeId) {
-      return res.status(404).json({ error: 'Employee not authorised for this conversation' });
-    }
-
-    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
-      return res.status(404).json({ error: 'Employee not authorised for this conversation' });
-    }
-   
-    res.status(200).json({ messages: conversation.messages });
-  } catch (error) {
-    console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 

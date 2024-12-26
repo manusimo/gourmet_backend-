@@ -94,6 +94,19 @@ const getRestaurantUserIdFromCookie = (req, res, next) => {
   }
 }
 
+const identifyUser = (decodedToken, req) => {
+  req.userId = decodedToken.userId;
+  req.userType = decodedToken.userType;
+
+  if (decodedToken.employeeId) {
+    req.employeeId = decodedToken.employeeId;
+  }
+
+  if (decodedToken.restaurantUserId) {
+    req.restaurantUserId = decodedToken.restaurantUserId;
+  }
+};
+
 const optionalAuth = (req, res, next) => {
   const token = req.cookies.manu; 
 
@@ -114,5 +127,39 @@ const optionalAuth = (req, res, next) => {
   }
 };
 
+const validateTokenAndIdentifyUser = (req, res, next) => {
+  try {
+    const token = req.cookies.manu 
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
 
-export { getRestaurantIdFromCookie, getEmployeeIdFromCookie, getUserIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth  };
+    const decodedToken = validateToken(token); 
+    identifyUser(decodedToken, req);
+
+    next(); 
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+const validateToken = (token) => {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET); 
+  } catch (error) {
+    console.error('Error in token validation:', error);
+    throw error;
+  }
+};
+
+export { 
+  getRestaurantIdFromCookie, 
+  validateTokenAndIdentifyUser,
+  getEmployeeIdFromCookie, 
+  getUserIdFromCookie, 
+  getRestaurantUserIdFromCookie, 
+  optionalAuth,
+};
