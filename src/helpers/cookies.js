@@ -33,8 +33,6 @@ const getEmployeeIdFromCookie = (req, res, next) => {
 
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-
-    console.log('this is the decoded token employeee id', decodedToken)
   
     const employeeId = decodedToken.employeeId; 
   
@@ -59,7 +57,7 @@ const getUserIdFromCookie = (req, res, next) => {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
    
       const userId = decodedToken.userId; 
-      const userType = decodedToken.userType;
+      const userType = decodedToken.userType;    
 
       req.userId = userId; 
       req.userType = userType

@@ -31,16 +31,6 @@ router.get('/conversations/:conversationId', async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // if (employeeId && conversation.employeeId !== employeeId) {
-    //   console.log(`Employee with ID ${employeeId} is not authorized for conversation ${conversationId}`);
-    //   return res.status(403).json({ error: 'Employee not authorized for this conversation' });
-    // }
-
-    // if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
-    //   console.log(`Restaurant user with ID ${restaurantUserId} is not authorized for conversation ${conversationId}`);
-    //   return res.status(403).json({ error: 'Restaurant user not authorized for this conversation' });
-    // }
-
     res.status(200).json({ conversation });
   } catch (error) {
     console.error('Failed to fetch conversation:', error);
@@ -97,9 +87,6 @@ router.post('/send-message', async (req, res) => {
       ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } } 
       : { receiverRestaurantUser: { connect: { id: parseInt(receiverUserId) } } };
 
-    console.log('Sender Relation:', senderRelation);
-    console.log('Receiver Relation:', receiverRelation);
-
     const message = await prisma.message.create({
       data: {
         text,
@@ -108,8 +95,6 @@ router.post('/send-message', async (req, res) => {
         ...receiverRelation,
       },
     });
-
-    console.log('Message Created:', message);
 
     res.status(200).json({ message: 'Message sent successfully.', data: message });
   } catch (error) {
@@ -246,7 +231,6 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
 router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     if (req.employeeId) {
-      console.log(`Fetching conversations for employee with ID: ${req.employeeId}`);
 
       const employeeConversations = await prisma.conversation.findMany({
         where: { 
@@ -265,12 +249,10 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
         },
       });
 
-      console.log(`Found ${employeeConversations.length} conversations for employee ${req.employeeId}`);
       return res.status(200).json({ conversations: employeeConversations });
     }
 
     if (req.restaurantUserId) {
-      console.log(`Fetching conversations for restaurant user with ID: ${req.restaurantUserId}`);
 
       const restaurantConversations = await prisma.conversation.findMany({
         where: { 
@@ -284,7 +266,6 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
         },
       });
 
-      console.log(`Found ${restaurantConversations.length} conversations for restaurant user ${req.restaurantUserId}`);
       return res.status(200).json({ conversations: restaurantConversations });
     }
 

@@ -471,6 +471,7 @@ router.post('/reset-password-request', async (req, res) => {
 });
 
 router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
+
   try {
     const { userId } = req;
     

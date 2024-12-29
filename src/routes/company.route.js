@@ -78,7 +78,6 @@ router.get('/companies', async (req, res) => {
 router.get('/api/company/restaurantUser/:userId', async (req, res) => {
   const { userId } = req.params;
 
-  // Validate userId
   if (!userId || isNaN(userId)) {
     return res.status(400).json({ error: 'Invalid or missing userId' });
   }
@@ -86,7 +85,7 @@ router.get('/api/company/restaurantUser/:userId', async (req, res) => {
   try {
     const restaurantUser = await prisma.restaurantUser.findUnique({
       where: {
-        userId: parseInt(userId), // Ensure userId is an integer
+        userId: parseInt(userId), 
       },
       include: {
         user: true,
