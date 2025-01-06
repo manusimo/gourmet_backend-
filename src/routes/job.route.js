@@ -202,7 +202,6 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
 });
 
 router.get('/jobs', async (req, res) => {
-
   const {        
     location,           
     schedule,         
@@ -226,7 +225,9 @@ router.get('/jobs', async (req, res) => {
   const restaurantFilter = buildFilters(req.query, restaurantFilterFields);
   const searchConditions = buildSearchConditions(q, 'position');
 
-  let orderByCriteria = {};
+  // Default orderByCriteria to sort by date (most recent first)
+  let orderByCriteria = { createdAt: 'desc' };
+
   if (orderBy === 'applications') {
     orderByCriteria = {
       applications: {
@@ -258,7 +259,7 @@ router.get('/jobs', async (req, res) => {
           restaurant: true,
           questions: true,
         },
-        orderBy: orderByCriteria,
+        orderBy: orderByCriteria, // Apply orderBy criteria
         skip, 
         take: limitNumber, 
       }),
@@ -288,6 +289,7 @@ router.get('/jobs', async (req, res) => {
     res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 });
+
 
 router.get('/jobs/restaurant', checkCompany, getRestaurantIdFromCookie, async (req, res) => { 
   try {

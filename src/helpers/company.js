@@ -24,7 +24,7 @@ async function updateCompanyProfile(
   restaurantId,
   { region, comuna, legalName, rut, name, format, specialty, numberOfRestaurants, 
     workers, profileImageUrl, weeklyAverageClients, description, benefits, 
-    existingLocations }
+    existingLocations, profileCarouselUrls }
 ) {
   await prisma.restaurant.update({
     where: { id: parseInt(restaurantId, 10) },
@@ -53,6 +53,9 @@ async function updateCompanyProfile(
             latitude: location.latitude,
           },
         })),
+      },
+      profileCarouselUrls: {
+        set: profileCarouselUrls, 
       },
     },
   });

@@ -11,13 +11,6 @@ const router = Router();
 
 router.get('/companies', async (req, res) => {
   const {
-    format,
-    specialty,
-    benefits,
-    workers,
-    weeklyAverageClients,
-    region,
-    comuna,
     q,
     page = 1,
     limit = 10,
@@ -28,38 +21,29 @@ router.get('/companies', async (req, res) => {
   const limitInt = parseInt(limit, 10);
 
   if (orderBy && !['popularity', 'scale'].includes(orderBy)) {
+    console.error(`Invalid orderBy value: ${orderBy}`);
     return res.status(400).json({ error: "Invalid orderBy value. Must be 'popularity' or 'scale'" });
   }
 
-  const filterFields = ['format', 'specialty', 'benefits', 'workers', 'weeklyAverageClients', 'region', 'comuna'];
-  const filters = buildFilters(req.query, filterFields);
-  const searchConditions = buildSearchConditions(q, 'name');
-
-  let orderCriteria = {};
-  if (orderBy) {
-    try {
-      orderCriteria = await getOrderByCriteriaCompanies(orderBy);
-    } catch (error) {
-      return res.status(500).json({ error: 'Error generating order criteria' });
-    }
-  }
-
   try {
+    const filters = buildFilters(req.query, ['format', 'specialty']);
+    const searchConditions = buildSearchConditions(q, 'name');
+    console.log('Filters:', filters);
+    console.log('Search Conditions:', searchConditions);
+
     const companies = await prisma.restaurant.findMany({
       where: {
         ...filters,
         ...searchConditions,
-        ...orderCriteria, 
       },
       take: limitInt,
-      skip: (pageInt - 1) * limitInt
+      skip: (pageInt - 1) * limitInt,
     });
 
     const totalCompanies = await prisma.restaurant.count({
       where: {
         ...filters,
         ...searchConditions,
-        ...orderCriteria,
       },
     });
 
@@ -68,9 +52,9 @@ router.get('/companies', async (req, res) => {
       totalCompanies,
       currentPage: pageInt,
       totalPages: Math.ceil(totalCompanies / limitInt),
-      orderBy: orderBy
     });
   } catch (error) {
+    console.error('Internal Server Error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -104,8 +88,6 @@ router.get('/api/company/restaurantUser/:userId', async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch restaurant user' });
   }
 });
-
-
 
 router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => {
   const restaurantId = req.restaurantId;
@@ -227,8 +209,10 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       benefits,
       locations,
       jobOffers,
-      profileImageUrl
+      profileImageUrl, 
+      profileCarouselUrls
     } = req.body;
+    
 
     const benefitsArray = Object.keys(benefits).filter(benefit => benefits[benefit]);
     const userId = req.userId;
@@ -365,13 +349,14 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
       benefits,
       locations, 
       profileImageUrl,
+      profileCarouselUrls,
     } = req.body;
- 
-    const restaurantId = req.restaurantId; 
-
+    
+    const restaurantId = req.restaurantId;
+  
     const newLocations = locations.filter(location => !location.id);
     const existingLocations = locations.filter(location => location.id);
-
+   
     const currentLocations = await prisma.location.findMany({
       where: { restaurantId },
     });
@@ -379,7 +364,7 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
     const locationsToDelete = currentLocations.filter(currentLocation => 
       !locations.some(location => location.id === currentLocation.id)
     );
-
+    
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete); 
       await updateCompanyProfile(restaurantId, {
@@ -396,17 +381,17 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
         region,
         comuna,
         benefits,
-        existingLocations
+        existingLocations,
+        profileCarouselUrls,
       });
       await createNewLocations(newLocations, restaurantId); 
     });
-
+  
     res.status(200).json({ message: 'Company profile updated successfully' });
   } catch (error) {
-    console.error('Error updating company profile:', error);
+    console.error('Error updating company profile:', error.message, error.stack);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
 
 export default router

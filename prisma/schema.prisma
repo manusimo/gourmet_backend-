@@ -96,6 +96,7 @@ model Restaurant {
   legalName            String   @default("No legal name to show")
   numberOfRestaurants  Int
   profileImageUrl String   @default("No photo")
+  profileCarouselUrls String[] @default([])
   workers              String
   weeklyAverageClients String
   benefits             String[]
@@ -217,7 +218,6 @@ model RestaurantUser {
   messagesSent     Message[] @relation("SenderRestaurantUser")
   messagesReceived Message[] @relation("ReceiverRestaurantUser")
 }
-
 
 model TalentPool {
   id             Int           @id @default(autoincrement())
