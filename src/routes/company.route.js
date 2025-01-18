@@ -1,4 +1,5 @@
 import Router from "express";
+import csrf from 'csurf';
 import { prisma } from "../db.js";
 import jwt from 'jsonwebtoken';
 import { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
@@ -6,7 +7,9 @@ import { getUserIdFromCookie, getRestaurantIdFromCookie } from '../helpers/cooki
 import { buildFilters, buildSearchConditions } from "../helpers/filterHelpers.js";
 import { deleteLocations, updateCompanyProfile, createNewLocations } from '../helpers/company.js'
 import {getOrderByCriteriaCompanies} from '../helpers/orderBy.js'
+import { verifyCSRFToken } from "../helpers/csrf.js";
 
+const csrfProtection = csrf({ cookie: true });
 const router = Router();
 
 router.get('/companies', async (req, res) => {
@@ -332,7 +335,7 @@ router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
   }
 });
 
-router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+router.patch('/company', verifyCSRFToken, checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const {
       legalName,

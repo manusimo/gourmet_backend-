@@ -8,6 +8,7 @@ import jobRoutes from './routes/job.route.js';
 import applicationRoutes from './routes/application.route.js';
 import chatRoutes from './routes/chat.route.js';
 import poolRoutes from './routes/pool.route.js';
+import csrfProtectionRoutes from './routes/csrfProtection.route.js';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api', jobRoutes);
 app.use('/api', applicationRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', poolRoutes);
+app.use('/api', csrfProtectionRoutes)
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {

@@ -331,7 +331,7 @@ router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req
 router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     console.log('Here we start the search');
-    const { position, experience, location, available, schedule } = req.query;
+    const { position, experience, region, comuna, available, schedule } = req.query;
 
     const userId = req.userId; 
     const restaurantUserId = req.restaurantUserId; 
@@ -343,8 +343,12 @@ router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurant
           contains: position,
           mode: 'insensitive',
         },
-        location: {
-          contains: location,
+        region: {
+          contains: region,
+          mode: 'insensitive',
+        },
+        comuna: {
+          contains: comuna,
           mode: 'insensitive',
         },
         available: {

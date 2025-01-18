@@ -69,14 +69,14 @@ router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaura
 router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const { restaurantId, restaurantUserId, userRole } = req;
-    const { position, experience, location, available, schedule } = req.query;
+    const { position, experience, region, comuna, available, schedule } = req.query;
 
     let filter = {};
     if (position) filter.position = position;
-    if (experience) filter.experience = experience;
-    if (location) filter.location = location;
     if (available) filter.available = available;
     if (schedule) filter.schedule = schedule;
+    if (region) filter.region = region;
+    if (comuna) filter.comuna = comuna;
 
     const talentPool = await getTalentPool(restaurantId,filter);
 

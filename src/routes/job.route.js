@@ -259,7 +259,7 @@ router.get('/jobs', async (req, res) => {
           restaurant: true,
           questions: true,
         },
-        orderBy: orderByCriteria, // Apply orderBy criteria
+        orderBy: orderByCriteria, 
         skip, 
         take: limitNumber, 
       }),

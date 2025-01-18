@@ -9,9 +9,10 @@ const getTalentPool = async (restaurantId, filter) => {
       employee: {
         ...(filter.position && { position: filter.position }),
         ...(filter.experience && { yearsOfExperience: filter.experience }),
-        ...(filter.location && { location: { contains: filter.location } }), 
         ...(filter.available && { available: filter.available }),
         ...(filter.schedule && { schedule: filter.schedule }),
+        ...(filter.region && { region: filter.region }),
+        ...(filter.comuna && { comuna: filter.comuna }),
       },
     };
 
