@@ -12,7 +12,7 @@ router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserId
   try {
     const {
       position,
-      location,
+      locationId,
       schedule,
       contract,
       vacancies,
@@ -28,14 +28,21 @@ router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserId
     const restaurantId = req.restaurantId; 
     const restaurantUserId = req.restaurantUserId; 
 
-    console.log('this is the lcoation', location)
+    console.log('this is the locationId', locationId);
 
-    const tips = propina === 'Si' ? true : false;
+    if (!locationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'locationId is required',
+      });
+    }
+
+    const tips = propina === 'Si';
 
     const jobOffer = await prisma.jobOffer.create({
       data: {
         position,
-        location,
+        location: { connect: { id: locationId } }, 
         schedule,
         contract,
         vacancies: parseInt(vacancies, 10),
@@ -51,9 +58,17 @@ router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserId
       },
     });
 
+    const jobOfferCheck = await prisma.jobOffer.findUnique({
+      where: { id: jobOffer.id },
+      include: { location: true },
+    });
+
+    console.log('this is the job offer', jobOfferCheck)
+
+
     res.status(201).json({ message: 'Job offer created successfully', jobOffer });
   } catch (error) {
-    console.error(error);
+    console.error('Error creating job offer:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -98,7 +113,6 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
 
 router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
@@ -166,8 +180,6 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
   }
 });
 
-
-
 router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
 
   const employeeId = req.employeeId;
@@ -203,7 +215,7 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
 router.get('/jobs', async (req, res) => {
   const {        
-    location,           
+    locationId, 
     schedule,         
     period,   
     format,          
@@ -221,11 +233,9 @@ router.get('/jobs', async (req, res) => {
   const skip = (pageNumber - 1) * limitNumber; 
 
   const restaurantFilterFields = ['specialty', 'format', 'benefits', 'region', 'comuna']; 
-
   const restaurantFilter = buildFilters(req.query, restaurantFilterFields);
   const searchConditions = buildSearchConditions(q, 'position');
 
-  // Default orderByCriteria to sort by date (most recent first)
   let orderByCriteria = { createdAt: 'desc' };
 
   if (orderBy === 'applications') {
@@ -241,7 +251,7 @@ router.get('/jobs', async (req, res) => {
       createdAt: 'desc' 
     };
   }
- 
+
   try {
     const [jobs, totalJobs] = await Promise.all([
       prisma.jobOffer.findMany({
@@ -250,13 +260,14 @@ router.get('/jobs', async (req, res) => {
             ...restaurantFilter,
           },
           ...searchConditions,
-          location: location || undefined, 
+          locationId: locationId ? parseInt(locationId, 10) : undefined, 
           schedule: schedule || undefined,
           period: period || undefined,
           contract: contract || undefined,
         },
         include: {
           restaurant: true,
+          location: true, 
           questions: true,
         },
         orderBy: orderByCriteria, 
@@ -269,14 +280,14 @@ router.get('/jobs', async (req, res) => {
           restaurant: {
             ...restaurantFilter,
           },
-          location: location || undefined,
+          locationId: locationId ? parseInt(locationId, 10) : undefined, 
           schedule: schedule || undefined,
           period: period || undefined,
           contract: contract || undefined,
         },
       }),
     ]);
-     
+
     const totalPages = Math.ceil(totalJobs / limitNumber);
 
     res.status(200).json({
@@ -290,7 +301,6 @@ router.get('/jobs', async (req, res) => {
   }
 });
 
-
 router.get('/jobs/restaurant', checkCompany, getRestaurantIdFromCookie, async (req, res) => { 
   try {
     const restaurantId = req.restaurantId;
@@ -301,6 +311,7 @@ router.get('/jobs/restaurant', checkCompany, getRestaurantIdFromCookie, async (r
       include: {
         restaurant: true, 
         questions: true,
+        location: true,
       },
       orderBy: {
         createdAt: 'desc', 
@@ -325,8 +336,11 @@ router.get('/jobs/:jobId', async (req, res) => {
         questions: true,
         restaurant: true,
         applications: true, 
+        location: true,
       },
     });
+
+    console.log('this is the job offer', jobOffer)
 
     if (jobOffer) {
       res.json({
@@ -341,7 +355,5 @@ router.get('/jobs/:jobId', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-
 
 export default router

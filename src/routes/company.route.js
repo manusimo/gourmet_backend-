@@ -195,7 +195,6 @@ router.get('/company/talents-application', getRestaurantIdFromCookie, async (req
 });
 
 router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (req, res) => {
-
   try {
     const {
       name,
@@ -215,11 +214,16 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       profileImageUrl, 
       profileCarouselUrls
     } = req.body;
-    
 
     const benefitsArray = Object.keys(benefits).filter(benefit => benefits[benefit]);
     const userId = req.userId;
-    const role = req.userRole
+    const role = req.userRole;
+
+    const formattedLocations = locations.map(location => ({
+      address: location.address,
+      longitude: parseFloat(location.longitude), 
+      latitude: parseFloat(location.latitude),   
+    }));
 
     const companyProfile = await prisma.restaurant.create({
       data: {
@@ -232,15 +236,11 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
         region,
         comuna,
         numberOfRestaurants: parseInt(numberOfRestaurants, 10),
-        workers: workers,
-        weeklyAverageClients:weeklyAverageClients,
-        profileImageUrl: profileImageUrl,
+        workers,
+        weeklyAverageClients,
+        profileImageUrl,
         benefits: benefitsArray,
-        locations: { create: locations.map(location => ({
-          address: location.address,
-          longitude: location.longitude,
-          latitude: location.latitude,
-        })) },
+        locations: { create: formattedLocations }, 
         jobOffers: { create: jobOffers },
         userId,
       },
@@ -254,12 +254,11 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       }
     });
 
-    const updateUser =  await prisma.user.update({
+    const updateUser = await prisma.user.update({
       where: { id: userId },
       data: { 
-        restaurant: { 
-          connect: { id: companyProfile.id } 
-        } }
+        restaurant: { connect: { id: companyProfile.id } }
+      }
     });
 
     const newToken = jwt.sign({
@@ -278,7 +277,7 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
 
     res.status(201).json({ message: 'Company created successfully', companyProfile });
   } catch (error) {
-    console.error(error);
+    console.error('Error creating company:', error.message, error.stack);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -356,10 +355,16 @@ router.patch('/company', verifyCSRFToken, checkCompany, getRestaurantIdFromCooki
     } = req.body;
     
     const restaurantId = req.restaurantId;
-  
-    const newLocations = locations.filter(location => !location.id);
+    
+    // Separate new and existing locations
+    const newLocations = locations.filter(location => !location.id).map(location => ({
+      ...location,
+      longitude: parseFloat(location.longitude), // Convert to Float
+      latitude: parseFloat(location.latitude),   // Convert to Float
+    }));
+
     const existingLocations = locations.filter(location => location.id);
-   
+
     const currentLocations = await prisma.location.findMany({
       where: { restaurantId },
     });
@@ -367,7 +372,7 @@ router.patch('/company', verifyCSRFToken, checkCompany, getRestaurantIdFromCooki
     const locationsToDelete = currentLocations.filter(currentLocation => 
       !locations.some(location => location.id === currentLocation.id)
     );
-    
+
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete); 
       await updateCompanyProfile(restaurantId, {
@@ -389,7 +394,7 @@ router.patch('/company', verifyCSRFToken, checkCompany, getRestaurantIdFromCooki
       });
       await createNewLocations(newLocations, restaurantId); 
     });
-  
+
     res.status(200).json({ message: 'Company profile updated successfully' });
   } catch (error) {
     console.error('Error updating company profile:', error.message, error.stack);

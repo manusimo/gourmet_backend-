@@ -111,16 +111,18 @@ model Restaurant {
 model Location {
   id           Int        @id @default(autoincrement())
   address      String
-  longitude    String     @default("0")  
-  latitude     String     @default("0")  
+  latitude Float @default(0)
+  longitude Float @default(0)
   restaurantId Int
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  jobOffers    JobOffer[] 
 }
 
 model JobOffer {
   id                 Int              @id @default(autoincrement())
   position           String
-  location           String
+  locationId         Int?             
+  location           Location?         @relation(fields: [locationId], references: [id])
   schedule           String
   period             String           @default("Sin información")
   contract           String
