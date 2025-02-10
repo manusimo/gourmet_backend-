@@ -355,7 +355,8 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
       message: "User logged in",
       isAuthenticated: true,
       profileImageUrl,
-      userType: user.userType
+      userType: user.userType,
+      role: user.role
     });
   } catch (error) {
     console.error('Full error:', error);

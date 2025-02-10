@@ -356,11 +356,10 @@ router.patch('/company', verifyCSRFToken, checkCompany, getRestaurantIdFromCooki
     
     const restaurantId = req.restaurantId;
     
-    // Separate new and existing locations
     const newLocations = locations.filter(location => !location.id).map(location => ({
       ...location,
-      longitude: parseFloat(location.longitude), // Convert to Float
-      latitude: parseFloat(location.latitude),   // Convert to Float
+      longitude: parseFloat(location.longitude), 
+      latitude: parseFloat(location.latitude),  
     }));
 
     const existingLocations = locations.filter(location => location.id);
