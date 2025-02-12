@@ -473,7 +473,8 @@ router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, a
       include: {
         jobOffer: {
           include: {
-            restaurant: true,  // Ensure restaurant data is included
+            restaurant: true, 
+            location: true, // Ensure restaurant data is included
           },
         },
       },

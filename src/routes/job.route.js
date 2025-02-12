@@ -181,7 +181,6 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
 });
 
 router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
-
   const employeeId = req.employeeId;
 
   try {
@@ -201,6 +200,7 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
         jobPost: {
           include: {
             restaurant: true,
+            location: true,
           },
         },
       },

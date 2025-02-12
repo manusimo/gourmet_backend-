@@ -239,7 +239,11 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
         },
         include: { 
           messages: true, 
-          jobOffer: true,
+          jobOffer: {
+            include: {
+              location: true
+            }
+          },
           employee: true,
           restaurantUser: { 
             include: {
