@@ -239,6 +239,7 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
         workers,
         weeklyAverageClients,
         profileImageUrl,
+        profileCarouselUrls,
         benefits: benefitsArray,
         locations: { create: formattedLocations }, 
         jobOffers: { create: jobOffers },
