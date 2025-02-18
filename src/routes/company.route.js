@@ -335,7 +335,7 @@ router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
   }
 });
 
-router.patch('/company', verifyCSRFToken, checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const {
       legalName,
