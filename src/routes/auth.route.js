@@ -509,7 +509,7 @@ router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + (60 * 60), 
       aud: 'chat',
-      iss: 'api'
+      iss: process.env.NODE_ENV === 'production' ? process.env.JWT_ISSUER : 'localhost',   
     };
 
     const chatToken = jwt.sign(
