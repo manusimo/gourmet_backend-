@@ -187,7 +187,7 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
     const employeeExists = await prisma.employee.findUnique({
       where: { id: employeeId },
     });
-
+    console.log('herok')
     if (!employeeExists) {
       return res.status(404).json({ message: 'Employee not found' });
     }
