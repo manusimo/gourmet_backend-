@@ -70,6 +70,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
 router.get('/applications/:applicationId', async (req, res) => {
   const { applicationId } = req.params;  
+  
   try {
       const application = await prisma.application.findUnique({
           where: {
@@ -96,10 +97,13 @@ router.get('/applications/:applicationId', async (req, res) => {
           return res.status(404).send('Application not found');
       }
 
-      console.log(application);
       res.status(200).json(application);
   } catch (error) {
-      console.error(error);
+      console.error('🚨 Error in GET /applications/:applicationId:', {
+          error: error.message,
+          stack: error.stack,
+          applicationId
+      });
       res.status(500).json({ message: 'Internal Server Error' });
   }
 });

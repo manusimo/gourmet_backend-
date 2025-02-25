@@ -201,6 +201,12 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
           include: {
             restaurant: true,
             location: true,
+            questions: true,
+          },
+        },
+        answers: {
+          include: {
+            question: true,
           },
         },
       },
@@ -208,7 +214,7 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
     res.json(applications);
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching applications:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
