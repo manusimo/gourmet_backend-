@@ -101,8 +101,7 @@ router.get('/applications/:applicationId', async (req, res) => {
   } catch (error) {
       console.error('🚨 Error in GET /applications/:applicationId:', {
           error: error.message,
-          stack: error.stack,
-          applicationId
+          stack: error.stack
       });
       res.status(500).json({ message: 'Internal Server Error' });
   }

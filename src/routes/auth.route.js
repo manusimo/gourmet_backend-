@@ -558,11 +558,20 @@ router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
 
 router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
   try {
+    console.log('🚀 Starting user update process...');
     const { userId } = req;
-    const { email, name, phoneNumber } = req.body
-    const numericUserId = typeof userId === 'string' ? parseInt(userId) : userId;
+    const { email, name, phoneNumber } = req.body;
+    console.log('📝 Update request details:', {
+      userId,
+      requestBody: { email, name, phoneNumber }
+    });
 
+    const numericUserId = typeof userId === 'string' ? parseInt(userId) : userId;
+    console.log('🔢 Converted userId to numeric:', { original: userId, converted: numericUserId });
+
+    // Check for email conflicts if email is being updated
     if (email) {
+      console.log('📧 Checking for email conflicts:', { newEmail: email.toLowerCase() });
       const emailUser = await prisma.user.findFirst({
         where: {
           email: email.toLowerCase(),
@@ -572,7 +581,16 @@ router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
         }
       });
 
+      console.log('📧 Email conflict check result:', {
+        emailFound: !!emailUser,
+        conflictingUserId: emailUser?.id
+      });
+
       if (emailUser) {
+        console.log('❌ Email conflict detected:', {
+          attemptedEmail: email,
+          existingUserId: emailUser.id
+        });
         return res.status(400).json({ 
           message: 'This email is already associated with another account' 
         });
@@ -585,13 +603,17 @@ router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
     if (name) updateData.name = name;
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
 
+    console.log('📦 Prepared update data:', updateData);
+
     if (Object.keys(updateData).length === 0) {
+      console.log('ℹ️ No changes detected in update data');
       return res.status(200).json({
         message: 'No changes to update',
         user: existingUser
       });
     }
 
+    console.log('🔄 Attempting to update user with ID:', numericUserId);
     const updatedUser = await prisma.user.update({
       where: { 
         id: numericUserId 
@@ -600,6 +622,12 @@ router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
       include: {
         restaurantUsers: true
       }
+    });
+
+    console.log('✅ User update successful:', {
+      userId: updatedUser.id,
+      updatedFields: Object.keys(updateData),
+      restaurantUsersCount: updatedUser.restaurantUsers.length
     });
 
     return res.status(200).json({
@@ -614,7 +642,22 @@ router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Request failed:', error);
+    console.error('❌ Update request failed:', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+      meta: error.meta
+    });
+
+    // Log specific Prisma errors
+    if (error.code) {
+      console.error('📊 Prisma error details:', {
+        code: error.code,
+        meta: error.meta,
+        target: error.meta?.target
+      });
+    }
+
     return res.status(500).json({ 
       message: 'Failed to update profile. Please try again.',
       error: error.message
