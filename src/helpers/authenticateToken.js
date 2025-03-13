@@ -36,7 +36,6 @@ const checkUserType = (requiredUserType) => (req, res, next) => {
 
 const setUserType = () => (req, res, next) => {
   const token = req.cookies.manu; 
-  console.log('setting the user type')
   
   if (!token) {
     return res.status(401).json({ message: 'JWT token is missing or undefined' });
@@ -44,8 +43,6 @@ const setUserType = () => (req, res, next) => {
 
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-
-    console.log('this is the decoded token at user type', decodedToken)
 
     const userType = decodedToken.userType; 
    

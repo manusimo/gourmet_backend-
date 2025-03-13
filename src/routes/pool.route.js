@@ -19,8 +19,10 @@ router.get('/talent-pool/check', checkCompany, getRestaurantIdFromCookie, async 
     });
 
     if (existingEntry) {
+      console.log('Talent pool entry exists for employeeId:', employeeId);
       return res.status(200).json({ exists: true });
     } else {
+      console.log('No talent pool entry found for employeeId:', employeeId);
       return res.status(200).json({ exists: false });
     }
   } catch (error) {
@@ -32,34 +34,31 @@ router.get('/talent-pool/check', checkCompany, getRestaurantIdFromCookie, async 
 router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const { employeeId } = req.body;
-    const restaurantId = req.restaurantId;
-    const restaurantUserId = req.restaurantUserId;
-
-    console.log('this is the employee id', employeeId)
-
-    console.log('This is the restaurant user id:', restaurantUserId);
+    const restaurantId = parseInt(req.restaurantId);
+    const restaurantUserId = parseInt(req.restaurantUserId);
 
     const existingEntry = await prisma.talentPool.findFirst({
       where: {
-        employeeId,
+        employeeId: parseInt(employeeId),
         restaurantId,
       }
     });
 
     if (existingEntry) {
+      console.log('Employee already exists in the talent pool:');
       return res.status(409).json({ message: "Employee already exists in the talent pool." });
     }
 
     const talentEntry = await prisma.talentPool.create({
       data: {
-        employee: { connect: { id: employeeId } },
+        employee: { connect: { id: parseInt(employeeId) } },
         restaurant: { connect: { id: restaurantId } },
         addedByUser: { connect: { id: restaurantUserId } },
         status: 'accepted', 
       }
     });
 
-    res.status(201).json({ message: "Employee added to talent pool successfully", talentEntry });
+    res.status(201).json({ message: "Employee added to talent pool successfully", talentEntry });;
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -90,8 +89,7 @@ router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurant
 
 router.delete('/talent-pool/:talentId', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   const talentId = parseInt(req.params.talentId);
-  console.log('about to delete', talentId);
-
+ 
   try {
     const existingEntry = await prisma.talentPool.findUnique({
       where: { id: talentId },
@@ -105,17 +103,14 @@ router.delete('/talent-pool/:talentId', checkCompany, getRestaurantIdFromCookie,
     await prisma.$transaction(async (tx) => {
       const conversationIds = existingEntry.conversations.map(conversation => conversation.id);
 
-      // Delete messages in batch
       await tx.message.deleteMany({
         where: { conversationId: { in: conversationIds } }
       });
 
-      // Delete conversations in batch
       await tx.conversation.deleteMany({
         where: { id: { in: conversationIds } }
       });
 
-      // Delete the talent pool entry
       await tx.talentPool.delete({
         where: { id: talentId }
       });
@@ -129,6 +124,7 @@ router.delete('/talent-pool/:talentId', checkCompany, getRestaurantIdFromCookie,
 });
 
 router.patch('/talent-pool/:id/approve', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+
   try {
     const { id } = req.params;
     const restaurantUserId = req.restaurantUserId;

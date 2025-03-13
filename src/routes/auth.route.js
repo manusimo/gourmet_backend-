@@ -64,7 +64,6 @@ router.post('/signup', async (req, res) => {
 
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-      console.log(decodedToken);
     } catch (error) {
       console.error(error);
       return res.status(401).json({ message: 'Invalid token' });
@@ -152,7 +151,6 @@ router.post('/logout', async (req, res) => {
     const token = req.cookies.manu;
     
     if (!token) {
-      console.log('No token found, user is not logged in.');
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
@@ -218,13 +216,10 @@ router.get('/protected-route', async (req, res) => {
 });
 
 router.post('/admin/create-user', getRestaurantIdFromCookie, setUserRole, async (req, res) => {
-  console.log('creating the staff user');
   const { email } = req.body;
   const { restaurantId, userRole } = req;
   const userType = 'empresas';
   
-  console.log('Input values:', { email, userType, restaurantId, userRole });
-
   if (!email) {
     console.log('Error: Email is required');
     return res.status(400).json({ message: 'Email is required' });
@@ -243,20 +238,16 @@ router.post('/admin/create-user', getRestaurantIdFromCookie, setUserRole, async 
   });
 
   if (existingUser) {
-    console.log('Error: User already exists');
     return res.status(409).json({ message: 'User already exists' });
   }
 
-  console.log('creating the token for confirmation');
   const confirmationToken = jwt.sign({ email, userType, restaurantId }, process.env.JWT_SECRET, { expiresIn: '60min' });
 
   const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
   const confirmationLink = `${baseUrl}/panel-empresa/confirm-email?token=${confirmationToken}`;
   const emailBody = `Welcome to our service! Please click on the link below to confirm your email and set your password. <a href="${confirmationLink}">Confirm Email</a>`;
   
-  console.log('Preparing to send email');
   try {
-    console.log('sending to this email', email)
     await sendEmail({
       to: email,
       subject: 'Welcome to Our Service - Confirm Your Email',

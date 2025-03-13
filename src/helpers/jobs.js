@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Fetch top-rated jobs
 const fetchTopRatedJobs = async (limit) => {  
   try {
     const jobs = await prisma.jobOffer.findMany({
@@ -18,6 +17,7 @@ const fetchTopRatedJobs = async (limit) => {
           },
         },
         restaurant: true,
+        location: true,
       },
       take: parseInt(limit, 10),
     });
@@ -39,22 +39,22 @@ const fetchJobsByNameAndLocation = async (jobName, location, user = null) => {
       where: {
         ...(jobName && {
           name: {
-            contains: jobName, // Filter by job name (partial match)
-            mode: 'insensitive', // Case-insensitive search
+            contains: jobName, 
+            mode: 'insensitive', 
           },
         }),
         ...(location && {
           restaurant: {
             location: {
-              contains: location, // Filter by location (partial match)
-              mode: 'insensitive', // Case-insensitive search
+              contains: location,
+              mode: 'insensitive', 
             },
           },
         }),
         ...(user && {
           applications: {
             some: {
-              userId: user.id, // Filter jobs that the user has applied to
+              userId: user.id, 
             },
           },
         }),
@@ -66,6 +66,7 @@ const fetchJobsByNameAndLocation = async (jobName, location, user = null) => {
             id: true,
           },
         },
+        location: true, 
       },
     });
 
