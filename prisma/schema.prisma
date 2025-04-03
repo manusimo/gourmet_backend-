@@ -142,7 +142,8 @@ model JobOffer {
   createdAt  DateTime @default(now())
   restaurantUserId   Int?
   restaurantUser     RestaurantUser?  @relation(fields: [restaurantUserId], references: [id])
-  deactivatedAt      DateTime? 
+  deactivatedAt      DateTime?
+  deletedAt          DateTime?
 }
 
 model Question {

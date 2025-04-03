@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import  { checkCompany, checkEmployee }  from '../helpers/authenticateToken.js';
 import { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } from '../helpers/cookies.js';
 import { buildFilters, buildSearchConditions } from '../helpers/filterHelpers.js';
-import { fetchTopRatedJobs, fetchJobsByNameAndLocation  } from "../helpers/jobs.js";
+import { fetchTopRatedJobs, fetchJobsByNameAndLocation, toggleJobActivation, softDeleteJob } from "../helpers/jobs.js";
 
 const router = Router();
 
@@ -65,7 +65,6 @@ router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserId
 
     console.log('this is the job offer', jobOfferCheck)
 
-
     res.status(201).json({ message: 'Job offer created successfully', jobOffer });
   } catch (error) {
     console.error('Error creating job offer:', error);
@@ -82,7 +81,6 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
     let formattedJobs;
 
     formattedJobs = await fetchJobsByNameAndLocation(jobName, location);
-
 
     res.status(200).json({
       jobs: formattedJobs,
@@ -101,9 +99,7 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
   try {
     let formattedJobs;
 
-
     formattedJobs = await fetchTopRatedJobs(limit);
-
 
     res.json({
       jobs: formattedJobs,
@@ -133,9 +129,16 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
       functions,
     } = req.body;
 
-
     const restaurantId = req.restaurantId;
     const tips = propina === 'Si';
+
+    const existingJob = await prisma.jobOffer.findFirst({
+      where: { id: jobId, restaurantId: restaurantId, deletedAt: null }
+    });
+
+    if (!existingJob) {
+      return res.status(404).json({ message: 'Job offer not found or has been deleted' });
+    }
 
     const newQuestions = questions.filter((q) => !q.id);
     const existingQuestions = questions.filter((q) => q.id);
@@ -176,7 +179,7 @@ router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, re
     res.status(200).json({ message: 'Job offer updated successfully', updatedJobOffer });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
   }
 });
 
@@ -195,6 +198,7 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
     const applications = await prisma.application.findMany({
       where: {
         employeeId: employeeId,
+        jobPost: { deletedAt: null, deactivatedAt: null },
       },
       include: {
         jobPost: {
@@ -283,6 +287,7 @@ router.get('/jobs', async (req, res) => {
           contract: contract || undefined,
           createdAt: { gt: finishedDateParsed },
           deactivatedAt: null,
+          deletedAt: null,
         },
         include: {
           restaurant: true,
@@ -305,6 +310,7 @@ router.get('/jobs', async (req, res) => {
           contract: contract || undefined,
           createdAt: { gt: finishedDateParsed },
           deactivatedAt: null,
+          deletedAt: null,
         },
       }),
     ]);
@@ -328,6 +334,7 @@ router.get('/jobs/restaurant', checkCompany, getRestaurantIdFromCookie, async (r
     const jobOffers = await prisma.jobOffer.findMany({
       where: {
         restaurantId: restaurantId,
+        deletedAt: null,
       },
       include: {
         restaurant: true,
@@ -338,7 +345,6 @@ router.get('/jobs/restaurant', checkCompany, getRestaurantIdFromCookie, async (r
         createdAt: 'desc',
       },
     });
-
     res.status(200).json(jobOffers);
   } catch (error) {
     console.error(error);
@@ -350,9 +356,10 @@ router.get('/jobs/:jobId', async (req, res) => {
   const { jobId } = req.params;
 
   try {
-    const jobOffer = await prisma.jobOffer.findUnique({
+    const jobOffer = await prisma.jobOffer.findFirst({
       where: {
         id: parseInt(jobId),
+        deletedAt: null,
       },
       include: {
         questions: true,
@@ -384,26 +391,26 @@ router.patch('/jobs/:id/activation', checkCompany, getRestaurantIdFromCookie, as
     const { active } = req.body;
     const restaurantId = req.restaurantId;
 
-    const jobOffer = await prisma.jobOffer.findFirst({
-      where: {
-        id: jobId,
-        restaurantId: restaurantId,
-      },
-    });
-    if (!jobOffer) {
-      return res.status(404).json({ message: 'Job offer not found' });
-    }
-
-    const updatedJobOffer = await prisma.jobOffer.update({
-      where: { id: jobId },
-      data: {
-        deactivatedAt: active ? null : new Date(),
-      },
-    });
-
+    const updatedJobOffer = await toggleJobActivation(jobId, active, restaurantId);
     res.status(200).json({
       message: active ? 'Job offer activated successfully' : 'Job offer deactivated successfully',
       jobOffer: updatedJobOffer,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Internal Server Error' });
+  }
+});
+
+router.delete('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+  try {
+    const jobId = parseInt(req.params.id, 10);
+    const restaurantId = req.restaurantId;
+
+    const deletedJob = await softDeleteJob(jobId, restaurantId);
+
+    res.status(200).json({
+      message: 'Job offer soft deleted successfully',
+      jobOffer: deletedJob,
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Internal Server Error' });
