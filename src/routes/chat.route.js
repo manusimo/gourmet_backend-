@@ -1,12 +1,12 @@
 import express from 'express';
 import { checkJoinAuthorization, checkSendMessageAuthorization } from '../helpers/chat.js';
 import  { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
-import { 
-  getUserIdFromCookie, 
-  getRestaurantIdFromCookie, 
-  getEmployeeIdFromCookie, 
+import {
+  getUserIdFromCookie,
+  getRestaurantIdFromCookie,
+  getEmployeeIdFromCookie,
   getRestaurantUserIdFromCookie,
-  validateTokenAndIdentifyUser 
+  validateTokenAndIdentifyUser
 } from '../helpers/cookies.js';
 import { prisma } from "../db.js";
 
@@ -16,8 +16,8 @@ router.get('/conversations/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
 
   try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: parseInt(conversationId) },
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: parseInt(conversationId), deletedAt: null },
       include: {
         messages: true,
         jobOffer: true,
@@ -48,8 +48,8 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
   }
 
   try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: parseInt(conversationId) },
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: parseInt(conversationId), deletedAt: null },
       include: { messages: true }
     });
 
@@ -79,12 +79,20 @@ router.post('/send-message', async (req, res) => {
   const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
 
   try {
-    const senderRelation = senderType === 'employee' 
-      ? { senderEmployee: { connect: { id: parseInt(senderUserId) } } } 
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: parseInt(conversationId), deletedAt: null }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    const senderRelation = senderType === 'employee'
+      ? { senderEmployee: { connect: { id: parseInt(senderUserId) } } }
       : { senderRestaurantUser: { connect: { id: parseInt(senderUserId) } } };
 
-    const receiverRelation = receiverType === 'employee' 
-      ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } } 
+    const receiverRelation = receiverType === 'employee'
+      ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } }
       : { receiverRestaurantUser: { connect: { id: parseInt(receiverUserId) } } };
 
     const message = await prisma.message.create({
@@ -108,7 +116,7 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
   const { employeeId, type } = req.params;
   const restaurantUserId = req.restaurantUserId;
   console.log('checking the existence of the conversation in the backend', employeeId, restaurantUserId, type)
- 
+
   if (!restaurantUserId) {
     return res.status(400).json({ error: 'Restaurant user ID not found in cookies.' });
   }
@@ -121,18 +129,20 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
           where: {
             employeeId: parseInt(employeeId),
             restaurantUserId: parseInt(restaurantUserId),
-            type: 'talent'
+            type: 'talent',
+            deletedAt: null
           },
         });
-      } 
-      
+      }
+
       if (type === 'application') {
         console.log('check the application conversation')
         conversation = await prisma.conversation.findFirst({
           where: {
             employeeId: parseInt(employeeId),
             restaurantUserId: parseInt(restaurantUserId),
-            type: 'applicant'
+            type: 'applicant',
+            deletedAt: null
           },
         });
 
@@ -157,7 +167,7 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
 
   try {
     let conversation;
-    
+
     const parsedEmployeeId = parseInt(employeeId, 10);
 
     if (jobPostId) {
@@ -166,18 +176,20 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
           employeeId: parsedEmployeeId,
           jobOfferId: jobPostId,
           restaurantUserId: restaurantUserId,
-          type
+          type,
+          deletedAt: null
         },
       });
     }
-    
+
     if (talentPoolId) {
       conversation = await prisma.conversation.findFirst({
         where: {
-          employeeId: parsedEmployeeId,  
+          employeeId: parsedEmployeeId,
           talentPoolId,
           restaurantUserId: restaurantUserId,
-          type
+          type,
+          deletedAt: null
         },
       });
     }
@@ -185,7 +197,7 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
     if (!conversation) {
       conversation = await prisma.conversation.create({
         data: {
-          employeeId: parsedEmployeeId,  
+          employeeId: parsedEmployeeId,
           jobOfferId: jobPostId,
           talentPoolId: talentPoolId,
           restaurantUserId,
@@ -203,14 +215,15 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
 
 router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie, async (req, res) => {
   const { employeeId, type } = req.params;
-  const { restaurantUserId } = req.cookies; 
-  
+  const { restaurantUserId } = req.cookies;
+
   try {
     const conversations = await prisma.conversation.findMany({
       where: {
         restaurantUserId: parseInt(restaurantUserId),
         employeeId: parseInt(employeeId),
         type: type.toLowerCase(),
+        deletedAt: null
       },
       include: {
         messages: true,
@@ -233,23 +246,24 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
     if (req.employeeId) {
 
       const employeeConversations = await prisma.conversation.findMany({
-        where: { 
+        where: {
           employeeId: req.employeeId,
           type: req.query.type || 'none',
+          deletedAt: null
         },
-        include: { 
-          messages: true, 
+        include: {
+          messages: true,
           jobOffer: {
             include: {
               location: true
             }
           },
           employee: true,
-          restaurantUser: { 
+          restaurantUser: {
             include: {
               restaurant: true,
             },
-          },  
+          },
         },
       });
 
@@ -259,14 +273,15 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
     if (req.restaurantUserId) {
 
       const restaurantConversations = await prisma.conversation.findMany({
-        where: { 
+        where: {
           restaurantUserId: parseInt(req.restaurantUserId),
-          type: req.query.type || '', 
+          type: req.query.type || '',
+          deletedAt: null
         },
-        include: { 
-          messages: true, 
+        include: {
+          messages: true,
           jobOffer: true,
-          employee: true,  
+          employee: true,
         },
       });
 
@@ -292,9 +307,9 @@ router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRest
   }
 
   try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id: parseInt(conversationId) },
-      include: { messages: true }, 
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: parseInt(conversationId), deletedAt: null },
+      include: { messages: true },
     });
 
     if (!conversation) {
@@ -319,4 +334,3 @@ router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRest
 });
 
 export default router;
-

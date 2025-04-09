@@ -142,7 +142,6 @@ model JobOffer {
   createdAt  DateTime @default(now())
   restaurantUserId   Int?
   restaurantUser     RestaurantUser?  @relation(fields: [restaurantUserId], references: [id])
-  deactivatedAt      DateTime?
   deletedAt          DateTime?
 }
 
@@ -161,6 +160,7 @@ model Application {
   jobPost       JobOffer   @relation(fields: [jobPostId], references: [id])
   employee      Employee   @relation(fields: [employeeId], references: [id])
   answers       Answer[]
+  deletedAt     DateTime?
 }
 
 model Answer {
@@ -186,6 +186,7 @@ model Conversation {
 
   employee         Employee       @relation(fields: [employeeId], references: [id])
   restaurantUser   RestaurantUser @relation(fields: [restaurantUserId], references: [id])
+  deletedAt        DateTime?
 }
 
 model Message {

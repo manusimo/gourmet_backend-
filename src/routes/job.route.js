@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import  { checkCompany, checkEmployee }  from '../helpers/authenticateToken.js';
 import { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } from '../helpers/cookies.js';
 import { buildFilters, buildSearchConditions } from '../helpers/filterHelpers.js';
-import { fetchTopRatedJobs, fetchJobsByNameAndLocation, toggleJobActivation, softDeleteJob } from "../helpers/jobs.js";
+import { fetchTopRatedJobs, fetchJobsByNameAndLocation, softDeleteJobCascade } from "../helpers/jobs.js";
 
 const router = Router();
 
@@ -198,7 +198,7 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
     const applications = await prisma.application.findMany({
       where: {
         employeeId: employeeId,
-        jobPost: { deletedAt: null, deactivatedAt: null },
+        jobPost: { deletedAt: null},
       },
       include: {
         jobPost: {
@@ -286,7 +286,6 @@ router.get('/jobs', async (req, res) => {
           period: period || undefined,
           contract: contract || undefined,
           createdAt: { gt: finishedDateParsed },
-          deactivatedAt: null,
           deletedAt: null,
         },
         include: {
@@ -309,7 +308,6 @@ router.get('/jobs', async (req, res) => {
           period: period || undefined,
           contract: contract || undefined,
           createdAt: { gt: finishedDateParsed },
-          deactivatedAt: null,
           deletedAt: null,
         },
       }),
@@ -385,28 +383,13 @@ router.get('/jobs/:jobId', async (req, res) => {
   }
 });
 
-router.patch('/jobs/:id/activation', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
-  try {
-    const jobId = parseInt(req.params.id, 10);
-    const { active } = req.body;
-    const restaurantId = req.restaurantId;
-
-    const updatedJobOffer = await toggleJobActivation(jobId, active, restaurantId);
-    res.status(200).json({
-      message: active ? 'Job offer activated successfully' : 'Job offer deactivated successfully',
-      jobOffer: updatedJobOffer,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message || 'Internal Server Error' });
-  }
-});
 
 router.delete('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const jobId = parseInt(req.params.id, 10);
     const restaurantId = req.restaurantId;
 
-    const deletedJob = await softDeleteJob(jobId, restaurantId);
+    const deletedJob = await softDeleteJobCascade(jobId, restaurantId);
 
     res.status(200).json({
       message: 'Job offer soft deleted successfully',

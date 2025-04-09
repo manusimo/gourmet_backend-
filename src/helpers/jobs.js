@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const fetchTopRatedJobs = async (limit) => {
   try {
     const jobs = await prisma.jobOffer.findMany({
-      where: { deletedAt: null, deactivatedAt: null },
+      where: { deletedAt: null },
       orderBy: {
         applications: {
           _count: 'desc',
@@ -23,7 +23,7 @@ const fetchTopRatedJobs = async (limit) => {
       take: parseInt(limit, 10),
     });
 
-    return jobs.map(job => ({
+    return jobs.map((job) => ({
       ...job,
       applicationsCount: job.applications.length,
     }));
@@ -39,7 +39,6 @@ const fetchJobsByNameAndLocation = async (jobName, location, user = null) => {
     const jobs = await prisma.jobOffer.findMany({
       where: {
         deletedAt: null,
-        deactivatedAt: null,
         ...(jobName && {
           name: {
             contains: jobName,
@@ -73,7 +72,7 @@ const fetchJobsByNameAndLocation = async (jobName, location, user = null) => {
       },
     });
 
-    return jobs.map(job => ({
+    return jobs.map((job) => ({
       ...job,
       applicationsCount: job.applications.length,
     }));
@@ -83,55 +82,54 @@ const fetchJobsByNameAndLocation = async (jobName, location, user = null) => {
   }
 };
 
-const toggleJobActivation = async (jobId, active, restaurantId) => {
+const softDeleteJobCascade = async (jobId, restaurantId) => {
   try {
-    const jobOffer = await prisma.jobOffer.findFirst({
+    const existingJob = await prisma.jobOffer.findFirst({
       where: {
         id: jobId,
-        restaurantId: restaurantId,
+        restaurantId,
         deletedAt: null,
       },
     });
-    if (!jobOffer) {
-      throw new Error('Job offer not found');
-    }
-    const updatedJobOffer = await prisma.jobOffer.update({
-      where: { id: jobId },
-      data: {
-        deactivatedAt: active ? null : new Date(),
-      },
-    });
-    return updatedJobOffer;
-  } catch (error) {
-    console.error('Error toggling job activation:', error);
-    throw new Error('Could not toggle job activation');
-  }
-};
 
-// Soft delete job: update deletedAt to current date instead of removing from DB
-const softDeleteJob = async (jobId, restaurantId) => {
-  try {
-    const jobOffer = await prisma.jobOffer.findFirst({
-      where: {
-        id: jobId,
-        restaurantId: restaurantId,
-        deletedAt: null,
-      },
-    });
-    if (!jobOffer) {
+    if (!existingJob) {
       throw new Error('Job offer not found or already deleted');
     }
-    const updatedJob = await prisma.jobOffer.update({
-      where: { id: jobId },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
+
+    const [updatedJob] = await prisma.$transaction([
+      prisma.jobOffer.update({
+        where: { id: jobId },
+        data: {
+          deletedAt: new Date(),
+        },
+      }),
+      // Soft-delete associated Conversations
+      prisma.conversation.updateMany({
+        where: {
+          jobOfferId: jobId,
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: new Date(),
+        },
+      }),
+      // Soft-delete associated Applications
+      prisma.application.updateMany({
+        where: {
+          jobPostId: jobId,
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: new Date(),
+        },
+      }),
+    ]);
+
     return updatedJob;
   } catch (error) {
-    console.error('Error soft deleting job:', error);
-    throw new Error('Could not soft delete job');
+    console.error('[softDeleteJobCascade] Error:', error);
+    throw new Error('Could not perform soft-delete cascade operation');
   }
 };
 
-export { fetchTopRatedJobs, fetchJobsByNameAndLocation, toggleJobActivation, softDeleteJob };
+export { fetchTopRatedJobs, fetchJobsByNameAndLocation, softDeleteJobCascade };
