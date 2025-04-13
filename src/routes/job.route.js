@@ -4,7 +4,12 @@ import jwt from 'jsonwebtoken';
 import  { checkCompany, checkEmployee }  from '../helpers/authenticateToken.js';
 import { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } from '../helpers/cookies.js';
 import { buildFilters, buildSearchConditions } from '../helpers/filterHelpers.js';
-import { fetchTopRatedJobs, fetchJobsByNameAndLocation, softDeleteJobCascade } from "../helpers/jobs.js";
+import {
+  fetchTopRatedJobs,
+  fetchJobsByNameAndLocation,
+  softDeleteJobCascade,
+  updateJobOffer,
+} from '../helpers/jobs.js';
 
 const router = Router();
 
@@ -113,75 +118,19 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
 router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const jobId = parseInt(req.params.id, 10);
-    const {
-      position,
-      location,
-      schedule,
-      contract,
-      period,
-      vacancies,
-      yearsOfExperience,
-      description,
-      questions,
-      requirements,
-      salary,
-      propina,
-      functions,
-    } = req.body;
-
-    const restaurantId = req.restaurantId;
-    const tips = propina === 'Si';
-
-    const existingJob = await prisma.jobOffer.findFirst({
-      where: { id: jobId, restaurantId: restaurantId, deletedAt: null }
-    });
-
-    if (!existingJob) {
-      return res.status(404).json({ message: 'Job offer not found or has been deleted' });
-    }
-
-    const newQuestions = questions.filter((q) => !q.id);
-    const existingQuestions = questions.filter((q) => q.id);
-
-    for (const q of existingQuestions) {
-      await prisma.question.update({
-        where: { id: q.id },
-        data: { question: q.question },
+    const updated = await updateJobOffer(jobId, req.restaurantId, req.body);
+    res
+      .status(200)
+      .json({
+        message: 'Job offer updated successfully',
+        updatedJobOffer: updated,
       });
-    }
-
-    const updatedJobOffer = await prisma.jobOffer.update({
-      where: { id: jobId },
-      data: {
-        position,
-        location,
-        schedule,
-        period,
-        contract,
-        vacancies: parseInt(vacancies, 10),
-        yearsOfExperience: isNaN(parseInt(yearsOfExperience, 10)) ? null : parseInt(yearsOfExperience, 10),
-        description,
-        restaurantId,
-        requirements,
-        functions,
-        tips,
-        salary: parseInt(salary, 10),
-        questions: {
-          create: newQuestions.map((q) => ({ question: q.question })),
-        },
-      },
-      include: {
-        questions: true,
-      },
-    });
-
-    console.log('upd offer', updatedJobOffer);
-    res.status(200).json({ message: 'Job offer updated successfully', updatedJobOffer });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: error.message || 'Internal Server Error' });
+    console.error('[PATCH /job/:id]', error);
+    res.status(400).json({ message: error.message });
   }
 });
+
 
 router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   const employeeId = req.employeeId;

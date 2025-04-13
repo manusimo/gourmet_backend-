@@ -103,7 +103,6 @@ const softDeleteJobCascade = async (jobId, restaurantId) => {
           deletedAt: new Date(),
         },
       }),
-      // Soft-delete associated Conversations
       prisma.conversation.updateMany({
         where: {
           jobOfferId: jobId,
@@ -113,7 +112,6 @@ const softDeleteJobCascade = async (jobId, restaurantId) => {
           deletedAt: new Date(),
         },
       }),
-      // Soft-delete associated Applications
       prisma.application.updateMany({
         where: {
           jobPostId: jobId,
@@ -132,4 +130,88 @@ const softDeleteJobCascade = async (jobId, restaurantId) => {
   }
 };
 
-export { fetchTopRatedJobs, fetchJobsByNameAndLocation, softDeleteJobCascade };
+/* ---------- helpers ---------- */
+const toInt = (v) => (v === undefined ? undefined : parseInt(v, 10));
+const toNullableInt = (v) => (isNaN(toInt(v)) ? null : toInt(v));
+
+const ensureActiveJob = async (jobId, restaurantId) => {
+  return prisma.jobOffer.findFirst({
+    where: { id: jobId, restaurantId, deletedAt: null },
+  });
+};
+
+
+/* ---------- updated updateJobOffer ---------- */
+const updateJobOffer = async (jobId, restaurantId, body) => {
+  const {
+    position,
+    locationId,
+    schedule,
+    contract,
+    period,
+    vacancies,
+    yearsOfExperience,
+    description,
+    questions = [],
+    requirements,
+    salary,
+    propina,
+    functions,
+  } = body;
+
+  const existingJob = await ensureActiveJob(jobId, restaurantId);
+  if (!existingJob) throw new Error('Job offer not found or has been deleted');
+
+  const tips = propina === 'Si';
+
+  const createQueue = [];
+  const updateQueue = [];
+
+  for (const q of questions) {
+    if (q.id) {
+      updateQueue.push(
+        prisma.question.update({
+          where: { id: q.id },
+          data: { question: q.question },
+        })
+      );
+    } else {
+      createQueue.push({ question: q.question });
+    }
+  }
+
+  const data = {
+    position,
+    schedule,
+    period,
+    contract,
+    vacancies: toInt(vacancies),
+    yearsOfExperience: toNullableInt(yearsOfExperience),
+    description,
+    requirements,
+    functions,
+    tips,
+    salary: toInt(salary),
+    questions: { create: createQueue },
+  };
+
+  if (locationId) data.location = { connect: { id: toInt(locationId) } };
+
+  const updatedJob = await prisma.$transaction(async (tx) => {
+    if (updateQueue.length) await Promise.all(updateQueue);
+    return tx.jobOffer.update({
+      where: { id: jobId },
+      data,
+      include: { questions: true },
+    });
+  });
+
+  return updatedJob;
+};
+
+export {
+  fetchTopRatedJobs,
+  fetchJobsByNameAndLocation,
+  softDeleteJobCascade,
+  updateJobOffer,
+};
