@@ -1,6 +1,7 @@
 import Router from "express";
 import { prisma } from "../db.js";
 import  { checkEmployee, checkCompany }  from '../helpers/authenticateToken.js';
+import { findApplicationDetails } from '../helpers/employee/findApplication.js';
 import { getUserIdFromCookie, getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } from '../helpers/cookies.js';
 import jwt from 'jsonwebtoken';
 
@@ -23,14 +24,14 @@ router.get('/employee/:id', async (req, res) => {
         user: true,
       },
     });
-    
+
     if (!employeeProfile) {
       return res.status(404).json({ error: 'Employee profile not found' });
     } else {
       res.status(200).json({ profile: employeeProfile });
     }
 
-    
+
   } catch (error) {
     console.error('Error fetching employee profile:', error.message);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -59,7 +60,7 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       profileImageUrl
     } = req.body;
 
-    const userId = req.userId; 
+    const userId = req.userId;
 
     const skillsArray = Object.keys(skills).filter(skill => skills[skill]);
 
@@ -94,8 +95,8 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
 
     const newToken = jwt.sign(
       {
-        userId: req.userId, 
-        userType: 'profesionales', 
+        userId: req.userId,
+        userType: 'profesionales',
         employeeId: employeeProfile.id,
       },
       process.env.JWT_SECRET
@@ -103,8 +104,8 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
 
     res.cookie('manu', newToken, {
       httpOnly: true,
-      sameSite: 'None', 
-      secure: true,     
+      sameSite: 'None',
+      secure: true,
     });
 
     res.status(201).json({ message: 'Employee created successfully', employeeProfile });
@@ -170,7 +171,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
 
     const newExperiences = experiences.filter(experience => !experience.id);
     const existingExperiences = experiences.filter(experience => experience.id);
-       
+
     const newEducations = educations.filter(education => !education.id);
     const existingEducations = educations.filter(education => education.id);
 
@@ -180,7 +181,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
         name,
         surname,
         country,
-        birthDate: new Date(birthDate), 
+        birthDate: new Date(birthDate),
         phoneNumber,
         position,
         aboutMe,
@@ -199,8 +200,8 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
             data: {
               companyName: exp.companyName,
               description: exp.description,
-              startDate: new Date(exp.startDate), 
-              endDate: new Date(exp.endDate), 
+              startDate: new Date(exp.startDate),
+              endDate: new Date(exp.endDate),
               role: exp.role,
             },
           })),
@@ -212,7 +213,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
               institution: edu.institution,
               startDate: new Date(edu.startDate),
               study: edu.study,
-              endDate: new Date(edu.endDate), 
+              endDate: new Date(edu.endDate),
               description: edu.description,
             },
           })),
@@ -226,7 +227,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
         data: {
           companyName: experience.companyName,
           description: experience.description,
-          startDate: new Date(experience.startDate), 
+          startDate: new Date(experience.startDate),
           endDate: new Date(experience.endDate),
           role: experience.role,
           employeeId,
@@ -239,8 +240,8 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
         data: {
           study: education.study,
           institution: education.institution,
-          startDate: new Date(education.startDate), 
-          endDate: new Date(education.endDate), 
+          startDate: new Date(education.startDate),
+          endDate: new Date(education.endDate),
           description: education.description,
           employeeId,
         },
@@ -269,11 +270,14 @@ router.get('/employees/:employeeId/applications', async (req, res) => {
     const employee = await prisma.jobOffer.findMany({
       where: {
         id: parseInt(employeeId),
+        deletedAt: null,
       },
       include: {
         experiences: true,
         educations: true,
-        applications: true,
+        applications: {
+          where: { deletedAt: null },
+        },
       },
     });
 
@@ -287,22 +291,6 @@ router.get('/employees/:employeeId/applications', async (req, res) => {
   }
 });
 
-async function findApplicationDetails(employeeIdInt, jobPostIdInt) {
-  return await prisma.application.findFirst({
-    where: {
-      employeeId: employeeIdInt,
-      jobPostId: jobPostIdInt,
-    },
-    include: {
-      jobPost: {
-        include: {
-          restaurant: true,
-        },
-      },
-      employee: true,
-    },
-  });
-}
 
 router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req, res) => {
   const { employeeId, jobPostId } = req.params;
@@ -333,8 +321,8 @@ router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurant
     console.log('Here we start the search');
     const { position, experience, region, comuna, available, schedule } = req.query;
 
-    const userId = req.userId; 
-    const restaurantUserId = req.restaurantUserId; 
+    const userId = req.userId;
+    const restaurantUserId = req.restaurantUserId;
     console.log('this is the query ', req.query)
 
     const employees = await prisma.employee.findMany({
@@ -381,8 +369,8 @@ router.post('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdF
     const { jobPostId } = req.params;
     const employeeId = req.employeeId;
 
-    const jobPost = await prisma.jobOffer.findUnique({
-      where: { id: parseInt(jobPostId) },
+    const jobPost = await prisma.jobOffer.findFirst({
+      where: { id: parseInt(jobPostId), deletedAt: null },
     });
 
     if (!jobPost) {
@@ -401,6 +389,7 @@ router.post('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdF
       where: {
         employeeId: employeeId,
         jobOfferId: parseInt(jobPostId),
+        jobOffer: { deletedAt: null },
       },
     });
 
@@ -408,14 +397,13 @@ router.post('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdF
       return res.status(400).json({ message: 'Job post is already a favorite' });
     }
 
-    // Create the favorite job entry
     const newFavorite = await prisma.favouriteJob.create({
       data: {
         employeeId: employeeId,
         jobOfferId: parseInt(jobPostId),
       },
     });
-    
+
     console.log('this is the new favourite', newFavorite)
     res.status(201).json({ message: 'Job post added to favorites', favoriteJob: newFavorite });
   } catch (error) {
@@ -437,6 +425,7 @@ router.delete('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeI
       where: {
         jobOfferId: parseInt(jobPostId),
         employeeId: employeeId,
+        jobOffer: { deletedAt: null },
       },
     });
 
@@ -461,7 +450,7 @@ router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, a
   try {
     console.log('fetching the jobs saved as favouritess')
     const employeeId = req.employeeId;
-    
+
     if(!employeeId) {
       res.status(404).send('Emloyee not found');
     }
@@ -469,12 +458,13 @@ router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, a
     const favoriteJobs = await prisma.favouriteJob.findMany({
       where: {
         employeeId: employeeId,
+        jobOffer: { deletedAt: null },
       },
       include: {
         jobOffer: {
           include: {
-            restaurant: true, 
-            location: true, // Ensure restaurant data is included
+            restaurant: true,
+            location: true,
           },
         },
       },
@@ -505,6 +495,7 @@ router.get('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFr
       where: {
         employeeId: employeeId,
         jobOfferId: jobPostId,
+        jobOffer: { deletedAt: null },
       },
     });
 
@@ -522,7 +513,7 @@ router.get('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFr
 router.post('/employee/talent-pool', getEmployeeIdFromCookie, async (req, res) => {
   const { restaurantId } = req.body;
   const employeeId = req.employeeId;
-  
+
   try {
     const existingRecord = await prisma.talentPool.findFirst({
       where: {
@@ -534,7 +525,7 @@ router.post('/employee/talent-pool', getEmployeeIdFromCookie, async (req, res) =
     if (existingRecord) {
       return res.status(409).json({ message: 'You have already applied to this company.' });
     }
-    
+
     const newTalentPoolRecord = await prisma.talentPool.create({
       data: {
         employeeId: parseInt(employeeId),
@@ -542,7 +533,7 @@ router.post('/employee/talent-pool', getEmployeeIdFromCookie, async (req, res) =
         status: 'pendent',
       },
     });
-    
+
     if(!newTalentPoolRecord) {
       res.status(404).json({ message: 'We were not able to send the cv to this company', newTalentPoolRecord });
     }
@@ -582,4 +573,3 @@ router.get('/employee/talent-pool/check', getEmployeeIdFromCookie, async (req, r
 });
 
 export default router
-
