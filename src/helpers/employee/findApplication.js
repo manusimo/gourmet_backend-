@@ -5,6 +5,7 @@ async function findApplicationDetails(employeeIdInt, jobPostIdInt) {
       where: {
         employeeId: employeeIdInt,
         jobPostId: jobPostIdInt,
+        deletedAt: null,
       },
       include: {
         jobPost: {
@@ -16,3 +17,5 @@ async function findApplicationDetails(employeeIdInt, jobPostIdInt) {
       },
     });
 }
+
+export { findApplicationDetails };

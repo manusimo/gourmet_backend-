@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import { getEmployeeIdFromCookie, getRestaurantIdFromCookie } from "../helpers/cookies.js";
 import { checkEmployee, checkCompany } from "../helpers/authenticateToken.js";
 
-
 const router = Router();
 
 router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
@@ -16,8 +15,8 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
       return res.status(401).json({ message: 'Debes hacer log in para postular' });
     }
 
-    const jobPost = await prisma.jobOffer.findUnique({
-      where: { id: jobPostId },
+    const jobPost = await prisma.jobOffer.findFirst({
+      where: { id: jobPostId, deletedAt: null },
     });
 
     if (!jobPost) {
@@ -28,6 +27,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
       where: {
         jobPostId: jobPostId,
         employeeId: employeeId,
+        deletedAt: null,
       },
     });
 
@@ -59,7 +59,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
   } catch (error) {
     console.error('Error creating application:', error);
 
-    if (error.code === 'P2025') { 
+    if (error.code === 'P2025') {
       return res.status(400).json({ message: 'Este trabajo ya no está disponible.' });
     }
 
@@ -69,12 +69,13 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
 
 router.get('/applications/:applicationId', async (req, res) => {
-  const { applicationId } = req.params;  
-  
+  const { applicationId } = req.params;
+
   try {
-      const application = await prisma.application.findUnique({
+      const application = await prisma.application.findFirst({
           where: {
               id: parseInt(applicationId),
+              deletedAt: null,
           },
           include: {
               jobPost: {
@@ -83,7 +84,7 @@ router.get('/applications/:applicationId', async (req, res) => {
                           include: {
                               answers: {
                                   where: {
-                                      applicationId: parseInt(applicationId), 
+                                      applicationId: parseInt(applicationId),
                                   },
                               },
                           },
@@ -116,6 +117,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
       where: {
         id: parseInt(jobOfferId),
         restaurantId: parseInt(restaurantId),
+        deletedAt: null,
       },
     });
 
@@ -126,6 +128,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     const applications = await prisma.application.findMany({
       where: {
         jobPostId: parseInt(jobOfferId),
+        deletedAt: null,
       },
       include: {
         employee: {
@@ -144,5 +147,4 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
   }
 });
 
-  
 export default router

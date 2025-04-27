@@ -20,7 +20,7 @@ model User {
   updatedAt        DateTime @updatedAt
   employee         Employee?
   restaurant       Restaurant?
-  restaurantUsers  RestaurantUser[] 
+  restaurantUsers  RestaurantUser[]
 }
 
 model TokenDenyList {
@@ -49,7 +49,7 @@ model Employee {
   phoneNumber  String @default("+56912345678")
   yearsOfExperience String @default("No experience")
 
-  skills       String[]    
+  skills       String[]
   userId       Int         @unique
   user         User        @relation(fields: [userId], references: [id])
   conversations Conversation[]
@@ -86,10 +86,10 @@ model Education {
 
 model Restaurant {
   id                   Int       @id @default(autoincrement())
-  name                 String 
+  name                 String
   specialty            String
   format               String
-  region               String   @default("No hay") 
+  region               String   @default("No hay")
   comuna               String   @default("No hay")
   description          String   @default("No description to show")
   rut                  String   @default("No rut to show")
@@ -104,7 +104,7 @@ model Restaurant {
   jobOffers            JobOffer[]
   userId               Int       @unique
   user                 User      @relation(fields: [userId], references: [id])
-  restaurantUsers      RestaurantUser[] 
+  restaurantUsers      RestaurantUser[]
   talentPools     TalentPool[]
 }
 
@@ -115,13 +115,13 @@ model Location {
   longitude Float @default(0)
   restaurantId Int
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
-  jobOffers    JobOffer[] 
+  jobOffers    JobOffer[]
 }
 
 model JobOffer {
   id                 Int              @id @default(autoincrement())
   position           String
-  locationId         Int?             
+  locationId         Int?
   location           Location?         @relation(fields: [locationId], references: [id])
   schedule           String
   period             String           @default("Sin información")
@@ -142,12 +142,13 @@ model JobOffer {
   createdAt  DateTime @default(now())
   restaurantUserId   Int?
   restaurantUser     RestaurantUser?  @relation(fields: [restaurantUserId], references: [id])
+  deletedAt          DateTime?
 }
 
 model Question {
   id          Int     @id @default(autoincrement())
-  question    String  
-  jobOfferId  Int    
+  question    String
+  jobOfferId  Int
   jobOffer    JobOffer @relation(fields: [jobOfferId], references: [id])
   answers     Answer[]
 }
@@ -159,6 +160,7 @@ model Application {
   jobPost       JobOffer   @relation(fields: [jobPostId], references: [id])
   employee      Employee   @relation(fields: [employeeId], references: [id])
   answers       Answer[]
+  deletedAt     DateTime?
 }
 
 model Answer {
@@ -174,16 +176,17 @@ model Conversation {
   id               Int            @id @default(autoincrement())
   messages         Message[]
   employeeId       Int
-  restaurantUserId Int 
+  restaurantUserId Int
   type             String         @default("none")
   jobOfferId       Int?
   jobOffer         JobOffer?      @relation(fields: [jobOfferId], references: [id])
-  
+
   talentPoolId     Int?
   talentPool       TalentPool?    @relation(fields: [talentPoolId], references: [id])
 
   employee         Employee       @relation(fields: [employeeId], references: [id])
   restaurantUser   RestaurantUser @relation(fields: [restaurantUserId], references: [id])
+  deletedAt        DateTime?
 }
 
 model Message {
@@ -191,7 +194,7 @@ model Message {
   text                      String
   conversationId            Int
   conversation              Conversation     @relation(fields: [conversationId], references: [id])
-  
+
   senderEmployeeId          Int?
   senderEmployee            Employee?        @relation("SenderEmployee", fields: [senderEmployeeId], references: [id])
 
@@ -215,7 +218,7 @@ model RestaurantUser {
   user          User           @relation(fields: [userId], references: [id])
   restaurant    Restaurant     @relation(fields: [restaurantId], references: [id])
   conversations Conversation[]
-  addedTalent   TalentPool[]   @relation("AddedByUser") 
+  addedTalent   TalentPool[]   @relation("AddedByUser")
   jobOffers     JobOffer[]
   messagesSent     Message[] @relation("SenderRestaurantUser")
   messagesReceived Message[] @relation("ReceiverRestaurantUser")
@@ -231,7 +234,7 @@ model TalentPool {
   createdAt      DateTime     @default(now())
   employee       Employee     @relation(fields: [employeeId], references: [id])
   restaurant     Restaurant   @relation(fields: [restaurantId], references: [id])
-  addedByUser    RestaurantUser? @relation("AddedByUser", fields: [addedByUserId], references: [id]) 
+  addedByUser    RestaurantUser? @relation("AddedByUser", fields: [addedByUserId], references: [id])
 }
 
 model FavouriteJob {
