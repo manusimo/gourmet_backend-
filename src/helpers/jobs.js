@@ -2,10 +2,10 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const fetchTopRatedJobs = async (limit) => {
+const fetchTopRatedJobs = async (limit, finishedDateParsed) => {
   try {
     const jobs = await prisma.jobOffer.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, createdAt: { gt: finishedDateParsed } },
       orderBy: {
         applications: {
           _count: 'desc',
@@ -34,11 +34,12 @@ const fetchTopRatedJobs = async (limit) => {
 };
 
 // Fetch jobs by name and location, with optional user filtering
-const fetchJobsByNameAndLocation = async (jobName, location, user = null) => {
+const fetchJobsByNameAndLocation = async (jobName, location, user = null, finishedDateParsed) => {
   try {
     const jobs = await prisma.jobOffer.findMany({
       where: {
         deletedAt: null,
+        createdAt: { gt: finishedDateParsed },
         ...(jobName && {
           name: {
             contains: jobName,

@@ -81,11 +81,12 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
   const { jobName, location, limit = 4 } = req.query;
   const userId = req.userId;
   const userType = req.userType;
+  const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 30));
 
   try {
     let formattedJobs;
 
-    formattedJobs = await fetchJobsByNameAndLocation(jobName, location);
+    formattedJobs = await fetchJobsByNameAndLocation(jobName, location, null, finishedDateParsed);
 
     res.status(200).json({
       jobs: formattedJobs,
@@ -100,11 +101,12 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
   const { limit = 4 } = req.query;
   const userId = req.userId;
   const userType = req.userType;
+  const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 30));
 
   try {
     let formattedJobs;
 
-    formattedJobs = await fetchTopRatedJobs(limit);
+    formattedJobs = await fetchTopRatedJobs(limit, finishedDateParsed);
 
     res.json({
       jobs: formattedJobs,
