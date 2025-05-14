@@ -10,6 +10,7 @@ import chatRoutes from './routes/chat.route.js';
 import poolRoutes from './routes/pool.route.js';
 import csrfProtectionRoutes from './routes/csrfProtection.route.js';
 import adminRouter from './routes/admin.route.js';
+import contactRoutes from './routes/contact.route.js';
 
 const app = express();
 
@@ -33,16 +34,17 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 app.use('/api', authRoutes);
+app.use('/api', contactRoutes);
 app.use('/api', employeeRoutes);
 app.use('/api', companyRoutes);
 app.use('/api', jobRoutes);
 app.use('/api', applicationRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', poolRoutes);
-app.use('/api', csrfProtectionRoutes)
+app.use('/api', csrfProtectionRoutes);
 app.use('/api/admin', adminRouter);
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);
 });
