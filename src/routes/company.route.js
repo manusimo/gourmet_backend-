@@ -72,7 +72,7 @@ router.get('/api/company/restaurantUser/:userId', async (req, res) => {
   try {
     const restaurantUser = await prisma.restaurantUser.findUnique({
       where: {
-        userId: parseInt(userId), 
+        userId: parseInt(userId),
       },
       include: {
         user: true,
@@ -150,7 +150,7 @@ router.get('/company/top-rated-companies', async (req, res) => {
       skip: skip,
       include: {
         _count: {
-          select: { jobOffers: true },
+          select: { jobOffers: { where: { deletedAt: null } } },
         },
       },
     });
@@ -160,7 +160,7 @@ router.get('/company/top-rated-companies', async (req, res) => {
     res.json({
       companies: companies.map(company => ({
         ...company,
-        jobOffersCount: company._count.jobOffers, 
+        jobOffersCount: company._count.jobOffers,
       })),
       totalCompanies,
       currentPage: page,
@@ -174,11 +174,11 @@ router.get('/company/top-rated-companies', async (req, res) => {
 router.get('/company/talents-application', getRestaurantIdFromCookie, async (req, res) => {
   try {
     const restaurantId = req.restaurantId;
-  
+
     const talents = await prisma.talentPool.findMany({
       where: {
         status: "pendent",
-        restaurantId: parseInt(restaurantId, 10), 
+        restaurantId: parseInt(restaurantId, 10),
       },
       include: {
         employee: true,
@@ -211,7 +211,7 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       benefits,
       locations,
       jobOffers,
-      profileImageUrl, 
+      profileImageUrl,
       profileCarouselUrls
     } = req.body;
 
@@ -221,8 +221,8 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
 
     const formattedLocations = locations.map(location => ({
       address: location.address,
-      longitude: parseFloat(location.longitude), 
-      latitude: parseFloat(location.latitude),   
+      longitude: parseFloat(location.longitude),
+      latitude: parseFloat(location.latitude),
     }));
 
     const companyProfile = await prisma.restaurant.create({
@@ -241,7 +241,7 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
         profileImageUrl,
         profileCarouselUrls,
         benefits: benefitsArray,
-        locations: { create: formattedLocations }, 
+        locations: { create: formattedLocations },
         jobOffers: { create: jobOffers },
         userId,
       },
@@ -251,13 +251,13 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       data: {
         userId,
         restaurantId: companyProfile.id,
-        role: 'admin' 
+        role: 'admin'
       }
     });
 
     const updateUser = await prisma.user.update({
       where: { id: userId },
-      data: { 
+      data: {
         restaurant: { connect: { id: companyProfile.id } }
       }
     });
@@ -267,13 +267,13 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       userType: 'empresas',
       restaurantId: companyProfile.id,
       restaurantUserId: restaurantUser.id,
-      role: role, 
+      role: role,
     }, process.env.JWT_SECRET);
 
     res.cookie('manu', newToken, {
       httpOnly: true,
-      sameSite: 'None', 
-      secure: true,     
+      sameSite: 'None',
+      secure: true,
     });
 
     res.status(201).json({ message: 'Company created successfully', companyProfile });
@@ -293,18 +293,18 @@ router.get('/company/:id', async (req, res) => {
       },
       include: {
         locations: true,
-        jobOffers: true,
+        jobOffers: { where: { deletedAt: null } },
       },
     });
 
     console.log('this is the restaurant', restaurant.benefits)
-    
+
     if (restaurant) {
       res.status(200).json({ company: restaurant });
     } else {
       res.status(404).send('Restaurant not found');
     }
-    
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -321,7 +321,7 @@ router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
       },
       include: {
         locations: true,
-        jobOffers: true,
+        jobOffers: { where: { deletedAt: null } },
       },
     });
 
@@ -350,17 +350,17 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
       weeklyAverageClients,
       description,
       benefits,
-      locations, 
+      locations,
       profileImageUrl,
       profileCarouselUrls,
     } = req.body;
-    
+
     const restaurantId = req.restaurantId;
-    
+
     const newLocations = locations.filter(location => !location.id).map(location => ({
       ...location,
-      longitude: parseFloat(location.longitude), 
-      latitude: parseFloat(location.latitude),  
+      longitude: parseFloat(location.longitude),
+      latitude: parseFloat(location.latitude),
     }));
 
     const existingLocations = locations.filter(location => location.id);
@@ -369,12 +369,12 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
       where: { restaurantId },
     });
 
-    const locationsToDelete = currentLocations.filter(currentLocation => 
+    const locationsToDelete = currentLocations.filter(currentLocation =>
       !locations.some(location => location.id === currentLocation.id)
     );
 
     await prisma.$transaction(async () => {
-      await deleteLocations(locationsToDelete); 
+      await deleteLocations(locationsToDelete);
       await updateCompanyProfile(restaurantId, {
         legalName,
         rut,
@@ -392,7 +392,7 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
         existingLocations,
         profileCarouselUrls,
       });
-      await createNewLocations(newLocations, restaurantId); 
+      await createNewLocations(newLocations, restaurantId);
     });
 
     res.status(200).json({ message: 'Company profile updated successfully' });
