@@ -2,8 +2,9 @@ import Router from "express";
 import csrf from 'csurf';
 import { prisma } from "../db.js";
 import jwt from 'jsonwebtoken';
-import { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
+import { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
 import { getUserIdFromCookie, getRestaurantIdFromCookie } from '../helpers/cookies.js';
+import { requirePlan, checkLocationLimit } from '../middleware/checkPlan.js';
 import { buildFilters, buildSearchConditions } from "../helpers/filterHelpers.js";
 import { deleteLocations, updateCompanyProfile, createNewLocations } from '../helpers/company.js'
 import {getOrderByCriteriaCompanies} from '../helpers/orderBy.js'
@@ -194,7 +195,7 @@ router.get('/company/talents-application', getRestaurantIdFromCookie, async (req
   }
 });
 
-router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (req, res) => {
+router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, checkLocationLimit(), async (req, res) => {
   try {
     const {
       name,
@@ -276,7 +277,25 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       secure: true,
     });
 
-    res.status(201).json({ message: 'Company created successfully', companyProfile });
+    const planNames = {
+      'starter': 'STARTER',
+      'pro': 'PRO',
+      'plus': 'PLUS',
+      'premium': 'PREMIUM'
+    };
+
+    res.status(201).json({ 
+      message: 'Company created successfully', 
+      companyProfile,
+      planInfo: {
+        currentPlan: planNames[req.user.payment_status] || 'STARTER',
+        locationsCreated: req.requestedLocations,
+        locationLimit: req.locationLimit,
+        upgradeMessage: req.requestedLocations === req.locationLimit ? 
+          `Has usado todas tus ubicaciones permitidas. Actualiza a ${req.user.payment_status === 'starter' ? 'PRO' : req.user.payment_status === 'pro' ? 'PLUS' : 'PREMIUM'} para más ubicaciones.` : 
+          `Has creado ${req.requestedLocations} ubicaciones de tu plan ${planNames[req.user.payment_status]}.`
+      }
+    });
   } catch (error) {
     console.error('Error creating company:', error.message, error.stack);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -335,7 +354,7 @@ router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
   }
 });
 
-router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+router.patch('/company', checkCompany, getRestaurantIdFromCookie, checkLocationLimit(), async (req, res) => {
   try {
     const {
       legalName,
@@ -395,7 +414,24 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
       await createNewLocations(newLocations, restaurantId);
     });
 
-    res.status(200).json({ message: 'Company profile updated successfully' });
+    const planNames = {
+      'starter': 'STARTER',
+      'pro': 'PRO',
+      'plus': 'PLUS',
+      'premium': 'PREMIUM'
+    };
+
+    res.status(200).json({ 
+      message: 'Company profile updated successfully',
+      planInfo: {
+        currentPlan: planNames[req.user.payment_status] || 'STARTER',
+        locationsUpdated: req.requestedLocations,
+        locationLimit: req.locationLimit,
+        upgradeMessage: req.requestedLocations === req.locationLimit ? 
+          `Has usado todas tus ubicaciones permitidas. Actualiza a ${req.user.payment_status === 'starter' ? 'PRO' : req.user.payment_status === 'pro' ? 'PLUS' : 'PREMIUM'} para más ubicaciones.` : 
+          `Has actualizado ${req.requestedLocations} ubicaciones de tu plan ${planNames[req.user.payment_status]}.`
+      }
+    });
   } catch (error) {
     console.error('Error updating company profile:', error.message, error.stack);
     res.status(500).json({ message: 'Internal Server Error' });

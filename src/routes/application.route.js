@@ -55,7 +55,10 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
       },
     });
 
-    res.status(201).json({ message: 'Postulaste exitosamente.', application });
+    res.status(201).json({ 
+      message: 'Postulaste exitosamente.', 
+      application
+    });
   } catch (error) {
     console.error('Error creating application:', error);
 

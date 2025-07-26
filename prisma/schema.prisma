@@ -16,6 +16,8 @@ model User {
   surname          String  @default("Pérez")
   phoneNumber      String  @default("+56976212644")
   role             String   @default("admin")
+  payment_status   String   @default("starter")
+  last_payment     DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   employee         Employee?

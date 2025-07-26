@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth.route.js';
 import employeeRoutes from './routes/employee.route.js';
 import companyRoutes from './routes/company.route.js';
@@ -14,7 +15,9 @@ import contactRoutes from './routes/contact.route.js';
 
 const app = express();
 
-app.use(express.json());
+// BARE MINIMUM SECURITY: Request size limits
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 
 const allowedOrigins = [process.env.FRONTEND_URL, process.env.CHAT_SERVICE_URL];
@@ -32,6 +35,19 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// BARE MINIMUM SECURITY: Basic rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { error: 'Too many login attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to auth routes
+app.use('/api/signin', authLimiter);
+app.use('/api/signup', authLimiter);
 
 app.use('/api', authRoutes);
 app.use('/api', contactRoutes);

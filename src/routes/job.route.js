@@ -1,9 +1,10 @@
 import Router from "express";
 import { prisma } from "../db.js";
 import jwt from 'jsonwebtoken';
-import  { checkCompany, checkEmployee }  from '../helpers/authenticateToken.js';
+import  { checkCompany, checkEmployee }  from '../helpers/authenticateToken.js';
 import { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } from '../helpers/cookies.js';
 import { buildFilters, buildSearchConditions } from '../helpers/filterHelpers.js';
+import { checkJobOfferLimit } from '../middleware/checkPlan.js';
 import {
   fetchTopRatedJobs,
   fetchJobsByNameAndLocation,
@@ -13,7 +14,7 @@ import {
 
 const router = Router();
 
-router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, checkJobOfferLimit(), async (req, res) => {
   try {
     const {
       position,
@@ -70,7 +71,27 @@ router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserId
 
     console.log('this is the job offer', jobOfferCheck)
 
-    res.status(201).json({ message: 'Job offer created successfully', jobOffer });
+    // Calcular ofertas restantes
+    const remainingJobOffers = req.remainingJobOffers - 1;
+    const planNames = {
+      'starter': 'STARTER',
+      'pro': 'PRO',
+      'plus': 'PLUS',
+      'premium': 'PREMIUM'
+    };
+
+    res.status(201).json({
+      message: 'Job offer created successfully',
+      jobOffer,
+      planInfo: {
+        currentPlan: planNames[req.user.payment_status] || 'STARTER',
+        remainingJobOffers,
+        totalLimit: req.jobOfferLimit,
+        upgradeMessage: remainingJobOffers === 0 ?
+          `Has usado todas tus ofertas de trabajo. Actualiza a ${req.user.payment_status === 'starter' ? 'PRO' : req.user.payment_status === 'pro' ? 'PLUS' : 'PREMIUM'} para más.` :
+          `Te quedan ${remainingJobOffers} ofertas de trabajo de tu plan ${planNames[req.user.payment_status]}.`
+      }
+    });
   } catch (error) {
     console.error('Error creating job offer:', error);
     res.status(500).json({ message: 'Internal Server Error' });
@@ -351,4 +372,126 @@ router.delete('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, r
   }
 });
 
-export default router
+// Ruta para obtener información del plan y job offers de la empresa
+router.get('/my-plan-info', checkCompany, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    const restaurantUserId = req.restaurantUserId;
+
+    if (!restaurantUserId) {
+      return res.status(401).json({ message: 'No autenticado como usuario de restaurante' });
+    }
+
+    // Buscar el usuario de restaurante y su usuario asociado
+    const restaurantUser = await prisma.restaurantUser.findUnique({
+      where: { id: restaurantUserId },
+      include: {
+        user: true,
+        jobOffers: {
+          where: { deletedAt: null },
+          include: {
+            applications: {
+              where: { deletedAt: null }
+            },
+            location: true
+          }
+        }
+      }
+    });
+
+    if (!restaurantUser || !restaurantUser.user) {
+      return res.status(401).json({ message: 'Usuario de restaurante no encontrado' });
+    }
+
+    const user = restaurantUser.user;
+    const currentJobOffers = restaurantUser.jobOffers.length;
+
+    // Definir límites según el plan
+    const planLimits = {
+      'starter': 1,
+      'pro': 5,
+      'plus': 10,
+      'premium': Infinity
+    };
+
+    const limit = planLimits[user.payment_status] || 1;
+    const remainingJobOffers = limit - currentJobOffers;
+
+    const planNames = {
+      'starter': 'STARTER',
+      'pro': 'PRO',
+      'plus': 'PLUS',
+      'premium': 'PREMIUM'
+    };
+
+    // Verificar vigencia del pago
+    let paymentStatus = 'active';
+    let daysUntilExpiration = null;
+
+    if (user.payment_status !== 'starter' && user.last_payment) {
+      const lastPayment = new Date(user.last_payment);
+      const now = new Date();
+      const thirtyDaysFromPayment = new Date(lastPayment.getTime() + (30 * 24 * 60 * 60 * 1000));
+      
+      if (now > thirtyDaysFromPayment) {
+        paymentStatus = 'expired';
+      } else {
+        daysUntilExpiration = Math.ceil((thirtyDaysFromPayment - now) / (24 * 60 * 60 * 1000));
+      }
+    }
+
+    // Calcular estadísticas
+    const totalApplications = restaurantUser.jobOffers.reduce((total, jobOffer) => {
+      return total + jobOffer.applications.length;
+    }, 0);
+
+    // Obtener información de ubicaciones
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantUser.restaurantId },
+      include: {
+        locations: true
+      }
+    });
+
+    const currentLocations = restaurant ? restaurant.locations.length : 0;
+
+    // Definir límites de ubicaciones según el plan
+    const locationLimits = {
+      'starter': 1,
+      'pro': 5,
+      'plus': 10,
+      'premium': Infinity
+    };
+
+    const locationLimit = locationLimits[user.payment_status] || 1;
+    const remainingLocations = locationLimit - currentLocations;
+
+    res.status(200).json({
+      planInfo: {
+        currentPlan: planNames[user.payment_status] || 'STARTER',
+        paymentStatus,
+        daysUntilExpiration,
+        lastPayment: user.last_payment,
+        currentJobOffers,
+        remainingJobOffers,
+        totalLimit: limit,
+        totalApplications,
+        currentLocations,
+        remainingLocations,
+        locationLimit,
+        jobOffers: restaurantUser.jobOffers.map(jobOffer => ({
+          id: jobOffer.id,
+          position: jobOffer.position,
+          applicationsCount: jobOffer.applications.length,
+          createdAt: jobOffer.createdAt,
+          location: jobOffer.location
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting plan info:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+export default router;

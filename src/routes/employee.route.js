@@ -1,8 +1,9 @@
 import Router from "express";
 import { prisma } from "../db.js";
-import  { checkEmployee, checkCompany }  from '../helpers/authenticateToken.js';
+import { checkEmployee, checkCompany } from "../helpers/authenticateToken.js";
+import { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } from "../helpers/cookies.js";
+import { requirePlan } from "../middleware/checkPlan.js";
 import { findApplicationDetails } from '../helpers/employee/findApplication.js';
-import { getUserIdFromCookie, getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } from '../helpers/cookies.js';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -316,7 +317,7 @@ router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req
   }
 });
 
-router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, requirePlan(['plus', 'premium']), async (req, res) => {
   try {
     console.log('Here we start the search');
     const { position, experience, region, comuna, available, schedule } = req.query;

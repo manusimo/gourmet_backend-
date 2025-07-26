@@ -1,6 +1,6 @@
 import express from 'express';
 import { checkJoinAuthorization, checkSendMessageAuthorization } from '../helpers/chat.js';
-import  { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
+import  { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
 import {
   getUserIdFromCookie,
   getRestaurantIdFromCookie,
@@ -8,6 +8,7 @@ import {
   getRestaurantUserIdFromCookie,
   validateTokenAndIdentifyUser
 } from '../helpers/cookies.js';
+import { requirePlan } from '../middleware/checkPlan.js';
 import { prisma } from "../db.js";
 
 const router = express.Router();
@@ -75,7 +76,7 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
   }
 });
 
-router.post('/send-message', async (req, res) => {
+router.post('/send-message', requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
   const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
 
   try {
@@ -160,7 +161,7 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
   }
 });
 
-router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
   const { employeeId, jobPostId, talentPoolId, type } = req.body;
   const userId = req.userId;
   const restaurantUserId = req.restaurantUserId;

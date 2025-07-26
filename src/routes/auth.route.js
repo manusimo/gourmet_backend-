@@ -65,13 +65,11 @@ router.post('/signup', async (req, res) => {
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
-      console.error(error);
       return res.status(401).json({ message: 'Invalid token' });
     }
 
     res.status(201).json({ message: 'User registered successfully and logged in' });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
