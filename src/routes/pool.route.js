@@ -1,146 +1,162 @@
 import Router from "express";
-import { prisma } from "../db.js";
 import { checkCompany, setUserRole } from '../helpers/authenticateToken.js';
 import { getUserIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } from '../helpers/cookies.js';
 import { getTalentPool } from "../helpers/pool.js";
+import {
+  checkTalentPoolEntry,
+  createTalentPoolEntry,
+  buildTalentPoolFilters,
+  getTalentPoolEntryWithConversations,
+  deleteTalentPoolEntry,
+  approveTalentPoolEntry
+} from '../helpers/poolHelpers.js';
 
 const router = Router();
 
+// GET /talent-pool/check - Check if talent pool entry exists
 router.get('/talent-pool/check', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const { employeeId } = req.query;
     const restaurantId = req.restaurantId;
 
-    const existingEntry = await prisma.talentPool.findFirst({
-      where: {
-        employeeId: parseInt(employeeId),
-        restaurantId,
-      }
-    });
+    const existingEntry = await checkTalentPoolEntry(employeeId, restaurantId);
 
     if (existingEntry) {
       console.log('Talent pool entry exists for employeeId:', employeeId);
-      return res.status(200).json({ exists: true });
+      return res.status(200).json({ 
+        success: true,
+        exists: true 
+      });
     } else {
       console.log('No talent pool entry found for employeeId:', employeeId);
-      return res.status(200).json({ exists: false });
+      return res.status(200).json({ 
+        success: true,
+        exists: false 
+      });
     }
   } catch (error) {
     console.error('Error checking talent existence:', error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error" 
+    });
   }
 });
 
+// POST /talent-pool - Add employee to talent pool
 router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const { employeeId } = req.body;
     const restaurantId = parseInt(req.restaurantId);
     const restaurantUserId = parseInt(req.restaurantUserId);
 
-    const existingEntry = await prisma.talentPool.findFirst({
-      where: {
-        employeeId: parseInt(employeeId),
-        restaurantId,
-      }
-    });
+    const existingEntry = await checkTalentPoolEntry(employeeId, restaurantId);
 
     if (existingEntry) {
       console.log('Employee already exists in the talent pool:');
-      return res.status(409).json({ message: "Employee already exists in the talent pool." });
+      return res.status(409).json({ 
+        success: false,
+        message: "Employee already exists in the talent pool." 
+      });
     }
 
-    const talentEntry = await prisma.talentPool.create({
-      data: {
-        employee: { connect: { id: parseInt(employeeId) } },
-        restaurant: { connect: { id: restaurantId } },
-        addedByUser: { connect: { id: restaurantUserId } },
-        status: 'accepted', 
-      }
+    const talentEntry = await createTalentPoolEntry({
+      employeeId,
+      restaurantId,
+      restaurantUserId
     });
 
-    res.status(201).json({ message: "Employee added to talent pool successfully", talentEntry });;
+    res.status(201).json({ 
+      success: true,
+      message: "Employee added to talent pool successfully", 
+      data: talentEntry 
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error" 
+    });
   }
 });
 
+// GET /talent-pool - Get talent pool with filters
 router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const { restaurantId, restaurantUserId, userRole } = req;
     const { position, experience, region, comuna, available, schedule } = req.query;
 
-    let filter = {};
-    if (position) filter.position = position;
-    if (available) filter.available = available;
-    if (schedule) filter.schedule = schedule;
-    if (region) filter.region = region;
-    if (comuna) filter.comuna = comuna;
+    const filter = buildTalentPoolFilters({
+      position,
+      experience,
+      region,
+      comuna,
+      available,
+      schedule
+    });
 
-    const talentPool = await getTalentPool(restaurantId,filter);
+    const talentPool = await getTalentPool(restaurantId, filter);
 
-    res.status(200).json(talentPool);
-
+    res.status(200).json({
+      success: true,
+      data: talentPool
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error" 
+    });
   }
 });
 
+// DELETE /talent-pool/:talentId - Remove talent from pool
 router.delete('/talent-pool/:talentId', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
-  const talentId = parseInt(req.params.talentId);
- 
   try {
-    const existingEntry = await prisma.talentPool.findUnique({
-      where: { id: talentId },
-      include: { conversations: true }
+    const talentId = parseInt(req.params.talentId);
+
+    await deleteTalentPoolEntry(talentId);
+
+    res.status(200).json({ 
+      success: true,
+      message: "Talent and associated conversations successfully removed from the pool." 
     });
-
-    if (!existingEntry) {
-      return res.status(404).json({ message: "Talent not found in the pool." });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const conversationIds = existingEntry.conversations.map(conversation => conversation.id);
-
-      await tx.message.deleteMany({
-        where: { conversationId: { in: conversationIds } }
-      });
-
-      await tx.conversation.deleteMany({
-        where: { id: { in: conversationIds } }
-      });
-
-      await tx.talentPool.delete({
-        where: { id: talentId }
-      });
-    });
-
-    res.status(200).json({ message: "Talent and associated conversations successfully removed from the pool." });
   } catch (error) {
     console.error('Error removing talent:', error);
-    res.status(500).json({ message: "Internal Server Error" });
+    
+    if (error.message === 'Talent not found in the pool.') {
+      return res.status(404).json({ 
+        success: false,
+        message: "Talent not found in the pool." 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error" 
+    });
   }
 });
 
+// PATCH /talent-pool/:id/approve - Approve talent pool entry
 router.patch('/talent-pool/:id/approve', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
-
   try {
     const { id } = req.params;
     const restaurantUserId = req.restaurantUserId;
 
-    const talentEntry = await prisma.talentPool.update({
-      where: { id: parseInt(id) },
-      data: {
-        status: "approved",
-        addedByUser: { connect: { id: restaurantUserId } }
-      }
-    });
+    const talentEntry = await approveTalentPoolEntry(id, restaurantUserId);
 
-    res.status(200).json({ message: "Talent pool entry approved successfully", talentEntry });
+    res.status(200).json({ 
+      success: true,
+      message: "Talent pool entry approved successfully", 
+      data: talentEntry 
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error" 
+    });
   }
 });
 

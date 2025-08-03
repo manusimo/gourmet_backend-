@@ -1,0 +1,624 @@
+import { jest } from '@jest/globals';
+import {
+  getEmployeeById,
+  getEmployeeByUserId,
+  createEmployeeProfile,
+  generateEmployeeToken,
+  getEmployeeProfile,
+  updateEmployeeProfile,
+  createExperience,
+  createEducation,
+  getEmployeeWithDetails,
+  searchEmployees,
+  getJobOfferById,
+  getEmployeeByEmployeeId,
+  checkFavoriteJobExists,
+  createFavoriteJob,
+  getFavoriteJobById,
+  deleteFavoriteJob,
+  getFavoriteJobs,
+  checkTalentPoolRecord,
+  createTalentPoolRecord
+} from '../../helpers/employeeHelpers.js';
+
+// Mock Prisma
+const mockPrisma = {
+  employee: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    findMany: jest.fn(),
+  },
+  experience: {
+    create: jest.fn(),
+  },
+  education: {
+    create: jest.fn(),
+  },
+  favouriteJob: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    findMany: jest.fn(),
+    delete: jest.fn(),
+  },
+  talentPool: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+  },
+  jobOffer: {
+    findFirst: jest.fn(),
+  },
+};
+
+// Mock the prisma import
+jest.mock('../../db.js', () => ({
+  prisma: mockPrisma,
+}));
+
+// Mock jwt
+const mockJwt = {
+  sign: jest.fn(),
+};
+jest.mock('jsonwebtoken', () => mockJwt);
+
+describe('Employee Helpers', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('getEmployeeById', () => {
+    it('should return employee when found', async () => {
+      const mockEmployee = { id: 1, name: 'John Doe', position: 'Chef' };
+      mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
+
+      const result = await getEmployeeById(1);
+
+      expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+      expect(result).toEqual(mockEmployee);
+    });
+
+    it('should return null when employee not found', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(null);
+
+      const result = await getEmployeeById(1);
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle string employeeId by converting to integer', async () => {
+      const mockEmployee = { id: 1, name: 'John Doe' };
+      mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
+
+      await getEmployeeById('1');
+
+      expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+    });
+  });
+
+  describe('getEmployeeByUserId', () => {
+    it('should return employee when found', async () => {
+      const mockEmployee = { id: 1, name: 'John Doe', userId: 123 };
+      mockPrisma.employee.findFirst.mockResolvedValue(mockEmployee);
+
+      const result = await getEmployeeByUserId(123);
+
+      expect(mockPrisma.employee.findFirst).toHaveBeenCalledWith({
+        where: { userId: 123 },
+      });
+      expect(result).toEqual(mockEmployee);
+    });
+
+    it('should return null when employee not found', async () => {
+      mockPrisma.employee.findFirst.mockResolvedValue(null);
+
+      const result = await getEmployeeByUserId(123);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createEmployeeProfile', () => {
+    it('should create employee profile successfully', async () => {
+      const mockEmployee = {
+        id: 1,
+        name: 'John Doe',
+        position: 'Chef',
+        userId: 123
+      };
+      mockPrisma.employee.create.mockResolvedValue(mockEmployee);
+
+      const employeeData = {
+        name: 'John Doe',
+        position: 'Chef',
+        surname: 'Smith',
+        skills: ['Cooking', 'Management'],
+        aboutMe: 'Experienced chef',
+        birthDate: '1990-01-01',
+        country: 'Chile',
+        phoneNumber: '+56912345678',
+        comuna: 'Providencia',
+        region: 'Santiago',
+        genre: 'Male',
+        civilState: 'Single',
+        available: 'Available',
+        schedule: 'Full-time',
+        profileImageUrl: 'https://example.com/image.jpg',
+        userId: 123
+      };
+
+      const result = await createEmployeeProfile(employeeData);
+
+      expect(mockPrisma.employee.create).toHaveBeenCalledWith({
+        data: {
+          name: 'John Doe',
+          position: 'Chef',
+          surname: 'Smith',
+          skills: ['Cooking', 'Management'],
+          aboutMe: 'Experienced chef',
+          birthDate: '1990-01-01',
+          country: 'Chile',
+          phoneNumber: '+56912345678',
+          comuna: 'Providencia',
+          region: 'Santiago',
+          genre: 'Male',
+          civilState: 'Single',
+          available: 'Available',
+          schedule: 'Full-time',
+          profileImageUrl: 'https://example.com/image.jpg',
+          user: { connect: { id: 123 } },
+        },
+      });
+      expect(result).toEqual(mockEmployee);
+    });
+  });
+
+  describe('generateEmployeeToken', () => {
+    it('should generate employee token successfully', () => {
+      const mockToken = 'mock.jwt.token';
+      mockJwt.sign.mockReturnValue(mockToken);
+
+      const tokenData = {
+        userId: 123,
+        employeeId: 456
+      };
+
+      const result = generateEmployeeToken(tokenData);
+
+      expect(mockJwt.sign).toHaveBeenCalledWith(
+        tokenData,
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      expect(result).toBe(mockToken);
+    });
+  });
+
+  describe('getEmployeeProfile', () => {
+    it('should return employee profile when found', async () => {
+      const mockEmployee = {
+        id: 1,
+        name: 'John Doe',
+        position: 'Chef',
+        experiences: [],
+        educations: []
+      };
+      mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
+
+      const result = await getEmployeeProfile(1);
+
+      expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        include: {
+          experiences: true,
+          educations: true,
+        },
+      });
+      expect(result).toEqual(mockEmployee);
+    });
+
+    it('should return null when employee not found', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(null);
+
+      const result = await getEmployeeProfile(1);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('updateEmployeeProfile', () => {
+    it('should update employee profile successfully', async () => {
+      const mockUpdatedEmployee = {
+        id: 1,
+        name: 'John Doe Updated',
+        position: 'Senior Chef'
+      };
+      mockPrisma.employee.update.mockResolvedValue(mockUpdatedEmployee);
+
+      const updateData = {
+        name: 'John Doe Updated',
+        position: 'Senior Chef',
+        surname: 'Smith',
+        skills: ['Cooking', 'Management'],
+        aboutMe: 'Experienced chef',
+        birthDate: '1990-01-01',
+        country: 'Chile',
+        phoneNumber: '+56912345678',
+        comuna: 'Providencia',
+        region: 'Santiago',
+        genre: 'Male',
+        civilState: 'Single',
+        available: 'Available',
+        schedule: 'Full-time',
+        profileImageUrl: 'https://example.com/image.jpg'
+      };
+
+      const result = await updateEmployeeProfile(1, updateData);
+
+      expect(mockPrisma.employee.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: updateData,
+      });
+      expect(result).toEqual(mockUpdatedEmployee);
+    });
+  });
+
+  describe('createExperience', () => {
+    it('should create experience successfully', async () => {
+      const mockExperience = {
+        id: 1,
+        company: 'Restaurant ABC',
+        position: 'Chef',
+        employeeId: 1
+      };
+      mockPrisma.experience.create.mockResolvedValue(mockExperience);
+
+      const experienceData = {
+        company: 'Restaurant ABC',
+        position: 'Chef',
+        startDate: '2020-01-01',
+        endDate: '2023-01-01',
+        description: 'Worked as head chef',
+        employeeId: 1
+      };
+
+      const result = await createExperience(experienceData);
+
+      expect(mockPrisma.experience.create).toHaveBeenCalledWith({
+        data: {
+          company: 'Restaurant ABC',
+          position: 'Chef',
+          startDate: '2020-01-01',
+          endDate: '2023-01-01',
+          description: 'Worked as head chef',
+          employee: { connect: { id: 1 } },
+        },
+      });
+      expect(result).toEqual(mockExperience);
+    });
+  });
+
+  describe('createEducation', () => {
+    it('should create education successfully', async () => {
+      const mockEducation = {
+        id: 1,
+        institution: 'Culinary Institute',
+        degree: 'Bachelor in Culinary Arts',
+        employeeId: 1
+      };
+      mockPrisma.education.create.mockResolvedValue(mockEducation);
+
+      const educationData = {
+        institution: 'Culinary Institute',
+        degree: 'Bachelor in Culinary Arts',
+        startDate: '2015-01-01',
+        endDate: '2019-01-01',
+        description: 'Studied culinary arts',
+        employeeId: 1
+      };
+
+      const result = await createEducation(educationData);
+
+      expect(mockPrisma.education.create).toHaveBeenCalledWith({
+        data: {
+          institution: 'Culinary Institute',
+          degree: 'Bachelor in Culinary Arts',
+          startDate: '2015-01-01',
+          endDate: '2019-01-01',
+          description: 'Studied culinary arts',
+          employee: { connect: { id: 1 } },
+        },
+      });
+      expect(result).toEqual(mockEducation);
+    });
+  });
+
+  describe('getEmployeeWithDetails', () => {
+    it('should return employee with details', async () => {
+      const mockEmployee = {
+        id: 1,
+        name: 'John Doe',
+        position: 'Chef',
+        experiences: [
+          { id: 1, company: 'Restaurant ABC' }
+        ],
+        educations: [
+          { id: 1, institution: 'Culinary Institute' }
+        ]
+      };
+      mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
+
+      const result = await getEmployeeWithDetails(1);
+
+      expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        include: {
+          experiences: true,
+          educations: true,
+        },
+      });
+      expect(result).toEqual(mockEmployee);
+    });
+
+    it('should return null when employee not found', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(null);
+
+      const result = await getEmployeeWithDetails(1);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('searchEmployees', () => {
+    it('should return employees with filters', async () => {
+      const mockEmployees = [
+        { id: 1, name: 'John Doe', position: 'Chef' },
+        { id: 2, name: 'Jane Smith', position: 'Waiter' }
+      ];
+      mockPrisma.employee.findMany.mockResolvedValue(mockEmployees);
+
+      const filters = {
+        position: 'Chef',
+        region: 'Santiago',
+        available: 'Available'
+      };
+
+      const result = await searchEmployees(filters);
+
+      expect(mockPrisma.employee.findMany).toHaveBeenCalledWith({
+        where: filters,
+        include: {
+          experiences: true,
+          educations: true,
+        },
+      });
+      expect(result).toEqual(mockEmployees);
+    });
+
+    it('should handle empty filters', async () => {
+      const mockEmployees = [
+        { id: 1, name: 'John Doe' }
+      ];
+      mockPrisma.employee.findMany.mockResolvedValue(mockEmployees);
+
+      const result = await searchEmployees({});
+
+      expect(mockPrisma.employee.findMany).toHaveBeenCalledWith({
+        where: {},
+        include: {
+          experiences: true,
+          educations: true,
+        },
+      });
+      expect(result).toEqual(mockEmployees);
+    });
+  });
+
+  describe('getJobOfferById', () => {
+    it('should return job offer when found', async () => {
+      const mockJobOffer = { id: 1, position: 'Chef', salary: 50000 };
+      mockPrisma.jobOffer.findFirst.mockResolvedValue(mockJobOffer);
+
+      const result = await getJobOfferById('1');
+
+      expect(mockPrisma.jobOffer.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 1,
+          deletedAt: null,
+        },
+      });
+      expect(result).toEqual(mockJobOffer);
+    });
+
+    it('should return null when job offer not found', async () => {
+      mockPrisma.jobOffer.findFirst.mockResolvedValue(null);
+
+      const result = await getJobOfferById('1');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getEmployeeByEmployeeId', () => {
+    it('should return employee when found', async () => {
+      const mockEmployee = { id: 1, name: 'John Doe' };
+      mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
+
+      const result = await getEmployeeByEmployeeId(1);
+
+      expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+      expect(result).toEqual(mockEmployee);
+    });
+
+    it('should return null when employee not found', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(null);
+
+      const result = await getEmployeeByEmployeeId(1);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('checkFavoriteJobExists', () => {
+    it('should return favorite job when exists', async () => {
+      const mockFavoriteJob = { id: 1, employeeId: 1, jobPostId: 1 };
+      mockPrisma.favouriteJob.findFirst.mockResolvedValue(mockFavoriteJob);
+
+      const result = await checkFavoriteJobExists(1, 1);
+
+      expect(mockPrisma.favouriteJob.findFirst).toHaveBeenCalledWith({
+        where: {
+          employeeId: 1,
+          jobPostId: 1,
+        },
+      });
+      expect(result).toEqual(mockFavoriteJob);
+    });
+
+    it('should return null when favorite job not found', async () => {
+      mockPrisma.favouriteJob.findFirst.mockResolvedValue(null);
+
+      const result = await checkFavoriteJobExists(1, 1);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createFavoriteJob', () => {
+    it('should create favorite job successfully', async () => {
+      const mockFavoriteJob = { id: 1, employeeId: 1, jobPostId: 1 };
+      mockPrisma.favouriteJob.create.mockResolvedValue(mockFavoriteJob);
+
+      const result = await createFavoriteJob(1, 1);
+
+      expect(mockPrisma.favouriteJob.create).toHaveBeenCalledWith({
+        data: {
+          employee: { connect: { id: 1 } },
+          jobPost: { connect: { id: 1 } },
+        },
+      });
+      expect(result).toEqual(mockFavoriteJob);
+    });
+  });
+
+  describe('getFavoriteJobById', () => {
+    it('should return favorite job when found', async () => {
+      const mockFavoriteJob = { id: 1, employeeId: 1, jobPostId: 1 };
+      mockPrisma.favouriteJob.findFirst.mockResolvedValue(mockFavoriteJob);
+
+      const result = await getFavoriteJobById(1, 1);
+
+      expect(mockPrisma.favouriteJob.findFirst).toHaveBeenCalledWith({
+        where: {
+          employeeId: 1,
+          jobPostId: 1,
+        },
+      });
+      expect(result).toEqual(mockFavoriteJob);
+    });
+
+    it('should return null when favorite job not found', async () => {
+      mockPrisma.favouriteJob.findFirst.mockResolvedValue(null);
+
+      const result = await getFavoriteJobById(1, 1);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('deleteFavoriteJob', () => {
+    it('should delete favorite job successfully', async () => {
+      const mockDeletedJob = { id: 1, employeeId: 1, jobPostId: 1 };
+      mockPrisma.favouriteJob.delete.mockResolvedValue(mockDeletedJob);
+
+      const result = await deleteFavoriteJob(1);
+
+      expect(mockPrisma.favouriteJob.delete).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
+      expect(result).toEqual(mockDeletedJob);
+    });
+  });
+
+  describe('getFavoriteJobs', () => {
+    it('should return favorite jobs for employee', async () => {
+      const mockFavoriteJobs = [
+        { id: 1, employeeId: 1, jobPost: { id: 1, position: 'Chef' } },
+        { id: 2, employeeId: 1, jobPost: { id: 2, position: 'Waiter' } }
+      ];
+      mockPrisma.favouriteJob.findMany.mockResolvedValue(mockFavoriteJobs);
+
+      const result = await getFavoriteJobs(1);
+
+      expect(mockPrisma.favouriteJob.findMany).toHaveBeenCalledWith({
+        where: { employeeId: 1 },
+        include: {
+          jobPost: {
+            include: {
+              restaurant: true,
+              location: true,
+            },
+          },
+        },
+      });
+      expect(result).toEqual(mockFavoriteJobs);
+    });
+
+    it('should return empty array when no favorite jobs found', async () => {
+      mockPrisma.favouriteJob.findMany.mockResolvedValue([]);
+
+      const result = await getFavoriteJobs(1);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('checkTalentPoolRecord', () => {
+    it('should return talent pool record when exists', async () => {
+      const mockRecord = { id: 1, employeeId: 1, restaurantId: 1 };
+      mockPrisma.talentPool.findFirst.mockResolvedValue(mockRecord);
+
+      const result = await checkTalentPoolRecord(1, 1);
+
+      expect(mockPrisma.talentPool.findFirst).toHaveBeenCalledWith({
+        where: {
+          employeeId: 1,
+          restaurantId: 1,
+        },
+      });
+      expect(result).toEqual(mockRecord);
+    });
+
+    it('should return null when talent pool record not found', async () => {
+      mockPrisma.talentPool.findFirst.mockResolvedValue(null);
+
+      const result = await checkTalentPoolRecord(1, 1);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createTalentPoolRecord', () => {
+    it('should create talent pool record successfully', async () => {
+      const mockRecord = { id: 1, employeeId: 1, restaurantId: 1 };
+      mockPrisma.talentPool.create.mockResolvedValue(mockRecord);
+
+      const result = await createTalentPoolRecord(1, 1);
+
+      expect(mockPrisma.talentPool.create).toHaveBeenCalledWith({
+        data: {
+          employee: { connect: { id: 1 } },
+          restaurant: { connect: { id: 1 } },
+          status: 'accepted',
+        },
+      });
+      expect(result).toEqual(mockRecord);
+    });
+  });
+}); 

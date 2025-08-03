@@ -1,157 +1,166 @@
 import { Router } from "express";
-import { prisma } from "../db.js";
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import { getRestaurantIdFromCookie, getUserIdFromCookie } from "../helpers/cookies.js";
 import { checkEmployee, checkUserType, setUserRole, setUserType } from "../helpers/authenticateToken.js";
-import { v4 as uuidv4 } from 'uuid';
-import { sendEmail } from '../helpers/email.js'; 
+import {
+  validateSignupInput,
+  validateSigninInput,
+  getUserByEmail,
+  createUser,
+  verifyPassword,
+  generateToken,
+  verifyToken,
+  getUserProfileImage,
+  buildTokenPayload,
+  getRestaurantUsers,
+  getUserById,
+  checkUserExists,
+  sendConfirmationEmail,
+  createOrUpdateUserWithPassword,
+  createRestaurantUser,
+  getUserWithDetails,
+  getUserInfo,
+  updateUserPassword,
+  sendPasswordResetEmail,
+  generateChatToken,
+  updateUserProfile,
+  checkEmailConflict
+} from "../helpers/authHelpers.js";
 
 const router = Router();
 
+// POST /signup - User registration
 router.post('/signup', async (req, res) => {
   try {
     const { email, password, passwordConfirmation, userType, name, phoneNumber } = req.body;
 
-    if (password !== passwordConfirmation) {
-      return res.status(400).json({ message: 'Your passwords do not match' });
+    // Validate input data
+    const validation = validateSignupInput({ email, password, passwordConfirmation, userType, name, phoneNumber });
+    if (!validation.isValid) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Validation failed',
+        errors: validation.errors 
+      });
     }
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
-    }
-
-    const existingUser = await prisma.user.findUnique({
-      where: {
-        email,
-      },
-    });
-
+    // Check if user already exists
+    const existingUser = await checkUserExists(email);
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'User already exists' 
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Create new user
+    const newUser = await createUser({ email, password, userType, name, phoneNumber });
 
-
-    const newUser = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        userType,
-        phoneNumber,
-        name,
-        role: 'admin', 
-      },
+    // Generate token
+    const token = generateToken({
+      userId: newUser.id,
+      email: newUser.email,
+      userType: newUser.userType,
+      role: newUser.role,
     });
 
-    const token = jwt.sign(
-      {
-        userId: newUser.id,
-        email: newUser.email,
-        userType: newUser.userType,
-        role: newUser.role,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
+    // Set cookie
     res.cookie('manu', token, {
       httpOnly: true,
       sameSite: 'None',
       secure: true, 
     });
 
+    // Verify token was created correctly
     try {
-      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+      verifyToken(token);
     } catch (error) {
-      return res.status(401).json({ message: 'Invalid token' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid token' 
+      });
     }
 
-    res.status(201).json({ message: 'User registered successfully and logged in' });
+    res.status(201).json({ 
+      success: true,
+      message: 'User registered successfully and logged in' 
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Signup error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /signin - User login
 router.post('/signin', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({
-      where: {
-        email,
-      },
-      include: {
-        employee: true,
-        restaurant: true,
-        restaurantUsers: {
-          include: {
-            restaurant: true
-          }
-        },
-      },
-    });
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+    // Validate input data
+    const validation = validateSigninInput({ email, password });
+    if (!validation.isValid) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Validation failed',
+        errors: validation.errors 
+      });
     }
 
-    const tokenPayload = {
-      userId: user.id,
-      email: user.email,
-      userType: user.userType,
-      role: user.role,
-    };
+    // Get user with all related data
+    const user = await getUserByEmail(email);
 
-    if (user.employee) {
-      tokenPayload.employeeId = user.employee.id;
+    if (!user || !(await verifyPassword(password, user.password))) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid email or password' 
+      });
     }
 
-    if (user.restaurantUsers.length > 0) {
-      const restaurantUser = user.restaurantUsers[0]; 
-      tokenPayload.restaurantId = restaurantUser.restaurantId;
-      tokenPayload.restaurantUserId = restaurantUser.id;
-    }
+    // Build token payload
+    const tokenPayload = buildTokenPayload(user);
+    const token = generateToken(tokenPayload);
 
-    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '1h' });
-
+    // Set cookie
     res.cookie('manu', token, {
       httpOnly: true,
       sameSite: 'None',
       secure: true,
     });
 
-    let profileImageUrl = 'defaultImage.jpg';
-    if (user.userType === 'profesionales' && user.employee) {
-      profileImageUrl = user.employee.profileImageUrl;
-    } else if (user.userType === 'empresas') {
-      const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
-      if (restaurant) {
-        profileImageUrl = restaurant.profileImageUrl;
-      }
-    }
+    // Get profile image
+    const profileImageUrl = getUserProfileImage(user);
 
     res.status(200).json({ 
+      success: true,
       message: 'Signin successful', 
       userType: user.userType, 
       profileImageUrl: profileImageUrl, 
       isAuthenticated: true 
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Signin error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /logout - User logout
 router.post('/logout', async (req, res) => {
   try {
     const token = req.cookies.manu;
     
     if (!token) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Unauthorized' 
+      });
     }
 
+    // Clear cookies
     res.clearCookie('manu', {
       httpOnly: true, 
       sameSite: 'None', 
@@ -164,121 +173,135 @@ router.post('/logout', async (req, res) => {
       secure: true, 
     });
     
-  
-    return res.status(200).json({ message: 'Logout successful' });
+    return res.status(200).json({ 
+      success: true,
+      message: 'Logout successful' 
+    });
   } catch (error) {
     console.error('Error during logout:', error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /users - Get restaurant users
 router.get('/users', getRestaurantIdFromCookie, async (req, res) => {
-  const { restaurantId } = req;
   try {
-    const restaurantUsers = await prisma.restaurantUser.findMany({
-      where: {
-        restaurantId:parseInt(restaurantId),
-
-      },
-      include: {
-        user: true,
-      },
+    const { restaurantId } = req;
+    const restaurantUsers = await getRestaurantUsers(restaurantId);
+    
+    res.json({ 
+      success: true,
+      data: restaurantUsers 
     });
-    res.json(restaurantUsers);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error getting restaurant users:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 });
 
+// GET /users/:id - Get user by ID
 router.get('/users/:id', async (req, res) => {
-  const { id } = req.params;
   try {
-    const user = await prisma.user.findUnique({
-      where: {
-        id: parseInt(id),
-      },
-    });
+    const { id } = req.params;
+    const user = await getUserById(id);
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'User not found' 
+      });
     }
 
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/protected-route', async (req, res) => {
-  res.status(200).json({ message: 'You are logged in and authorized to access this route' });
-});
-
-router.post('/admin/create-user', getRestaurantIdFromCookie, setUserRole, async (req, res) => {
-  const { email } = req.body;
-  const { restaurantId, userRole } = req;
-  const userType = 'empresas';
-  
-  if (!email) {
-    console.log('Error: Email is required');
-    return res.status(400).json({ message: 'Email is required' });
-  }
-
-  if (userRole !== 'admin') {
-    console.log('Error: Requires admin role');
-    return res.status(400).json({ message: 'You need to be an admin to create new users' });
-  }
-
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  }).catch(err => {
-    console.error('Failed to fetch user:', err);
-    return res.status(500).json({ message: 'Failed to check existing user' });
-  });
-
-  if (existingUser) {
-    return res.status(409).json({ message: 'User already exists' });
-  }
-
-  const confirmationToken = jwt.sign({ email, userType, restaurantId }, process.env.JWT_SECRET, { expiresIn: '60min' });
-
-  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-  const confirmationLink = `${baseUrl}/panel-empresa/confirm-email?token=${confirmationToken}`;
-  const emailBody = `Welcome to our service! Please click on the link below to confirm your email and set your password. <a href="${confirmationLink}">Confirm Email</a>`;
-  
-  try {
-    await sendEmail({
-      to: email,
-      subject: 'Welcome to Our Service - Confirm Your Email',
-      text: 'Confirmation link is provided in the email.',
-      html: `<p>${emailBody}</p>`,
+    res.json({ 
+      success: true,
+      data: user 
     });
-    console.log('Email sent successfully');
-    res.status(201).json({ message: 'User created successfully. Confirmation email sent.' });
   } catch (error) {
-    console.error('Failed to send email:', error);
-    return res.status(500).json({ message: 'Failed to send confirmation email' });
+    console.error('Error getting user:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 });
 
-router.post('/set-password', async (req, res) => {
-  console.log('Setting the new password');
-  const { token, password, name, phoneNumber } = req.body;
+// GET /protected-route - Test protected route
+router.get('/protected-route', async (req, res) => {
+  res.status(200).json({ 
+    success: true,
+    message: 'You are logged in and authorized to access this route' 
+  });
+});
 
-  if (!token || !password) {
-    return res.status(400).json({ message: 'Token and password are required' });
-  }
-
+// POST /admin/create-user - Create user by admin
+router.post('/admin/create-user', getRestaurantIdFromCookie, setUserRole, async (req, res) => {
   try {
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    const { email } = req.body;
+    const { restaurantId, userRole } = req;
+    const userType = 'empresas';
+    
+    if (!email) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Email is required' 
+      });
+    }
+
+    if (userRole !== 'admin') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'You need to be an admin to create new users' 
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await checkUserExists(email);
+    if (existingUser) {
+      return res.status(409).json({ 
+        success: false,
+        message: 'User already exists' 
+      });
+    }
+
+    // Send confirmation email
+    await sendConfirmationEmail(email, userType, restaurantId);
+    
+    res.status(201).json({ 
+      success: true,
+      message: 'User created successfully. Confirmation email sent.' 
+    });
+  } catch (error) {
+    console.error('Failed to create user:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Failed to send confirmation email' 
+    });
+  }
+});
+
+// POST /set-password - Set password for new user
+router.post('/set-password', async (req, res) => {
+  try {
+    const { token, password, name, phoneNumber } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Token and password are required' 
+      });
+    }
+
+    const decodedToken = verifyToken(token);
     const { email, userType, restaurantId } = decodedToken;
 
     // Check for existing user
-    const existingUser = await prisma.user.findUnique({ 
-      where: { email },
-      include: {
-        restaurantUsers: true
-      }
-    });
+    const existingUser = await getUserInfo(email);
 
     let userId;
 
@@ -290,6 +313,7 @@ router.post('/set-password', async (req, res) => {
 
       if (existingRestaurantUser) {
         return res.status(409).json({ 
+          success: false,
           message: 'User already exists and is associated with this restaurant' 
         });
       }
@@ -297,80 +321,63 @@ router.post('/set-password', async (req, res) => {
       userId = existingUser.id;
     } else {
       // Create new User if doesn't exist
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const newUser = await prisma.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          userType,
-          role: 'staff',
-          name: name || undefined,
-          phoneNumber: phoneNumber || undefined,
-        },
+      const newUser = await createOrUpdateUserWithPassword({ 
+        email, password, userType, name, phoneNumber 
       });
       userId = newUser.id;
     }
 
     // Create RestaurantUser association
-    const newRestaurantUser = await prisma.restaurantUser.create({
-      data: {
-        userId,
-        restaurantId: parseInt(restaurantId),
-        role: 'staff',
-        // Remove name and phoneNumber from here since they should be in the User model
-      }
-    });
+    await createRestaurantUser(userId, restaurantId);
 
     res.status(200).json({ 
+      success: true,
       message: existingUser 
         ? 'User associated with restaurant successfully' 
         : 'User created and associated successfully' 
     });
   } catch (error) {
-    console.error(error);
+    console.error('Set password error:', error);
     if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid or expired token' 
+      });
     }
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal server error' 
+    });
   }
 });
 
+// GET /check-login-status - Check user login status
 router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
   try {
     const { userId } = req; 
 
     if (!userId) {
-      return res.status(401).json({ message: 'User not logged in', isLoggedIn: false });
+      return res.status(401).json({ 
+        success: false,
+        message: 'User not logged in', 
+        isLoggedIn: false 
+      });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { 
-        employee: true,
-        restaurant: true,     
-        restaurantUsers: {    
-          include: {
-            restaurant: true
-          }
-        }
-      }
-    });
+    const user = await getUserWithDetails(userId);
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found', isLoggedIn: false });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found', 
+        isLoggedIn: false 
+      });
     }
 
-    let profileImageUrl = 'No photo';
-    if (user.userType === 'profesionales' && user.employee) {
-      profileImageUrl = user.employee.profileImageUrl;
-    } else if (user.userType === 'empresas') {
-      const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
-      if (restaurant) {
-        profileImageUrl = restaurant.profileImageUrl;
-      }
-    }
+    const profileImageUrl = getUserProfileImage(user);
 
     res.status(200).json({
+      success: true,
       message: "User logged in",
       isAuthenticated: true,
       profileImageUrl,
@@ -378,209 +385,177 @@ router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
       role: user.role
     });
   } catch (error) {
-    console.error('Full error:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Check login status error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /user-info - Get user info
 router.get('/user-info', getUserIdFromCookie, async (req, res) => {
   try {
     if (!req.userId) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: req.userId,
-      },
-      include: {
-        restaurantUsers: {
-          where: {
-            userId: req.userId, 
-          },
-        },
-        employee: true, 
-      },
-    });
+    const user = await getUserInfo(req.userId);
 
     const restaurantUserId = user.restaurantUsers.length > 0
       ? user.restaurantUsers[0].id
       : null;
 
-    const responseData = { userId: user.id, restaurantUserId: restaurantUserId, employeeId: '' };
+    const responseData = { 
+      userId: user.id, 
+      restaurantUserId: restaurantUserId, 
+      employeeId: '' 
+    };
 
     if (user.userType === 'profesionales' && user.employee) {
       responseData.employeeId = user.employee.id; 
     }
 
-    if (user) {
-      res.json(responseData); 
-    } else {
-      res.status(404).json({ message: 'User not found' });
-    }
+    res.json({ 
+      success: true,
+      data: responseData 
+    });
   } catch (error) {
     console.error('Failed to retrieve user:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /reset-password - Reset password
 router.post('/reset-password', async (req, res) => {
   try {
-    console.log('new password')
     const { token, newPassword } = req.body;
 
     if (!token || !newPassword) {
-      return res.status(400).json({ message: 'Token and new password are required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Token and new password are required' 
+      });
     }
 
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    const decodedToken = verifyToken(token);
     const { email } = decodedToken;
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await checkUserExists(email);
 
     if (!existingUser) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
     // Update the user's password
-    const updatedPassword = await prisma.user.update({
-      where: { email },
-      data: { password: hashedPassword },
+    await updateUserPassword(email, newPassword);
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Password reset successful' 
     });
-
-    console.log('updated pass', updatedPassword)
-
-    res.status(200).json({ message: 'Password reset successful' });
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid or expired token' 
+      });
     }
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal server error' 
+    });
   }
 });
 
+// POST /reset-password-request - Request password reset
 router.post('/reset-password-request', async (req, res) => {
   try {
     const { email } = req.body;
 
-    console.log('reseting the password for this email', email)
-
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await checkUserExists(email);
     if (!existingUser) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
 
-    const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    await sendPasswordResetEmail(email);
 
-    const resetLink = `http://localhost:3001/reset-password?token=${resetToken}`;
-
-    const emailBody = `Click the link below to reset your password:\n\n${resetLink}`;
-
-    await sendEmail({
-      to: email,
-      subject: 'Password Reset Request',
-      text: emailBody,
+    res.status(200).json({ 
+      success: true,
+      message: 'Password reset link sent successfully' 
     });
-
-    res.status(200).json({ message: 'Password reset link sent successfully' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Password reset request error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal server error' 
+    });
   }
 });
 
+// GET /chat-token - Generate chat token
 router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
-
   try {
     const { userId } = req;
     
     if (!userId) {
-      return res.status(401).json({ message: 'Not authenticated' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Not authenticated' 
+      });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        employee: true,
-        restaurant: true,
-        restaurantUsers: {
-          include: {
-            restaurant: true
-          }
-        }
-      }
-    });
+    const user = await getUserWithDetails(userId);
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
 
-    const chatTokenPayload = {
-      userId: user.id,
-      userType: user.userType,
-      tokenType: 'socket',
-      ...(user.employee && { employeeId: user.employee.id }),
-      ...(user.restaurantUsers?.[0] && {
-        restaurantUserId: user.restaurantUsers[0].id,
-        restaurantId: user.restaurantUsers[0].restaurantId
-      }),
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (60 * 60), 
-      aud: 'chat',
-      iss: process.env.NODE_ENV === 'production' ? process.env.JWT_ISSUER : 'localhost',   
-    };
+    const chatToken = generateChatToken(user);
 
-    const chatToken = jwt.sign(
-      chatTokenPayload,
-      process.env.JWT_SECRET
-    );
-
-    res.json({ token: chatToken });
+    res.json({ 
+      success: true,
+      token: chatToken 
+    });
   } catch (error) {
     console.error('Chat token generation error:', error);
-    res.status(500).json({ message: 'Failed to generate chat token' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to generate chat token' 
+    });
   }
 });
 
+// PATCH /user/update - Update user profile
 router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
   try {
-    console.log('🚀 Starting user update process...');
     const { userId } = req;
     const { email, name, phoneNumber } = req.body;
-    console.log('📝 Update request details:', {
-      userId,
-      requestBody: { email, name, phoneNumber }
-    });
 
     const numericUserId = typeof userId === 'string' ? parseInt(userId) : userId;
-    console.log('🔢 Converted userId to numeric:', { original: userId, converted: numericUserId });
 
     // Check for email conflicts if email is being updated
     if (email) {
-      console.log('📧 Checking for email conflicts:', { newEmail: email.toLowerCase() });
-      const emailUser = await prisma.user.findFirst({
-        where: {
-          email: email.toLowerCase(),
-          NOT: {
-            id: numericUserId
-          }
-        }
-      });
-
-      console.log('📧 Email conflict check result:', {
-        emailFound: !!emailUser,
-        conflictingUserId: emailUser?.id
-      });
+      const emailUser = await checkEmailConflict(email, numericUserId);
 
       if (emailUser) {
-        console.log('❌ Email conflict detected:', {
-          attemptedEmail: email,
-          existingUserId: emailUser.id
-        });
         return res.status(400).json({ 
+          success: false,
           message: 'This email is already associated with another account' 
         });
       }
@@ -592,36 +567,19 @@ router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
     if (name) updateData.name = name;
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
 
-    console.log('📦 Prepared update data:', updateData);
-
     if (Object.keys(updateData).length === 0) {
-      console.log('ℹ️ No changes detected in update data');
       return res.status(200).json({
-        message: 'No changes to update',
-        user: existingUser
+        success: true,
+        message: 'No changes to update'
       });
     }
 
-    console.log('🔄 Attempting to update user with ID:', numericUserId);
-    const updatedUser = await prisma.user.update({
-      where: { 
-        id: numericUserId 
-      },
-      data: updateData,
-      include: {
-        restaurantUsers: true
-      }
-    });
-
-    console.log('✅ User update successful:', {
-      userId: updatedUser.id,
-      updatedFields: Object.keys(updateData),
-      restaurantUsersCount: updatedUser.restaurantUsers.length
-    });
+    const updatedUser = await updateUserProfile(numericUserId, updateData);
 
     return res.status(200).json({
+      success: true,
       message: 'Profile updated successfully',
-      user: {
+      data: {
         id: updatedUser.id,
         email: updatedUser.email,
         name: updatedUser.name,
@@ -631,23 +589,9 @@ router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Update request failed:', {
-      error: error.message,
-      stack: error.stack,
-      code: error.code,
-      meta: error.meta
-    });
-
-    // Log specific Prisma errors
-    if (error.code) {
-      console.error('📊 Prisma error details:', {
-        code: error.code,
-        meta: error.meta,
-        target: error.meta?.target
-      });
-    }
-
+    console.error('Update request failed:', error);
     return res.status(500).json({ 
+      success: false,
       message: 'Failed to update profile. Please try again.',
       error: error.message
     });

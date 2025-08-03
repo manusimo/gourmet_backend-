@@ -1,6 +1,6 @@
 import express from 'express';
 import { checkJoinAuthorization, checkSendMessageAuthorization } from '../helpers/chat.js';
-import  { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
+import { checkCompany, setUserRole } from '../helpers/authenticateToken.js';
 import {
   getUserIdFromCookie,
   getRestaurantIdFromCookie,
@@ -9,328 +9,318 @@ import {
   validateTokenAndIdentifyUser
 } from '../helpers/cookies.js';
 import { requirePlan } from '../middleware/checkPlan.js';
-import { prisma } from "../db.js";
+import {
+  getConversationById,
+  getConversationWithMessages,
+  validateEmployeeAccess,
+  validateRestaurantUserAccess,
+  createMessage,
+  checkTalentConversation,
+  checkApplicationConversation,
+  findConversationByJobPost,
+  findConversationByTalentPool,
+  createConversation,
+  getRestaurantConversations,
+  getEmployeeConversations,
+  getRestaurantUserConversations,
+  deleteConversation,
+  validateConversationAccess
+} from '../helpers/chatHelpers.js';
 
 const router = express.Router();
 
+// GET /conversations/:conversationId - Get conversation by ID
 router.get('/conversations/:conversationId', async (req, res) => {
-  const { conversationId } = req.params;
-
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: parseInt(conversationId), deletedAt: null },
-      include: {
-        messages: true,
-        jobOffer: true,
-        talentPool: true,
-        employee: true,
-        restaurantUser: true,
-      },
-    });
+    const { conversationId } = req.params;
+    const conversation = await getConversationById(conversationId);
 
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Conversation not found' 
+      });
     }
 
-    res.status(200).json({ conversation });
+    res.status(200).json({ 
+      success: true,
+      data: conversation 
+    });
   } catch (error) {
     console.error('Failed to fetch conversation:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /conversations/:conversationId/messages - Get conversation messages
 router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUser, async (req, res) => {
-  const { conversationId } = req.params;
-  const { employeeId, restaurantUserId } = req;
-
-  if (!employeeId && !restaurantUserId) {
-    console.log('Unauthorized access: No valid user ID found');
-    return res.status(403).json({ error: 'Unauthorized access. You must be either an employee or a restaurant user.' });
-  }
-
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: parseInt(conversationId), deletedAt: null },
-      include: { messages: true }
-    });
+    const { conversationId } = req.params;
+    const { employeeId, restaurantUserId } = req;
+
+    if (!employeeId && !restaurantUserId) {
+      console.log('Unauthorized access: No valid user ID found');
+      return res.status(403).json({ 
+        success: false,
+        error: 'Unauthorized access. You must be either an employee or a restaurant user.' 
+      });
+    }
+
+    const conversation = await getConversationWithMessages(conversationId);
 
     if (!conversation) {
       console.log(`Conversation with ID ${conversationId} not found`);
-      return res.status(404).json({ error: 'Conversation not found.' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Conversation not found.' 
+      });
     }
 
-    if (employeeId && conversation.employeeId !== employeeId) {
-      console.log(`Employee with ID ${employeeId} is not authorized for conversation ${conversationId}`);
-      return res.status(404).json({ error: 'Employee not authorized for this conversation' });
+    // Validate access
+    if (!validateConversationAccess(conversation, employeeId, restaurantUserId)) {
+      console.log(`User not authorized for conversation ${conversationId}`);
+      return res.status(404).json({ 
+        success: false,
+        error: 'User not authorized for this conversation' 
+      });
     }
 
-    if (restaurantUserId && conversation.restaurantUserId !== restaurantUserId) {
-      console.log(`Restaurant user with ID ${restaurantUserId} is not authorized for conversation ${conversationId}`);
-      return res.status(404).json({ error: 'Restaurant user not authorized for this conversation' });
-    }
-
-    res.status(200).json({ messages: conversation.messages });
+    res.status(200).json({ 
+      success: true,
+      data: conversation.messages 
+    });
   } catch (error) {
     console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /send-message - Send a message
 router.post('/send-message', requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
-  const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
-
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: parseInt(conversationId), deletedAt: null }
-    });
+    const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
+
+    const conversation = await getConversationById(conversationId);
 
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found.' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Conversation not found.' 
+      });
     }
 
-    const senderRelation = senderType === 'employee'
-      ? { senderEmployee: { connect: { id: parseInt(senderUserId) } } }
-      : { senderRestaurantUser: { connect: { id: parseInt(senderUserId) } } };
-
-    const receiverRelation = receiverType === 'employee'
-      ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } }
-      : { receiverRestaurantUser: { connect: { id: parseInt(receiverUserId) } } };
-
-    const message = await prisma.message.create({
-      data: {
-        text,
-        conversation: { connect: { id: parseInt(conversationId) } },
-        ...senderRelation,
-        ...receiverRelation,
-      },
+    const message = await createMessage({
+      text,
+      senderUserId,
+      receiverUserId,
+      conversationId,
+      senderType,
+      receiverType
     });
 
-    res.status(200).json({ message: 'Message sent successfully.', data: message });
+    res.status(200).json({ 
+      success: true,
+      message: 'Message sent successfully.', 
+      data: message 
+    });
   } catch (error) {
     console.error('Error sending message:', error);
-
-    res.status(500).json({ error: 'Failed to send message.' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to send message.' 
+    });
   }
 });
 
+// GET /check-conversation/:employeeId/:type - Check conversation existence
 router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantUserIdFromCookie, async (req, res) => {
-  const { employeeId, type } = req.params;
-  const restaurantUserId = req.restaurantUserId;
-  console.log('checking the existence of the conversation in the backend', employeeId, restaurantUserId, type)
-
-  if (!restaurantUserId) {
-    return res.status(400).json({ error: 'Restaurant user ID not found in cookies.' });
-  }
-
   try {
-      let conversation;
+    const { employeeId, type } = req.params;
+    const restaurantUserId = req.restaurantUserId;
+    
+    console.log('checking the existence of the conversation in the backend', employeeId, restaurantUserId, type);
 
-      if (type === 'talent') {
-        conversation = await prisma.conversation.findFirst({
-          where: {
-            employeeId: parseInt(employeeId),
-            restaurantUserId: parseInt(restaurantUserId),
-            type: 'talent',
-            deletedAt: null
-          },
-        });
-      }
+    if (!restaurantUserId) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Restaurant user ID not found in cookies.' 
+      });
+    }
 
-      if (type === 'application') {
-        console.log('check the application conversation')
-        conversation = await prisma.conversation.findFirst({
-          where: {
-            employeeId: parseInt(employeeId),
-            restaurantUserId: parseInt(restaurantUserId),
-            type: 'applicant',
-            deletedAt: null
-          },
-        });
-
-        console.log('this is the conversation', conversation)
-      }
-
-      if (conversation) {
-        res.status(200).json({ message: 'Conversation found.', conversation });
-      } else {
-        res.status(404).json({ message: 'Conversation not found.' });
-      }
-  } catch (error) {
-      console.error('Error checking conversation:', error);
-      res.status(500).json({ error: 'Failed to check conversation.' });
-  }
-});
-
-router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
-  const { employeeId, jobPostId, talentPoolId, type } = req.body;
-  const userId = req.userId;
-  const restaurantUserId = req.restaurantUserId;
-
-  try {
     let conversation;
 
+    if (type === 'talent') {
+      conversation = await checkTalentConversation(employeeId, restaurantUserId);
+    }
+
+    if (type === 'application') {
+      console.log('check the application conversation');
+      conversation = await checkApplicationConversation(employeeId, restaurantUserId);
+      console.log('this is the conversation', conversation);
+    }
+
+    if (conversation) {
+      res.status(200).json({ 
+        success: true,
+        message: 'Conversation found.', 
+        data: conversation 
+      });
+    } else {
+      res.status(404).json({ 
+        success: false,
+        message: 'Conversation not found.' 
+      });
+    }
+  } catch (error) {
+    console.error('Error checking conversation:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to check conversation.' 
+    });
+  }
+});
+
+// POST /create-conversation - Create or ensure conversation exists
+router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
+  try {
+    const { employeeId, jobPostId, talentPoolId, type } = req.body;
+    const userId = req.userId;
+    const restaurantUserId = req.restaurantUserId;
+
+    let conversation;
     const parsedEmployeeId = parseInt(employeeId, 10);
 
+    // Check for existing conversation
     if (jobPostId) {
-      conversation = await prisma.conversation.findFirst({
-        where: {
-          employeeId: parsedEmployeeId,
-          jobOfferId: jobPostId,
-          restaurantUserId: restaurantUserId,
-          type,
-          deletedAt: null
-        },
-      });
+      conversation = await findConversationByJobPost(parsedEmployeeId, jobPostId, restaurantUserId, type);
     }
 
     if (talentPoolId) {
-      conversation = await prisma.conversation.findFirst({
-        where: {
-          employeeId: parsedEmployeeId,
-          talentPoolId,
-          restaurantUserId: restaurantUserId,
-          type,
-          deletedAt: null
-        },
-      });
+      conversation = await findConversationByTalentPool(parsedEmployeeId, talentPoolId, restaurantUserId, type);
     }
 
+    // Create new conversation if none exists
     if (!conversation) {
-      conversation = await prisma.conversation.create({
-        data: {
-          employeeId: parsedEmployeeId,
-          jobOfferId: jobPostId,
-          talentPoolId: talentPoolId,
-          restaurantUserId,
-          type
-        },
+      conversation = await createConversation({
+        employeeId: parsedEmployeeId,
+        jobPostId,
+        talentPoolId,
+        restaurantUserId,
+        type
       });
     }
 
-    res.status(200).json({ message: 'Conversation created/ensured.', conversation });
+    res.status(200).json({ 
+      success: true,
+      message: 'Conversation created/ensured.', 
+      data: conversation 
+    });
   } catch (error) {
     console.error('Error creating/ensuring conversation:', error);
-    res.status(500).json({ error: 'Failed to create/ensure conversation.' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create/ensure conversation.' 
+    });
   }
 });
 
+// GET /conversations/:employeeId/:type - Get conversations for specific employee and type
 router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie, async (req, res) => {
-  const { employeeId, type } = req.params;
-  const { restaurantUserId } = req.cookies;
-
   try {
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        restaurantUserId: parseInt(restaurantUserId),
-        employeeId: parseInt(employeeId),
-        type: type.toLowerCase(),
-        deletedAt: null
-      },
-      include: {
-        messages: true,
-        jobOffer: true,
-        talentPool: true,
-        employee: true,
-        restaurantUser: true,
-      },
-    });
+    const { employeeId, type } = req.params;
+    const { restaurantUserId } = req.cookies;
 
-    res.status(200).json({ conversations });
+    const conversations = await getRestaurantConversations(restaurantUserId, employeeId, type);
+
+    res.status(200).json({ 
+      success: true,
+      data: conversations 
+    });
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    res.status(500).json({ error: 'Failed to fetch conversations.' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch conversations.' 
+    });
   }
 });
 
+// GET /conversations - Get all conversations for current user
 router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     if (req.employeeId) {
-
-      const employeeConversations = await prisma.conversation.findMany({
-        where: {
-          employeeId: req.employeeId,
-          type: req.query.type || 'none',
-          deletedAt: null
-        },
-        include: {
-          messages: true,
-          jobOffer: {
-            include: {
-              location: true
-            }
-          },
-          employee: true,
-          restaurantUser: {
-            include: {
-              restaurant: true,
-            },
-          },
-        },
+      const employeeConversations = await getEmployeeConversations(req.employeeId, req.query.type);
+      return res.status(200).json({ 
+        success: true,
+        data: employeeConversations 
       });
-
-      return res.status(200).json({ conversations: employeeConversations });
     }
 
     if (req.restaurantUserId) {
-
-      const restaurantConversations = await prisma.conversation.findMany({
-        where: {
-          restaurantUserId: parseInt(req.restaurantUserId),
-          type: req.query.type || '',
-          deletedAt: null
-        },
-        include: {
-          messages: true,
-          jobOffer: true,
-          employee: true,
-        },
+      const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, req.query.type);
+      return res.status(200).json({ 
+        success: true,
+        data: restaurantConversations 
       });
-
-      return res.status(200).json({ conversations: restaurantConversations });
     }
 
     console.log('No valid user type found in the request. Unable to fetch conversations.');
-    return res.status(400).json({ message: 'Invalid user type or ID' });
+    return res.status(400).json({ 
+      success: false,
+      message: 'Invalid user type or ID' 
+    });
 
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// DELETE /conversations/:conversationId - Delete conversation
 router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
-  const { conversationId } = req.params;
-  const employeeId = req.employeeId;
-  const restaurantUserId = req.restaurantUserId;
-
-  if (!employeeId && !restaurantUserId) {
-    return res.status(403).json({ error: 'Unauthorized access.' });
-  }
-
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: parseInt(conversationId), deletedAt: null },
-      include: { messages: true },
-    });
+    const { conversationId } = req.params;
+    const employeeId = req.employeeId;
+    const restaurantUserId = req.restaurantUserId;
 
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found.' });
+    if (!employeeId && !restaurantUserId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Unauthorized access.' 
+      });
     }
 
-    await prisma.message.deleteMany({
-      where: { conversationId: parseInt(conversationId) },
+    const conversation = await getConversationWithMessages(conversationId);
+
+    if (!conversation) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Conversation not found.' 
+      });
+    }
+
+    const conversationDeleted = await deleteConversation(conversationId);
+    console.log('conversation deleted', conversationDeleted);
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Conversation deleted successfully.' 
     });
-
-    const conversationDeleted = await prisma.conversation.delete({
-      where: { id: parseInt(conversationId) },
-    });
-
-    console.log('conversation deleted', conversationDeleted)
-
-    res.status(200).json({ message: 'Conversation deleted successfully.' });
   } catch (error) {
     console.error('Error deleting conversation:', error);
-    res.status(500).json({ error: 'Failed to delete conversation.' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to delete conversation.' 
+    });
   }
 });
 
