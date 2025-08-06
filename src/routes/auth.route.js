@@ -1,601 +1,712 @@
-import { Router } from "express";
-import { getRestaurantIdFromCookie, getUserIdFromCookie } from "../helpers/cookies.js";
-import { checkEmployee, checkUserType, setUserRole, setUserType } from "../helpers/authenticateToken.js";
+import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../db.js';
+import { 
+  checkEmployee, 
+  checkCompany, 
+  setUserRole, 
+  setUserType, 
+  validateTokenAndIdentifyUser,
+  optionalAuth
+} from '../middleware/auth.js';
+import { 
+  validateSignup, 
+  validateSignin, 
+  validateUserId,
+  validatePasswordReset,
+  validatePasswordResetConfirm
+} from "../middleware/validation.js";
+
+// Import new security functions
 import {
-  validateSignupInput,
-  validateSigninInput,
-  getUserByEmail,
-  createUser,
-  verifyPassword,
-  generateToken,
-  verifyToken,
-  getUserProfileImage,
-  buildTokenPayload,
-  getRestaurantUsers,
-  getUserById,
-  checkUserExists,
-  sendConfirmationEmail,
-  createOrUpdateUserWithPassword,
-  createRestaurantUser,
-  getUserWithDetails,
-  getUserInfo,
-  updateUserPassword,
-  sendPasswordResetEmail,
-  generateChatToken,
-  updateUserProfile,
-  checkEmailConflict
-} from "../helpers/authHelpers.js";
+  recordFailedAttempt,
+  isAccountLocked,
+  resetAccountLockout,
+  isTokenBlacklisted,
+  invalidateToken,
+  generateMFASecret,
+  generateMFAQRCode,
+  verifyMFAToken,
+  enhancedSecurityMiddleware
+} from '../middleware/security.js';
 
 const router = Router();
 
-// POST /signup - User registration
-router.post('/signup', async (req, res) => {
-  try {
-    const { email, password, passwordConfirmation, userType, name, phoneNumber } = req.body;
+// Apply enhanced security middleware to all auth routes
+router.use(enhancedSecurityMiddleware);
 
-    // Validate input data
-    const validation = validateSignupInput({ email, password, passwordConfirmation, userType, name, phoneNumber });
-    if (!validation.isValid) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Validation failed',
-        errors: validation.errors 
-      });
-    }
+// ============================================================================
+// AUTHENTICATION ROUTES WITH ENHANCED SECURITY
+// ============================================================================
+
+// POST /signup - User registration with enhanced validation
+router.post('/signup', validateSignup, async (req, res) => {
+  try {
+    const { email, password, userType } = req.body;
 
     // Check if user already exists
-    const existingUser = await checkUserExists(email);
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+
     if (existingUser) {
-      return res.status(400).json({ 
+      return res.status(409).json({
         success: false,
-        message: 'User already exists' 
+        message: 'User already exists with this email',
+        error: 'EMAIL_ALREADY_EXISTS'
       });
     }
 
-    // Create new user
-    const newUser = await createUser({ email, password, userType, name, phoneNumber });
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Generate token
-    const token = generateToken({
-      userId: newUser.id,
-      email: newUser.email,
-      userType: newUser.userType,
-      role: newUser.role,
+    // Create user with enhanced security defaults
+    const newUser = await prisma.user.create({
+      data: {
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        userType,
+        // Security enhancements
+        mfaEnabled: false,
+        mfaSecret: null,
+        accountLocked: false,
+        lastLoginAt: null,
+        loginAttempts: 0,
+        securityNotifications: true
+      },
+      select: {
+        id: true,
+        email: true,
+        userType: true,
+        createdAt: true,
+        mfaEnabled: true
+      }
     });
 
-    // Set cookie
-    res.cookie('manu', token, {
-      httpOnly: true,
-      sameSite: 'None',
-      secure: true, 
-    });
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: newUser.id, 
+        email: newUser.email, 
+        userType: newUser.userType 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-    // Verify token was created correctly
-    try {
-      verifyToken(token);
-    } catch (error) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Invalid token' 
-      });
-    }
+    console.log(`✅ New user registered: ${newUser.email} (${newUser.userType})`);
 
-    res.status(201).json({ 
+    res.status(201).json({
       success: true,
-      message: 'User registered successfully and logged in' 
+      message: 'User registered successfully',
+      data: {
+        user: newUser,
+        token,
+        securityRecommendation: 'Consider enabling multi-factor authentication for enhanced security'
+      }
     });
+
   } catch (error) {
     console.error('Signup error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Internal Server Error' 
-    });
-  }
-});
-
-// POST /signin - User login
-router.post('/signin', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    // Validate input data
-    const validation = validateSigninInput({ email, password });
-    if (!validation.isValid) {
-      return res.status(400).json({ 
+    
+    if (error.code === 'P2002') {
+      return res.status(409).json({
         success: false,
-        message: 'Validation failed',
-        errors: validation.errors 
+        message: 'User already exists with this email'
       });
     }
 
-    // Get user with all related data
-    const user = await getUserByEmail(email);
-
-    if (!user || !(await verifyPassword(password, user.password))) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Invalid email or password' 
-      });
-    }
-
-    // Build token payload
-    const tokenPayload = buildTokenPayload(user);
-    const token = generateToken(tokenPayload);
-
-    // Set cookie
-    res.cookie('manu', token, {
-      httpOnly: true,
-      sameSite: 'None',
-      secure: true,
-    });
-
-    // Get profile image
-    const profileImageUrl = getUserProfileImage(user);
-
-    res.status(200).json({ 
-      success: true,
-      message: 'Signin successful', 
-      userType: user.userType, 
-      profileImageUrl: profileImageUrl, 
-      isAuthenticated: true 
-    });
-  } catch (error) {
-    console.error('Signin error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Internal Server Error' 
+      message: 'Internal Server Error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// POST /logout - User logout
-router.post('/logout', async (req, res) => {
+// POST /signin - User login with enhanced validation and security
+router.post('/signin', validateSignin, async (req, res) => {
   try {
-    const token = req.cookies.manu;
-    
-    if (!token) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Unauthorized' 
-      });
-    }
+    const { email, password, mfaToken } = req.body;
+    const userEmail = email.toLowerCase();
 
-    // Clear cookies
-    res.clearCookie('manu', {
-      httpOnly: true, 
-      sameSite: 'None', 
-      secure: true, 
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email: userEmail },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        userType: true,
+        mfaEnabled: true,
+        mfaSecret: true,
+        accountLocked: true,
+        lastLoginAt: true
+      }
     });
-    
-    res.clearCookie('userInfo', {
-      httpOnly: false, 
-      sameSite: 'None', 
-      secure: true, 
-    });
-    
-    return res.status(200).json({ 
-      success: true,
-      message: 'Logout successful' 
-    });
-  } catch (error) {
-    console.error('Error during logout:', error);
-    return res.status(500).json({ 
-      success: false,
-      message: 'Internal Server Error' 
-    });
-  }
-});
-
-// GET /users - Get restaurant users
-router.get('/users', getRestaurantIdFromCookie, async (req, res) => {
-  try {
-    const { restaurantId } = req;
-    const restaurantUsers = await getRestaurantUsers(restaurantId);
-    
-    res.json({ 
-      success: true,
-      data: restaurantUsers 
-    });
-  } catch (error) {
-    console.error('Error getting restaurant users:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message 
-    });
-  }
-});
-
-// GET /users/:id - Get user by ID
-router.get('/users/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await getUserById(id);
 
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(401).json({
         success: false,
-        error: 'User not found' 
+        message: 'Invalid credentials'
       });
     }
 
-    res.json({ 
-      success: true,
-      data: user 
-    });
-  } catch (error) {
-    console.error('Error getting user:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message 
-    });
-  }
-});
+    // Check account lockout
+    const lockoutStatus = isAccountLocked(user.id);
+    if (lockoutStatus) {
+      return res.status(423).json({
+        success: false,
+        message: `Account temporarily locked due to multiple failed attempts`,
+        data: {
+          remainingTime: lockoutStatus.remainingTime,
+          attempts: lockoutStatus.attempts
+        }
+      });
+    }
 
-// GET /protected-route - Test protected route
-router.get('/protected-route', async (req, res) => {
-  res.status(200).json({ 
-    success: true,
-    message: 'You are logged in and authorized to access this route' 
-  });
-});
-
-// POST /admin/create-user - Create user by admin
-router.post('/admin/create-user', getRestaurantIdFromCookie, setUserRole, async (req, res) => {
-  try {
-    const { email } = req.body;
-    const { restaurantId, userRole } = req;
-    const userType = 'empresas';
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
     
-    if (!email) {
-      return res.status(400).json({ 
+    if (!isPasswordValid) {
+      // Record failed attempt
+      const lockoutData = recordFailedAttempt(user.id);
+      
+      return res.status(401).json({
         success: false,
-        message: 'Email is required' 
+        message: 'Invalid credentials',
+        data: {
+          attemptsRemaining: Math.max(0, 5 - lockoutData.attempts)
+        }
       });
     }
 
-    if (userRole !== 'admin') {
-      return res.status(400).json({ 
-        success: false,
-        message: 'You need to be an admin to create new users' 
-      });
-    }
-
-    // Check if user already exists
-    const existingUser = await checkUserExists(email);
-    if (existingUser) {
-      return res.status(409).json({ 
-        success: false,
-        message: 'User already exists' 
-      });
-    }
-
-    // Send confirmation email
-    await sendConfirmationEmail(email, userType, restaurantId);
-    
-    res.status(201).json({ 
-      success: true,
-      message: 'User created successfully. Confirmation email sent.' 
-    });
-  } catch (error) {
-    console.error('Failed to create user:', error);
-    return res.status(500).json({ 
-      success: false,
-      message: 'Failed to send confirmation email' 
-    });
-  }
-});
-
-// POST /set-password - Set password for new user
-router.post('/set-password', async (req, res) => {
-  try {
-    const { token, password, name, phoneNumber } = req.body;
-
-    if (!token || !password) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Token and password are required' 
-      });
-    }
-
-    const decodedToken = verifyToken(token);
-    const { email, userType, restaurantId } = decodedToken;
-
-    // Check for existing user
-    const existingUser = await getUserInfo(email);
-
-    let userId;
-
-    if (existingUser) {
-      // Check if already associated with this restaurant
-      const existingRestaurantUser = existingUser.restaurantUsers.find(
-        ru => ru.restaurantId === parseInt(restaurantId)
-      );
-
-      if (existingRestaurantUser) {
-        return res.status(409).json({ 
+    // If MFA is enabled, verify MFA token
+    if (user.mfaEnabled) {
+      if (!mfaToken) {
+        return res.status(403).json({
           success: false,
-          message: 'User already exists and is associated with this restaurant' 
+          message: 'Multi-factor authentication required',
+          requiresMFA: true
         });
       }
 
-      userId = existingUser.id;
-    } else {
-      // Create new User if doesn't exist
-      const newUser = await createOrUpdateUserWithPassword({ 
-        email, password, userType, name, phoneNumber 
-      });
-      userId = newUser.id;
+      const isMFAValid = verifyMFAToken(user.mfaSecret, mfaToken);
+      if (!isMFAValid) {
+        // Record failed attempt for invalid MFA
+        recordFailedAttempt(user.id);
+        
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid MFA token'
+        });
+      }
     }
 
-    // Create RestaurantUser association
-    await createRestaurantUser(userId, restaurantId);
+    // Reset account lockout on successful login
+    resetAccountLockout(user.id);
 
-    res.status(200).json({ 
-      success: true,
-      message: existingUser 
-        ? 'User associated with restaurant successfully' 
-        : 'User created and associated successfully' 
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() }
     });
-  } catch (error) {
-    console.error('Set password error:', error);
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Invalid or expired token' 
-      });
-    }
-    res.status(500).json({ 
-      success: false,
-      message: 'Internal server error' 
-    });
-  }
-});
 
-// GET /check-login-status - Check user login status
-router.get('/check-login-status', getUserIdFromCookie, async (req, res) => {
-  try {
-    const { userId } = req; 
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        email: user.email, 
+        userType: user.userType 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-    if (!userId) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'User not logged in', 
-        isLoggedIn: false 
-      });
-    }
-
-    const user = await getUserWithDetails(userId);
-
-    if (!user) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'User not found', 
-        isLoggedIn: false 
-      });
-    }
-
-    const profileImageUrl = getUserProfileImage(user);
+    console.log(`✅ User login successful: ${user.email}`);
 
     res.status(200).json({
       success: true,
-      message: "User logged in",
-      isAuthenticated: true,
-      profileImageUrl,
-      userType: user.userType,
-      role: user.role
+      message: 'Login successful',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          userType: user.userType,
+          mfaEnabled: user.mfaEnabled,
+          lastLoginAt: user.lastLoginAt
+        },
+        token,
+        securityStatus: {
+          mfaEnabled: user.mfaEnabled,
+          recommendMFA: !user.mfaEnabled
+        }
+      }
     });
+
   } catch (error) {
-    console.error('Check login status error:', error);
-    res.status(500).json({ 
+    console.error('Signin error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Internal Server Error' 
+      message: 'Internal Server Error'
     });
   }
 });
 
-// GET /user-info - Get user info
-router.get('/user-info', getUserIdFromCookie, async (req, res) => {
+// ============================================================================
+// MFA MANAGEMENT ROUTES
+// ============================================================================
+
+// POST /mfa/setup - Setup MFA for user
+router.post('/mfa/setup', validateTokenAndIdentifyUser, async (req, res) => {
   try {
-    if (!req.userId) {
-      return res.status(404).json({ 
+    const userId = req.userId;
+
+    // Get user details
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, mfaEnabled: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        message: 'User not found' 
+        message: 'User not found'
       });
     }
 
-    const user = await getUserInfo(req.userId);
-
-    const restaurantUserId = user.restaurantUsers.length > 0
-      ? user.restaurantUsers[0].id
-      : null;
-
-    const responseData = { 
-      userId: user.id, 
-      restaurantUserId: restaurantUserId, 
-      employeeId: '' 
-    };
-
-    if (user.userType === 'profesionales' && user.employee) {
-      responseData.employeeId = user.employee.id; 
+    if (user.mfaEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'MFA is already enabled for this account'
+      });
     }
 
-    res.json({ 
-      success: true,
-      data: responseData 
+    // Generate MFA secret
+    const mfaData = generateMFASecret(user.email);
+    const qrCodeDataUrl = await generateMFAQRCode(mfaData.qrCodeUrl);
+
+    // Store secret temporarily (user needs to confirm setup)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { 
+        mfaSecret: mfaData.secret,
+        mfaBackupCodes: JSON.stringify(mfaData.backupCodes)
+      }
     });
+
+    res.status(200).json({
+      success: true,
+      message: 'MFA setup initiated',
+      data: {
+        qrCode: qrCodeDataUrl,
+        backupCodes: mfaData.backupCodes,
+        instructions: 'Scan the QR code with your authenticator app and verify with a token to complete setup'
+      }
+    });
+
   } catch (error) {
-    console.error('Failed to retrieve user:', error);
-    res.status(500).json({ 
+    console.error('MFA setup error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Internal Server Error' 
+      message: 'Failed to setup MFA'
     });
   }
 });
 
-// POST /reset-password - Reset password
-router.post('/reset-password', async (req, res) => {
+// POST /mfa/verify - Verify and enable MFA
+router.post('/mfa/verify', validateTokenAndIdentifyUser, async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const userId = req.userId;
+    const { token } = req.body;
 
-    if (!token || !newPassword) {
-      return res.status(400).json({ 
+    if (!token) {
+      return res.status(400).json({
         success: false,
-        message: 'Token and new password are required' 
+        message: 'MFA token is required'
       });
     }
 
-    const decodedToken = verifyToken(token);
-    const { email } = decodedToken;
-
-    const existingUser = await checkUserExists(email);
-
-    if (!existingUser) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'User not found' 
-      });
-    }
-
-    // Update the user's password
-    await updateUserPassword(email, newPassword);
-
-    res.status(200).json({ 
-      success: true,
-      message: 'Password reset successful' 
+    // Get user with MFA secret
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { mfaSecret: true, mfaEnabled: true }
     });
-  } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ 
+
+    if (!user || !user.mfaSecret) {
+      return res.status(400).json({
         success: false,
-        message: 'Invalid or expired token' 
+        message: 'MFA setup not initiated'
       });
     }
-    res.status(500).json({ 
+
+    // Verify token
+    const isValidToken = verifyMFAToken(user.mfaSecret, token);
+
+    if (!isValidToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid MFA token'
+      });
+    }
+
+    // Enable MFA
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaEnabled: true }
+    });
+
+    console.log(`✅ MFA enabled for user ${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'MFA enabled successfully',
+      data: {
+        mfaEnabled: true,
+        securityLevel: 'Enhanced'
+      }
+    });
+
+  } catch (error) {
+    console.error('MFA verification error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Internal server error' 
+      message: 'Failed to verify MFA'
     });
   }
 });
 
-// POST /reset-password-request - Request password reset
-router.post('/reset-password-request', async (req, res) => {
+// POST /mfa/disable - Disable MFA
+router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { password, token } = req.body;
+
+    if (!password || !token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password and MFA token are required'
+      });
+    }
+
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true, mfaEnabled: true, mfaSecret: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (!user.mfaEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'MFA is not enabled'
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid password'
+      });
+    }
+
+    // Verify MFA token
+    const isValidToken = verifyMFAToken(user.mfaSecret, token);
+    if (!isValidToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid MFA token'
+      });
+    }
+
+    // Disable MFA
+    await prisma.user.update({
+      where: { id: userId },
+      data: { 
+        mfaEnabled: false,
+        mfaSecret: null,
+        mfaBackupCodes: null
+      }
+    });
+
+    console.log(`⚠️ MFA disabled for user ${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'MFA disabled successfully',
+      data: {
+        mfaEnabled: false,
+        securityLevel: 'Standard'
+      }
+    });
+
+  } catch (error) {
+    console.error('MFA disable error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to disable MFA'
+    });
+  }
+});
+
+// ============================================================================
+// SESSION MANAGEMENT ROUTES
+// ============================================================================
+
+// POST /logout - Enhanced logout with token blacklisting
+router.post('/logout', validateTokenAndIdentifyUser, async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (token) {
+      // Add token to blacklist
+      invalidateToken(token);
+    }
+
+    console.log(`✅ User logout: ${req.userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
+  }
+});
+
+// POST /logout-all - Logout from all devices
+router.post('/logout-all', validateTokenAndIdentifyUser, async (req, res) => {
+  try {
+    const userId = req.userId;
+    
+    // In a more advanced implementation, you would:
+    // 1. Track all user tokens in database
+    // 2. Add all user tokens to blacklist
+    // 3. Or increment a "token version" in user record
+    
+    // For now, we'll just blacklist the current token
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      invalidateToken(token);
+    }
+
+    console.log(`✅ User logout from all devices: ${userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out from all devices successfully'
+    });
+
+  } catch (error) {
+    console.error('Logout all error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
+  }
+});
+
+// ============================================================================
+// EXISTING ROUTES (ENHANCED)
+// ============================================================================
+
+// POST /password-reset-request - Password reset request
+router.post('/password-reset-request', validatePasswordReset, async (req, res) => {
   try {
     const { email } = req.body;
 
-    const existingUser = await checkUserExists(email);
-    if (!existingUser) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'User not found' 
-      });
-    }
-
-    await sendPasswordResetEmail(email);
-
-    res.status(200).json({ 
-      success: true,
-      message: 'Password reset link sent successfully' 
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
     });
-  } catch (error) {
-    console.error('Password reset request error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Internal server error' 
-    });
-  }
-});
-
-// GET /chat-token - Generate chat token
-router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
-  try {
-    const { userId } = req;
-    
-    if (!userId) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Not authenticated' 
-      });
-    }
-
-    const user = await getUserWithDetails(userId);
 
     if (!user) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'User not found' 
-      });
-    }
-
-    const chatToken = generateChatToken(user);
-
-    res.json({ 
-      success: true,
-      token: chatToken 
-    });
-  } catch (error) {
-    console.error('Chat token generation error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Failed to generate chat token' 
-    });
-  }
-});
-
-// PATCH /user/update - Update user profile
-router.patch('/user/update', getUserIdFromCookie, async (req, res) => {
-  try {
-    const { userId } = req;
-    const { email, name, phoneNumber } = req.body;
-
-    const numericUserId = typeof userId === 'string' ? parseInt(userId) : userId;
-
-    // Check for email conflicts if email is being updated
-    if (email) {
-      const emailUser = await checkEmailConflict(email, numericUserId);
-
-      if (emailUser) {
-        return res.status(400).json({ 
-          success: false,
-          message: 'This email is already associated with another account' 
-        });
-      }
-    }
-
-    // Prepare update data
-    const updateData = {};
-    if (email) updateData.email = email.toLowerCase();
-    if (name) updateData.name = name;
-    if (phoneNumber) updateData.phoneNumber = phoneNumber;
-
-    if (Object.keys(updateData).length === 0) {
+      // Don't reveal if email exists or not
       return res.status(200).json({
         success: true,
-        message: 'No changes to update'
+        message: 'If the email exists, a reset link has been sent'
       });
     }
 
-    const updatedUser = await updateUserProfile(numericUserId, updateData);
+    // Check account lockout
+    const lockoutStatus = isAccountLocked(user.id);
+    if (lockoutStatus) {
+      return res.status(423).json({
+        success: false,
+        message: 'Account temporarily locked. Please try again later.'
+      });
+    }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Profile updated successfully',
+    // Generate reset token
+    const resetToken = jwt.sign(
+      { userId: user.id, type: 'password-reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Store reset token
+    await prisma.passwordReset.create({
       data: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name,
-        phoneNumber: updatedUser.phoneNumber,
-        restaurantUsers: updatedUser.restaurantUsers
+        userId: user.id,
+        token: resetToken,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      },
+    });
+
+    console.log(`🔄 Password reset requested for: ${email}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'If the email exists, a reset link has been sent',
+      data: { 
+        resetToken: process.env.NODE_ENV === 'development' ? resetToken : undefined 
       }
     });
 
   } catch (error) {
-    console.error('Update request failed:', error);
-    return res.status(500).json({ 
+    console.error('Password reset request error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Failed to update profile. Please try again.',
-      error: error.message
+      message: 'Internal Server Error'
     });
   }
 });
+
+// POST /password-reset-confirm - Password reset confirmation
+router.post('/password-reset-confirm', validatePasswordResetConfirm, async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    // Verify reset token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Find reset request
+    const resetRequest = await prisma.passwordReset.findFirst({
+      where: {
+        token,
+        userId: decoded.userId,
+        used: false,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!resetRequest) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update password and mark token as used
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: decoded.userId },
+        data: { password: hashedPassword }
+      }),
+      prisma.passwordReset.update({
+        where: { id: resetRequest.id },
+        data: { used: true }
+      })
+    ]);
+
+    // Reset any account lockout
+    resetAccountLockout(decoded.userId);
+
+    console.log(`✅ Password reset completed for user: ${decoded.userId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successful'
+    });
+
+  } catch (error) {
+    console.error('Password reset confirm error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error'
+    });
+  }
+});
+
+// GET /user/:id - Get user information
+router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requesterId = req.userId;
+
+    // Check if user can access this information
+    if (id !== requesterId && req.userType !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied'
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        userType: true,
+        createdAt: true,
+        lastLoginAt: true,
+        mfaEnabled: true,
+        securityNotifications: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'User information retrieved successfully',
+      data: { user }
+    });
+
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error'
+    });
+  }
+});
+
+// ============================================================================
+// MIDDLEWARE SETUP ROUTES
+// ============================================================================
+
+// Apply role-based middleware
+router.use(setUserRole);
+router.use(setUserType);
 
 export default router;

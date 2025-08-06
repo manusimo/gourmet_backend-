@@ -1,0 +1,7 @@
+{"timestamp":"2025-08-06T19:19:27.639Z","level":"INFO","message":"🚀 Server started successfully","port":"3000","environment":"development","nodeVersion":"v16.20.2","memory":20166440,"pid":44924}
+{"timestamp":"2025-08-06T19:20:10.390Z","level":"INFO","message":"🚀 Server started successfully","port":"3000","environment":"development","nodeVersion":"v16.20.2","memory":19870936,"pid":44945}
+{"timestamp":"2025-08-06T19:20:58.598Z","level":"INFO","message":"🚀 Server started successfully","port":"3000","environment":"development","nodeVersion":"v16.20.2","memory":19871832,"pid":44971}
+{"timestamp":"2025-08-06T19:21:01.204Z","level":"INFO","message":"🚀 Server started successfully","port":"3000","environment":"development","nodeVersion":"v16.20.2","memory":19952104,"pid":44986}
+{"timestamp":"2025-08-06T19:21:03.203Z","level":"INFO","message":"🚀 Server started successfully","port":"3000","environment":"development","nodeVersion":"v16.20.2","memory":19871552,"pid":44997}
+{"timestamp":"2025-08-06T19:32:22.906Z","level":"INFO","message":"🚀 Server started successfully","port":"3000","environment":"development","nodeVersion":"v16.20.2","memory":20059376,"pid":45569}
+{"timestamp":"2025-08-06T19:33:04.548Z","level":"INFO","message":"🚀 Server started successfully","port":"5000","environment":"development","nodeVersion":"v16.20.2","memory":19601848,"pid":45672}
