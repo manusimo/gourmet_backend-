@@ -1,15 +1,15 @@
-import express from 'express';
-import { checkJoinAuthorization, checkSendMessageAuthorization } from '../helpers/chat.js';
-import { checkCompany, setUserRole } from '../helpers/authenticateToken.js';
-import {
+const express = require('express');
+const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
+const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
+const {
   getUserIdFromCookie,
   getRestaurantIdFromCookie,
   getEmployeeIdFromCookie,
   getRestaurantUserIdFromCookie,
   validateTokenAndIdentifyUser
-} from '../helpers/cookies.js';
-import { requirePlan } from '../middleware/checkPlan.js';
-import {
+} = require('../helpers/cookies.js');
+const { requirePlan } = require('../middleware/checkPlan.js');
+const {
   getConversationById,
   getConversationWithMessages,
   validateEmployeeAccess,
@@ -25,7 +25,7 @@ import {
   getRestaurantUserConversations,
   deleteConversation,
   validateConversationAccess
-} from '../helpers/chatHelpers.js';
+} = require('../helpers/chatHelpers.js');
 
 const router = express.Router();
 
@@ -324,4 +324,4 @@ router.delete('/conversations/:conversationId', getEmployeeIdFromCookie, getRest
   }
 });
 
-export default router;
+module.exports = router;

@@ -1,6 +1,9 @@
-import { jest } from '@jest/globals';
-import request from 'supertest';
-import express from 'express';
+// Set up environment variables for testing
+process.env.JWT_SECRET = 'test-secret';
+process.env.NODE_ENV = 'test';
+
+const request = require('supertest');
+const express = require('express');
 
 // Mock the helpers
 const mockPoolHelpers = {
@@ -41,7 +44,7 @@ jest.mock('../../helpers/cookies.js', () => mockCookies);
 jest.mock('../../helpers/pool.js', () => mockPool);
 
 // Import the router after mocking
-import poolRouter from '../../routes/pool.route.js';
+const poolRouter = require('../../routes/pool.route.js');
 
 describe('Pool Routes', () => {
   let app;
@@ -50,7 +53,17 @@ describe('Pool Routes', () => {
     jest.clearAllMocks();
     app = express();
     app.use(express.json());
-    app.use('/api', poolRouter);
+    app.use('/', poolRouter);
+    
+    // Reset the mock implementations to default
+    mockCookies.getRestaurantIdFromCookie.mockImplementation((req, res, next) => {
+      req.restaurantId = 123;
+      next();
+    });
+    mockCookies.getRestaurantUserIdFromCookie.mockImplementation((req, res, next) => {
+      req.restaurantUserId = 456;
+      next();
+    });
   });
 
   describe('GET /talent-pool/check', () => {
@@ -59,7 +72,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.checkTalentPoolEntry.mockResolvedValue(mockEntry);
 
       const response = await request(app)
-        .get('/api/talent-pool/check')
+        .get('/talent-pool/check')
         .query({ employeeId: '123' })
         .expect(200);
 
@@ -74,7 +87,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.checkTalentPoolEntry.mockResolvedValue(null);
 
       const response = await request(app)
-        .get('/api/talent-pool/check')
+        .get('/talent-pool/check')
         .query({ employeeId: '123' })
         .expect(200);
 
@@ -88,7 +101,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.checkTalentPoolEntry.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/talent-pool/check')
+        .get('/talent-pool/check')
         .query({ employeeId: '123' })
         .expect(500);
 
@@ -106,7 +119,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.createTalentPoolEntry.mockResolvedValue(mockEntry);
 
       const response = await request(app)
-        .post('/api/talent-pool')
+        .post('/talent-pool')
         .send({ employeeId: '123' })
         .expect(201);
 
@@ -128,7 +141,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.checkTalentPoolEntry.mockResolvedValue(mockEntry);
 
       const response = await request(app)
-        .post('/api/talent-pool')
+        .post('/talent-pool')
         .send({ employeeId: '123' })
         .expect(409);
 
@@ -142,7 +155,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.checkTalentPoolEntry.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .post('/api/talent-pool')
+        .post('/talent-pool')
         .send({ employeeId: '123' })
         .expect(500);
 
@@ -166,7 +179,7 @@ describe('Pool Routes', () => {
       mockPool.getTalentPool.mockResolvedValue(mockTalentPool);
 
       const response = await request(app)
-        .get('/api/talent-pool')
+        .get('/talent-pool')
         .query({
           position: 'Chef',
           region: 'Santiago'
@@ -192,7 +205,7 @@ describe('Pool Routes', () => {
       mockPool.getTalentPool.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .get('/api/talent-pool')
+        .get('/talent-pool')
         .expect(500);
 
       expect(response.body).toEqual({
@@ -208,7 +221,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.deleteTalentPoolEntry.mockResolvedValue(mockEntry);
 
       const response = await request(app)
-        .delete('/api/talent-pool/1')
+        .delete('/talent-pool/1')
         .expect(200);
 
       expect(mockPoolHelpers.deleteTalentPoolEntry).toHaveBeenCalledWith(1);
@@ -224,7 +237,7 @@ describe('Pool Routes', () => {
       );
 
       const response = await request(app)
-        .delete('/api/talent-pool/999')
+        .delete('/talent-pool/999')
         .expect(404);
 
       expect(response.body).toEqual({
@@ -237,7 +250,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.deleteTalentPoolEntry.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .delete('/api/talent-pool/1')
+        .delete('/talent-pool/1')
         .expect(500);
 
       expect(response.body).toEqual({
@@ -253,7 +266,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.approveTalentPoolEntry.mockResolvedValue(mockEntry);
 
       const response = await request(app)
-        .patch('/api/talent-pool/1/approve')
+        .patch('/talent-pool/1/approve')
         .expect(200);
 
       expect(mockPoolHelpers.approveTalentPoolEntry).toHaveBeenCalledWith('1', 456);
@@ -268,7 +281,7 @@ describe('Pool Routes', () => {
       mockPoolHelpers.approveTalentPoolEntry.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app)
-        .patch('/api/talent-pool/1/approve')
+        .patch('/talent-pool/1/approve')
         .expect(500);
 
       expect(response.body).toEqual({
@@ -280,9 +293,12 @@ describe('Pool Routes', () => {
 
   describe('Authentication and Authorization', () => {
     it('should require authentication for all routes', async () => {
+      // Mock the helper to ensure the route succeeds
+      mockPoolHelpers.checkTalentPoolEntry.mockResolvedValue(null);
+
       // Test that middleware is applied by checking if the mocked functions are called
       const response = await request(app)
-        .get('/api/talent-pool/check')
+        .get('/talent-pool/check')
         .query({ employeeId: '123' })
         .expect(200);
 
@@ -292,8 +308,12 @@ describe('Pool Routes', () => {
     });
 
     it('should set user role for talent pool GET route', async () => {
+      // Mock the helpers to ensure the route succeeds
+      mockPoolHelpers.buildTalentPoolFilters.mockReturnValue({});
+      mockPool.getTalentPool.mockResolvedValue([]);
+
       const response = await request(app)
-        .get('/api/talent-pool')
+        .get('/talent-pool')
         .expect(200);
 
       expect(mockAuthenticateToken.setUserRole).toHaveBeenCalled();
@@ -302,16 +322,23 @@ describe('Pool Routes', () => {
 
   describe('Input Validation', () => {
     it('should handle missing employeeId in check route', async () => {
+      // Mock the helper to ensure the route succeeds
+      mockPoolHelpers.checkTalentPoolEntry.mockResolvedValue(null);
+
       const response = await request(app)
-        .get('/api/talent-pool/check')
+        .get('/talent-pool/check')
         .expect(200);
 
       expect(mockPoolHelpers.checkTalentPoolEntry).toHaveBeenCalledWith(undefined, 123);
     });
 
     it('should handle missing employeeId in POST route', async () => {
+      // Mock the helpers to ensure the route succeeds
+      mockPoolHelpers.checkTalentPoolEntry.mockResolvedValue(null);
+      mockPoolHelpers.createTalentPoolEntry.mockResolvedValue({ id: 1, employeeId: undefined, restaurantId: 123 });
+
       const response = await request(app)
-        .post('/api/talent-pool')
+        .post('/talent-pool')
         .send({})
         .expect(201);
 
@@ -320,7 +347,7 @@ describe('Pool Routes', () => {
 
     it('should handle invalid talentId in DELETE route', async () => {
       const response = await request(app)
-        .delete('/api/talent-pool/invalid')
+        .delete('/talent-pool/invalid')
         .expect(500);
 
       expect(mockPoolHelpers.deleteTalentPoolEntry).toHaveBeenCalledWith(NaN);

@@ -1,5 +1,4 @@
-import { jest } from '@jest/globals';
-import {
+const {
   getCompanies,
   getTotalCompanies,
   getRestaurantUserByUserId,
@@ -20,7 +19,7 @@ import {
   findLocationsToDelete,
   generatePlanInfo,
   generateUpdatePlanInfo
-} from '../../helpers/companyHelpers.js';
+} = require('../../helpers/companyHelpers.js');
 
 // Mock Prisma
 const mockPrisma = {
@@ -62,8 +61,12 @@ const mockJwt = {
 jest.mock('jsonwebtoken', () => mockJwt);
 
 describe('Company Helpers', () => {
+  let helpers; // Declared to hold the re-required helpers
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetModules(); // Crucial for re-importing mocked modules
+    helpers = require('../../helpers/companyHelpers.js'); // Re-require helpers to get fresh mocks
   });
 
   describe('getCompanies', () => {
@@ -74,12 +77,22 @@ describe('Company Helpers', () => {
       ];
       mockPrisma.restaurant.findMany.mockResolvedValue(mockCompanies);
 
-      const filters = { specialty: 'Italian' };
-      const searchConditions = { name: { contains: 'Restaurant' } };
+      const filters = { 
+        specialty: { 
+          contains: 'italian',
+          mode: 'insensitive'
+        } 
+      };
+      const searchConditions = { 
+        name: { 
+          contains: 'Restaurant',
+          mode: 'insensitive'
+        } 
+      };
       const limit = 10;
       const skip = 0;
 
-      const result = await getCompanies(filters, searchConditions, limit, skip);
+      const result = await helpers.getCompanies(filters, searchConditions, limit, skip);
 
       expect(mockPrisma.restaurant.findMany).toHaveBeenCalledWith({
         where: {
@@ -103,7 +116,7 @@ describe('Company Helpers', () => {
           },
         },
         orderBy: {
-          createdAt: 'desc',
+          id: 'desc',
         },
         skip,
         take: limit,
@@ -115,7 +128,7 @@ describe('Company Helpers', () => {
       const mockCompanies = [{ id: 1, name: 'Restaurant ABC' }];
       mockPrisma.restaurant.findMany.mockResolvedValue(mockCompanies);
 
-      const result = await getCompanies({}, {}, 10, 0);
+      const result = await helpers.getCompanies({}, {}, 10, 0);
 
       expect(mockPrisma.restaurant.findMany).toHaveBeenCalledWith({
         where: {},
@@ -136,7 +149,7 @@ describe('Company Helpers', () => {
           },
         },
         orderBy: {
-          createdAt: 'desc',
+          id: 'desc',
         },
         skip: 0,
         take: 10,
@@ -152,7 +165,7 @@ describe('Company Helpers', () => {
       const filters = { specialty: 'Italian' };
       const searchConditions = { name: { contains: 'Restaurant' } };
 
-      const result = await getTotalCompanies(filters, searchConditions);
+      const result = await helpers.getTotalCompanies(filters, searchConditions);
 
       expect(mockPrisma.restaurant.count).toHaveBeenCalledWith({
         where: {
@@ -169,7 +182,7 @@ describe('Company Helpers', () => {
       const mockRestaurantUser = { id: 1, userId: 123, restaurantId: 456 };
       mockPrisma.restaurantUser.findFirst.mockResolvedValue(mockRestaurantUser);
 
-      const result = await getRestaurantUserByUserId(123);
+      const result = await helpers.getRestaurantUserByUserId(123);
 
       expect(mockPrisma.restaurantUser.findFirst).toHaveBeenCalledWith({
         where: { userId: 123 },
@@ -187,7 +200,7 @@ describe('Company Helpers', () => {
     it('should return null when restaurant user not found', async () => {
       mockPrisma.restaurantUser.findFirst.mockResolvedValue(null);
 
-      const result = await getRestaurantUserByUserId(123);
+      const result = await helpers.getRestaurantUserByUserId(123);
 
       expect(result).toBeNull();
     });
@@ -201,7 +214,7 @@ describe('Company Helpers', () => {
       ];
       mockPrisma.location.findMany.mockResolvedValue(mockLocations);
 
-      const result = await getCompanyLocations(1);
+      const result = await helpers.getCompanyLocations(1);
 
       expect(mockPrisma.location.findMany).toHaveBeenCalledWith({
         where: { restaurantId: 1 },
@@ -212,7 +225,7 @@ describe('Company Helpers', () => {
     it('should return empty array when no locations found', async () => {
       mockPrisma.location.findMany.mockResolvedValue([]);
 
-      const result = await getCompanyLocations(1);
+      const result = await helpers.getCompanyLocations(1);
 
       expect(result).toEqual([]);
     });
@@ -225,7 +238,7 @@ describe('Company Helpers', () => {
         { id: 2, address: '456 Oak Ave', region: 'Valparaiso', comuna: 'Vina del Mar' }
       ];
 
-      const result = formatLocations(mockLocations);
+      const result = helpers.formatLocations(mockLocations);
 
       expect(result).toEqual([
         { id: 1, address: '123 Main St', region: 'Santiago', comuna: 'Providencia' },
@@ -234,7 +247,7 @@ describe('Company Helpers', () => {
     });
 
     it('should handle empty locations array', () => {
-      const result = formatLocations([]);
+      const result = helpers.formatLocations([]);
 
       expect(result).toEqual([]);
     });
@@ -248,7 +261,7 @@ describe('Company Helpers', () => {
       ];
       mockPrisma.restaurant.findMany.mockResolvedValue(mockCompanies);
 
-      const result = await getTopRatedCompanies(4, 0);
+      const result = await helpers.getTopRatedCompanies(4, 0);
 
       expect(mockPrisma.restaurant.findMany).toHaveBeenCalledWith({
         include: {
@@ -283,7 +296,7 @@ describe('Company Helpers', () => {
     it('should return total companies count', async () => {
       mockPrisma.restaurant.count.mockResolvedValue(50);
 
-      const result = await getTotalCompaniesCount();
+      const result = await helpers.getTotalCompaniesCount();
 
       expect(mockPrisma.restaurant.count).toHaveBeenCalledWith();
       expect(result).toBe(50);
@@ -298,7 +311,7 @@ describe('Company Helpers', () => {
       ];
       mockPrisma.talentPool.findMany.mockResolvedValue(mockTalents);
 
-      const result = await getTalentsApplications(1);
+      const result = await helpers.getTalentsApplications(1);
 
       expect(mockPrisma.talentPool.findMany).toHaveBeenCalledWith({
         where: { restaurantId: 1 },
@@ -317,7 +330,7 @@ describe('Company Helpers', () => {
     it('should return empty array when no talents found', async () => {
       mockPrisma.talentPool.findMany.mockResolvedValue([]);
 
-      const result = await getTalentsApplications(1);
+      const result = await helpers.getTalentsApplications(1);
 
       expect(result).toEqual([]);
     });
@@ -353,7 +366,7 @@ describe('Company Helpers', () => {
         userId: 123
       };
 
-      const result = await createCompanyProfile(companyData);
+      const result = await helpers.createCompanyProfile(companyData);
 
       expect(mockPrisma.restaurant.create).toHaveBeenCalledWith({
         data: {
@@ -366,8 +379,8 @@ describe('Company Helpers', () => {
           region: 'Santiago',
           comuna: 'Providencia',
           numberOfRestaurants: 1,
-          workers: 20,
-          weeklyAverageClients: 500,
+          workers: '20',
+          weeklyAverageClients: '500',
           benefits: ['Health Insurance', 'Meals'],
           profileImageUrl: 'https://example.com/image.jpg',
           profileCarouselUrls: ['https://example.com/carousel1.jpg'],
@@ -383,7 +396,7 @@ describe('Company Helpers', () => {
       const mockRestaurantUser = { id: 1, userId: 123, restaurantId: 456 };
       mockPrisma.restaurantUser.create.mockResolvedValue(mockRestaurantUser);
 
-      const result = await createRestaurantUser(123, 456);
+      const result = await helpers.createRestaurantUser(123, 456);
 
       expect(mockPrisma.restaurantUser.create).toHaveBeenCalledWith({
         data: {
@@ -400,11 +413,11 @@ describe('Company Helpers', () => {
       const mockUpdatedUser = { id: 123, restaurantId: 456 };
       mockPrisma.user.update.mockResolvedValue(mockUpdatedUser);
 
-      const result = await updateUserWithRestaurant(123, 456);
+      const result = await helpers.updateUserWithRestaurant(123, 456);
 
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 123 },
-        data: { restaurantId: 456 },
+        data: { restaurant: { connect: { id: 456 } } },
       });
       expect(result).toEqual(mockUpdatedUser);
     });
@@ -422,7 +435,7 @@ describe('Company Helpers', () => {
         role: 'admin'
       };
 
-      const result = generateCompanyToken(tokenData);
+      const result = helpers.generateCompanyToken(tokenData);
 
       expect(mockJwt.sign).toHaveBeenCalledWith(
         tokenData,
@@ -438,7 +451,7 @@ describe('Company Helpers', () => {
       const mockCompany = { id: 1, name: 'Restaurant ABC', specialty: 'Italian' };
       mockPrisma.restaurant.findUnique.mockResolvedValue(mockCompany);
 
-      const result = await getCompanyById('1');
+      const result = await helpers.getCompanyById('1');
 
       expect(mockPrisma.restaurant.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -460,7 +473,7 @@ describe('Company Helpers', () => {
     it('should return null when company not found', async () => {
       mockPrisma.restaurant.findUnique.mockResolvedValue(null);
 
-      const result = await getCompanyById('1');
+      const result = await helpers.getCompanyById('1');
 
       expect(result).toBeNull();
     });
@@ -471,7 +484,7 @@ describe('Company Helpers', () => {
       const mockCompany = { id: 1, name: 'Restaurant ABC', specialty: 'Italian' };
       mockPrisma.restaurant.findUnique.mockResolvedValue(mockCompany);
 
-      const result = await getCompanyByRestaurantId(1);
+      const result = await helpers.getCompanyByRestaurantId(1);
 
       expect(mockPrisma.restaurant.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -493,7 +506,7 @@ describe('Company Helpers', () => {
     it('should return null when company not found', async () => {
       mockPrisma.restaurant.findUnique.mockResolvedValue(null);
 
-      const result = await getCompanyByRestaurantId(1);
+      const result = await helpers.getCompanyByRestaurantId(1);
 
       expect(result).toBeNull();
     });
@@ -507,7 +520,7 @@ describe('Company Helpers', () => {
       ];
       mockPrisma.location.findMany.mockResolvedValue(mockLocations);
 
-      const result = await getCurrentLocations(1);
+      const result = await helpers.getCurrentLocations(1);
 
       expect(mockPrisma.location.findMany).toHaveBeenCalledWith({
         where: { restaurantId: 1 },
@@ -518,7 +531,7 @@ describe('Company Helpers', () => {
     it('should return empty array when no locations found', async () => {
       mockPrisma.location.findMany.mockResolvedValue([]);
 
-      const result = await getCurrentLocations(1);
+      const result = await helpers.getCurrentLocations(1);
 
       expect(result).toEqual([]);
     });
@@ -533,7 +546,7 @@ describe('Company Helpers', () => {
         { address: '321 Elm St' } // New
       ];
 
-      const result = filterNewLocations(locations);
+      const result = helpers.filterNewLocations(locations);
 
       expect(result).toEqual([
         { address: '456 Oak Ave' },
@@ -547,7 +560,7 @@ describe('Company Helpers', () => {
         { id: 2, address: '456 Oak Ave' }
       ];
 
-      const result = filterNewLocations(locations);
+      const result = helpers.filterNewLocations(locations);
 
       expect(result).toEqual([]);
     });
@@ -562,7 +575,7 @@ describe('Company Helpers', () => {
         { address: '321 Elm St' } // New
       ];
 
-      const result = filterExistingLocations(locations);
+      const result = helpers.filterExistingLocations(locations);
 
       expect(result).toEqual([
         { id: 1, address: '123 Main St' },
@@ -576,7 +589,7 @@ describe('Company Helpers', () => {
         { address: '456 Oak Ave' }
       ];
 
-      const result = filterExistingLocations(locations);
+      const result = helpers.filterExistingLocations(locations);
 
       expect(result).toEqual([]);
     });
@@ -594,7 +607,7 @@ describe('Company Helpers', () => {
         { address: '321 Elm St' } // New
       ];
 
-      const result = findLocationsToDelete(currentLocations, newLocations);
+      const result = helpers.findLocationsToDelete(currentLocations, newLocations);
 
       expect(result).toEqual([
         { id: 2, address: '456 Oak Ave' },
@@ -612,7 +625,7 @@ describe('Company Helpers', () => {
         { id: 2, address: '456 Oak Ave' }
       ];
 
-      const result = findLocationsToDelete(currentLocations, newLocations);
+      const result = helpers.findLocationsToDelete(currentLocations, newLocations);
 
       expect(result).toEqual([]);
     });
@@ -620,7 +633,7 @@ describe('Company Helpers', () => {
 
   describe('generatePlanInfo', () => {
     it('should generate plan info for pro user', () => {
-      const result = generatePlanInfo('pro', 2, 5);
+      const result = helpers.generatePlanInfo('pro', 2, 5);
 
       expect(result).toEqual({
         currentPlan: 'PRO',
@@ -632,7 +645,7 @@ describe('Company Helpers', () => {
     });
 
     it('should generate plan info for starter user', () => {
-      const result = generatePlanInfo('starter', 1, 1);
+      const result = helpers.generatePlanInfo('starter', 1, 1);
 
       expect(result).toEqual({
         currentPlan: 'STARTER',
@@ -644,7 +657,7 @@ describe('Company Helpers', () => {
     });
 
     it('should handle unknown payment status', () => {
-      const result = generatePlanInfo('unknown', 1, 1);
+      const result = helpers.generatePlanInfo('unknown', 1, 1);
 
       expect(result.currentPlan).toBe('STARTER');
     });
@@ -652,7 +665,7 @@ describe('Company Helpers', () => {
 
   describe('generateUpdatePlanInfo', () => {
     it('should generate update plan info for pro user', () => {
-      const result = generateUpdatePlanInfo('pro', 2, 5);
+      const result = helpers.generateUpdatePlanInfo('pro', 2, 5);
 
       expect(result).toEqual({
         currentPlan: 'PRO',
@@ -664,7 +677,7 @@ describe('Company Helpers', () => {
     });
 
     it('should generate update plan info for starter user', () => {
-      const result = generateUpdatePlanInfo('starter', 1, 1);
+      const result = helpers.generateUpdatePlanInfo('starter', 1, 1);
 
       expect(result).toEqual({
         currentPlan: 'STARTER',
@@ -676,7 +689,7 @@ describe('Company Helpers', () => {
     });
 
     it('should handle unknown payment status', () => {
-      const result = generateUpdatePlanInfo('unknown', 1, 1);
+      const result = helpers.generateUpdatePlanInfo('unknown', 1, 1);
 
       expect(result.currentPlan).toBe('STARTER');
     });

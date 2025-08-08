@@ -1,11 +1,11 @@
-import { prisma } from "../db.js";
+const { prisma } = require("../db.js");
 
 /**
  * Create job offer
  * @param {Object} jobData - Job offer data
  * @returns {Object} Created job offer
  */
-export const createJobOffer = async (jobData) => {
+const createJobOffer = async (jobData) => {
   const {
     position,
     locationId,
@@ -25,24 +25,31 @@ export const createJobOffer = async (jobData) => {
 
   const tips = propina === 'Si';
 
-  return await prisma.jobOffer.create({
-    data: {
-      position,
-      location: { connect: { id: locationId } },
-      schedule,
-      contract,
-      vacancies: parseInt(vacancies, 10),
-      yearsOfExperience: isNaN(parseInt(yearsOfExperience, 10)) ? null : parseInt(yearsOfExperience, 10),
-      description,
-      restaurant: { connect: { id: restaurantId } },
-      requirements,
-      functions,
-      tips,
-      salary: parseInt(salary, 10),
-      questions: { create: questions },
-      restaurantUser: { connect: { id: restaurantUserId } },
-    },
-  });
+  // Parse numeric fields
+  const parsedVacancies = parseInt(vacancies, 10);
+  const parsedYearsOfExperience = parseInt(yearsOfExperience, 10);
+  const parsedSalary = parseInt(salary, 10);
+
+  // Build data object, only including valid numeric fields
+  const data = {
+    position,
+    location: { connect: { id: locationId } },
+    schedule,
+    contract,
+    description,
+    restaurant: { connect: { id: restaurantId } },
+    requirements,
+    functions,
+    tips,
+    questions: { create: questions },
+    restaurantUser: { connect: { id: restaurantUserId } },
+  };
+  if (!isNaN(parsedVacancies)) data.vacancies = parsedVacancies;
+  // yearsOfExperience: always present, number or null
+  data.yearsOfExperience = isNaN(parsedYearsOfExperience) ? null : parsedYearsOfExperience;
+  if (!isNaN(parsedSalary)) data.salary = parsedSalary;
+
+  return await prisma.jobOffer.create({ data });
 };
 
 /**
@@ -50,7 +57,7 @@ export const createJobOffer = async (jobData) => {
  * @param {number} jobId - Job offer ID
  * @returns {Object|null} Job offer with location or null
  */
-export const getJobOfferWithLocation = async (jobId) => {
+const getJobOfferWithLocation = async (jobId) => {
   return await prisma.jobOffer.findUnique({
     where: { id: jobId },
     include: { location: true },
@@ -61,7 +68,7 @@ export const getJobOfferWithLocation = async (jobId) => {
  * Get plan names mapping
  * @returns {Object} Plan names mapping
  */
-export const getPlanNames = () => {
+const getPlanNames = () => {
   return {
     'starter': 'STARTER',
     'pro': 'PRO',
@@ -75,7 +82,7 @@ export const getPlanNames = () => {
  * @param {Object} planData - Plan data
  * @returns {Object} Plan info object
  */
-export const generateJobPlanInfo = (planData) => {
+const generateJobPlanInfo = (planData) => {
   const { paymentStatus, remainingJobOffers, jobOfferLimit } = planData;
   const planNames = getPlanNames();
   const currentPlan = planNames[paymentStatus] || 'STARTER';
@@ -108,7 +115,7 @@ export const generateJobPlanInfo = (planData) => {
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Employee or null if not found
  */
-export const getEmployeeById = async (employeeId) => {
+const getEmployeeById = async (employeeId) => {
   return await prisma.employee.findUnique({
     where: { id: employeeId },
   });
@@ -119,7 +126,7 @@ export const getEmployeeById = async (employeeId) => {
  * @param {number} employeeId - Employee ID
  * @returns {Array} Array of applications
  */
-export const getEmployeeApplications = async (employeeId) => {
+const getEmployeeApplications = async (employeeId) => {
   return await prisma.application.findMany({
     where: {
       employeeId: employeeId,
@@ -151,7 +158,7 @@ export const getEmployeeApplications = async (employeeId) => {
  * @param {number} skip - Number of items to skip
  * @returns {Array} Array of jobs
  */
-export const getJobsWithFilters = async (filters, searchConditions, orderByCriteria, limit, skip) => {
+const getJobsWithFilters = async (filters, searchConditions, orderByCriteria, limit, skip) => {
   return await prisma.jobOffer.findMany({
     where: {
       restaurant: {
@@ -177,7 +184,7 @@ export const getJobsWithFilters = async (filters, searchConditions, orderByCrite
  * @param {Object} searchConditions - Search conditions
  * @returns {number} Total count
  */
-export const getTotalJobsCount = async (filters, searchConditions) => {
+const getTotalJobsCount = async (filters, searchConditions) => {
   return await prisma.jobOffer.count({
     where: {
       ...searchConditions,
@@ -194,7 +201,7 @@ export const getTotalJobsCount = async (filters, searchConditions) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Array} Array of job offers
  */
-export const getRestaurantJobOffers = async (restaurantId) => {
+const getRestaurantJobOffers = async (restaurantId) => {
   return await prisma.jobOffer.findMany({
     where: {
       restaurantId: restaurantId,
@@ -216,7 +223,7 @@ export const getRestaurantJobOffers = async (restaurantId) => {
  * @param {number} jobId - Job offer ID
  * @returns {Object|null} Job offer with details or null
  */
-export const getJobOfferById = async (jobId) => {
+const getJobOfferById = async (jobId) => {
   return await prisma.jobOffer.findFirst({
     where: {
       id: parseInt(jobId),
@@ -236,7 +243,7 @@ export const getJobOfferById = async (jobId) => {
  * @param {number} restaurantUserId - Restaurant user ID
  * @returns {Object|null} Restaurant user with details or null
  */
-export const getRestaurantUserWithDetails = async (restaurantUserId) => {
+const getRestaurantUserWithDetails = async (restaurantUserId) => {
   return await prisma.restaurantUser.findUnique({
     where: { id: restaurantUserId },
     include: {
@@ -258,7 +265,7 @@ export const getRestaurantUserWithDetails = async (restaurantUserId) => {
  * Get plan limits mapping
  * @returns {Object} Plan limits mapping
  */
-export const getPlanLimits = () => {
+const getPlanLimits = () => {
   return {
     'starter': 1,
     'pro': 5,
@@ -271,7 +278,7 @@ export const getPlanLimits = () => {
  * Get location limits mapping
  * @returns {Object} Location limits mapping
  */
-export const getLocationLimits = () => {
+const getLocationLimits = () => {
   return {
     'starter': 1,
     'pro': 5,
@@ -285,7 +292,7 @@ export const getLocationLimits = () => {
  * @param {Object} user - User object
  * @returns {Object} Payment status info
  */
-export const calculatePaymentStatus = (user) => {
+const calculatePaymentStatus = (user) => {
   let paymentStatus = 'active';
   let daysUntilExpiration = null;
 
@@ -309,7 +316,7 @@ export const calculatePaymentStatus = (user) => {
  * @param {Array} jobOffers - Array of job offers
  * @returns {number} Total applications count
  */
-export const calculateTotalApplications = (jobOffers) => {
+const calculateTotalApplications = (jobOffers) => {
   return jobOffers.reduce((total, jobOffer) => {
     return total + jobOffer.applications.length;
   }, 0);
@@ -320,7 +327,7 @@ export const calculateTotalApplications = (jobOffers) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object|null} Restaurant with locations or null
  */
-export const getRestaurantWithLocations = async (restaurantId) => {
+const getRestaurantWithLocations = async (restaurantId) => {
   return await prisma.restaurant.findUnique({
     where: { id: restaurantId },
     include: {
@@ -334,7 +341,7 @@ export const getRestaurantWithLocations = async (restaurantId) => {
  * @param {Array} jobOffers - Array of job offers
  * @returns {Array} Formatted job offers
  */
-export const formatJobOffersForPlanInfo = (jobOffers) => {
+const formatJobOffersForPlanInfo = (jobOffers) => {
   return jobOffers.map(jobOffer => ({
     id: jobOffer.id,
     position: jobOffer.position,
@@ -349,7 +356,7 @@ export const formatJobOffersForPlanInfo = (jobOffers) => {
  * @param {Object} planData - Plan data
  * @returns {Object} Complete plan info
  */
-export const generateCompletePlanInfo = (planData) => {
+const generateCompletePlanInfo = (planData) => {
   const {
     user,
     restaurantUser,
@@ -388,4 +395,25 @@ export const generateCompletePlanInfo = (planData) => {
       jobOffers: formattedJobOffers
     }
   };
+}; 
+
+module.exports = {
+  createJobOffer,
+  getJobOfferWithLocation,
+  getPlanNames,
+  generateJobPlanInfo,
+  getEmployeeById,
+  getEmployeeApplications,
+  getJobsWithFilters,
+  getTotalJobsCount,
+  getRestaurantJobOffers,
+  getJobOfferById,
+  getRestaurantUserWithDetails,
+  getPlanLimits,
+  getLocationLimits,
+  calculatePaymentStatus,
+  calculateTotalApplications,
+  getRestaurantWithLocations,
+  formatJobOffersForPlanInfo,
+  generateCompletePlanInfo,
 }; 

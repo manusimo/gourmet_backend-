@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
-import { prisma } from '../db.js';
+const jwt = require('jsonwebtoken');
+const { prisma } = require('../db.js');
 
 const getRestaurantIdFromCookie = (req, res, next) => {
   const token = req.cookies.manu;  
@@ -153,7 +153,7 @@ const validateToken = (token) => {
   }
 };
 
-export { 
+module.exports = {
   getRestaurantIdFromCookie, 
   validateTokenAndIdentifyUser,
   getEmployeeIdFromCookie, 

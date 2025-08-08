@@ -1,10 +1,10 @@
-import { body, param, query, validationResult } from 'express-validator';
-import xss from 'xss';
+const { body, param, query, validationResult } = require('express-validator');
+const xss = require('xss');
 
 /**
  * Handle validation errors
  */
-export const handleValidationErrors = (req, res, next) => {
+const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
@@ -43,7 +43,7 @@ const sanitizeAndTrim = (value) => {
 // ============================================================================
 // CONTACT FORM VALIDATION
 // ============================================================================
-export const validateContact = [
+const validateContact = [
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
@@ -82,7 +82,7 @@ export const validateContact = [
 // ============================================================================
 // USER AUTHENTICATION VALIDATION
 // ============================================================================
-export const validateSignup = [
+const validateSignup = [
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
@@ -123,7 +123,7 @@ export const validateSignup = [
   handleValidationErrors
 ];
 
-export const validateSignin = [
+const validateSignin = [
   body('email')
     .trim()
     .isEmail()
@@ -140,7 +140,7 @@ export const validateSignin = [
 // ============================================================================
 // COMPANY PROFILE VALIDATION
 // ============================================================================
-export const validateCompanyProfile = [
+const validateCompanyProfile = [
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
@@ -225,7 +225,7 @@ export const validateCompanyProfile = [
 // ============================================================================
 // EMPLOYEE PROFILE VALIDATION
 // ============================================================================
-export const validateEmployeeProfile = [
+const validateEmployeeProfile = [
   body('name')
     .trim()
     .isLength({ min: 2, max: 100 })
@@ -312,7 +312,7 @@ export const validateEmployeeProfile = [
 // ============================================================================
 // JOB OFFER VALIDATION
 // ============================================================================
-export const validateJobOffer = [
+const validateJobOffer = [
   body('position')
     .trim()
     .isLength({ min: 2, max: 100 })
@@ -387,7 +387,7 @@ export const validateJobOffer = [
 // ============================================================================
 // APPLICATION VALIDATION
 // ============================================================================
-export const validateApplication = [
+const validateApplication = [
   body('jobPostId')
     .isInt({ min: 1 })
     .withMessage('Job post ID must be a valid number'),
@@ -412,7 +412,7 @@ export const validateApplication = [
 // ============================================================================
 // CHAT MESSAGE VALIDATION
 // ============================================================================
-export const validateChatMessage = [
+const validateChatMessage = [
   body('receiverId')
     .isInt({ min: 1 })
     .withMessage('Receiver ID must be a valid number'),
@@ -433,7 +433,7 @@ export const validateChatMessage = [
 // ============================================================================
 // SEARCH AND FILTER VALIDATION
 // ============================================================================
-export const validateJobSearch = [
+const validateJobSearch = [
   query('position')
     .optional()
     .trim()
@@ -479,7 +479,7 @@ export const validateJobSearch = [
 // ============================================================================
 // ID PARAMETER VALIDATION
 // ============================================================================
-export const validateId = [
+const validateId = [
   param('id')
     .isInt({ min: 1 })
     .withMessage('ID must be a valid positive number'),
@@ -487,7 +487,7 @@ export const validateId = [
   handleValidationErrors
 ];
 
-export const validateJobId = [
+const validateJobId = [
   param('jobId')
     .isInt({ min: 1 })
     .withMessage('Job ID must be a valid positive number'),
@@ -495,7 +495,7 @@ export const validateJobId = [
   handleValidationErrors
 ];
 
-export const validateUserId = [
+const validateUserId = [
   param('userId')
     .isInt({ min: 1 })
     .withMessage('User ID must be a valid positive number'),
@@ -503,7 +503,7 @@ export const validateUserId = [
   handleValidationErrors
 ];
 
-export const validateEmployeeId = [
+const validateEmployeeId = [
   param('employeeId')
     .isInt({ min: 1 })
     .withMessage('Employee ID must be a valid positive number'),
@@ -511,7 +511,7 @@ export const validateEmployeeId = [
   handleValidationErrors
 ];
 
-export const validateJobPostId = [
+const validateJobPostId = [
   param('jobPostId')
     .isInt({ min: 1 })
     .withMessage('Job post ID must be a valid positive number'),
@@ -519,7 +519,7 @@ export const validateJobPostId = [
   handleValidationErrors
 ];
 
-export const validateConversationId = [
+const validateConversationId = [
   param('conversationId')
     .isInt({ min: 1 })
     .withMessage('Conversation ID must be a valid positive number'),
@@ -530,7 +530,7 @@ export const validateConversationId = [
 // ============================================================================
 // PASSWORD RESET VALIDATION
 // ============================================================================
-export const validatePasswordReset = [
+const validatePasswordReset = [
   body('email')
     .trim()
     .isEmail()
@@ -540,7 +540,7 @@ export const validatePasswordReset = [
   handleValidationErrors
 ];
 
-export const validatePasswordResetConfirm = [
+const validatePasswordResetConfirm = [
   body('token')
     .trim()
     .isLength({ min: 10 })
@@ -561,4 +561,25 @@ export const validatePasswordResetConfirm = [
     }),
   
   handleValidationErrors
-]; 
+];
+
+module.exports = {
+  handleValidationErrors,
+  validateContact,
+  validateSignup,
+  validateSignin,
+  validateCompanyProfile,
+  validateEmployeeProfile,
+  validateJobOffer,
+  validateApplication,
+  validateChatMessage,
+  validateJobSearch,
+  validateId,
+  validateJobId,
+  validateUserId,
+  validateEmployeeId,
+  validateJobPostId,
+  validateConversationId,
+  validatePasswordReset,
+  validatePasswordResetConfirm,
+}; 

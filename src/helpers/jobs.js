@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -210,7 +210,7 @@ const updateJobOffer = async (jobId, restaurantId, body) => {
   return updatedJob;
 };
 
-export {
+module.exports = {
   fetchTopRatedJobs,
   fetchJobsByNameAndLocation,
   softDeleteJobCascade,

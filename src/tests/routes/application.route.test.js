@@ -1,8 +1,7 @@
-import { jest } from '@jest/globals';
-import request from 'supertest';
-import express from 'express';
+// Set up environment variables for testing
+process.env.JWT_SECRET = 'test-secret';
+process.env.NODE_ENV = 'test';
 
-// Mock the helpers
 const mockApplicationHelpers = {
   validateApplicationInput: jest.fn(),
   getJobPost: jest.fn(),
@@ -35,16 +34,26 @@ jest.mock('../../helpers/authenticateToken.js', () => mockAuthenticateToken);
 jest.mock('../../helpers/cookies.js', () => mockCookies);
 
 // Import the router after mocking
-import applicationRouter from '../../routes/application.route.js';
+const applicationRouter = require('../../routes/application.route.js');
 
 describe('Application Routes', () => {
   let app;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    app = express();
-    app.use(express.json());
+    app = require('express')();
+    app.use(require('express').json());
     app.use('/', applicationRouter);
+    
+    // Reset the mock implementations to default
+    mockCookies.getEmployeeIdFromCookie.mockImplementation((req, res, next) => {
+      req.employeeId = 789;
+      next();
+    });
+    mockCookies.getRestaurantIdFromCookie.mockImplementation((req, res, next) => {
+      req.restaurantId = 456;
+      next();
+    });
   });
 
   describe('POST /application', () => {
@@ -79,7 +88,7 @@ describe('Application Routes', () => {
         ]
       };
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send(applicationData)
         .expect(201);
@@ -104,7 +113,7 @@ describe('Application Routes', () => {
         next();
       });
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -125,7 +134,7 @@ describe('Application Routes', () => {
         errors: validationErrors 
       });
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 'invalid',
@@ -144,7 +153,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: true, errors: [] });
       mockApplicationHelpers.getJobPost.mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 999,
@@ -166,7 +175,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.getJobPost.mockResolvedValue(mockJobPost);
       mockApplicationHelpers.getExistingApplication.mockResolvedValue(existingApplication);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -189,7 +198,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.getExistingApplication.mockResolvedValue(null);
       mockApplicationHelpers.createApplication.mockRejectedValue(prismaError);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -204,9 +213,12 @@ describe('Application Routes', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      mockApplicationHelpers.validateApplicationInput.mockRejectedValue(new Error('Database error'));
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: true, errors: [] });
+      mockApplicationHelpers.getJobPost.mockResolvedValue({ id: 123 });
+      mockApplicationHelpers.getExistingApplication.mockResolvedValue(null);
+      mockApplicationHelpers.createApplication.mockRejectedValue(new Error('Database error'));
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -237,7 +249,7 @@ describe('Application Routes', () => {
 
       mockApplicationHelpers.getApplicationById.mockResolvedValue(mockApplication);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/1')
         .expect(200);
 
@@ -249,7 +261,7 @@ describe('Application Routes', () => {
     });
 
     it('should return 400 for invalid application ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/invalid')
         .expect(400);
 
@@ -260,7 +272,7 @@ describe('Application Routes', () => {
     });
 
     it('should return 400 for non-numeric application ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/abc')
         .expect(400);
 
@@ -273,7 +285,7 @@ describe('Application Routes', () => {
     it('should return 404 when application not found', async () => {
       mockApplicationHelpers.getApplicationById.mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/999')
         .expect(404);
 
@@ -286,7 +298,7 @@ describe('Application Routes', () => {
     it('should handle errors gracefully', async () => {
       mockApplicationHelpers.getApplicationById.mockRejectedValue(new Error('Database error'));
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/1')
         .expect(500);
 
@@ -323,7 +335,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.getJobOfferForRestaurant.mockResolvedValue(mockJobOffer);
       mockApplicationHelpers.getApplicationsForJobOffer.mockResolvedValue(mockApplications);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(200);
 
@@ -339,7 +351,7 @@ describe('Application Routes', () => {
     });
 
     it('should return 400 for invalid job offer ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/invalid/applicants')
         .expect(400);
 
@@ -350,7 +362,7 @@ describe('Application Routes', () => {
     });
 
     it('should return 400 for non-numeric job offer ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/abc/applicants')
         .expect(400);
 
@@ -367,7 +379,7 @@ describe('Application Routes', () => {
         next();
       });
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(401);
 
@@ -380,7 +392,7 @@ describe('Application Routes', () => {
     it('should return 404 when job offer not found', async () => {
       mockApplicationHelpers.getJobOfferForRestaurant.mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/999/applicants')
         .expect(404);
 
@@ -393,7 +405,7 @@ describe('Application Routes', () => {
     it('should return 404 when job offer doesn\'t belong to restaurant', async () => {
       mockApplicationHelpers.getJobOfferForRestaurant.mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(404);
 
@@ -404,17 +416,11 @@ describe('Application Routes', () => {
     });
 
     it('should return empty applications list when no applicants', async () => {
-      const mockJobOffer = {
-        id: 123,
-        title: 'Chef Position',
-        restaurantId: 456,
-        isActive: true
-      };
-
+      const mockJobOffer = { id: 123, title: 'Chef Position', restaurantId: 456 };
       mockApplicationHelpers.getJobOfferForRestaurant.mockResolvedValue(mockJobOffer);
       mockApplicationHelpers.getApplicationsForJobOffer.mockResolvedValue([]);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(200);
 
@@ -428,7 +434,7 @@ describe('Application Routes', () => {
     it('should handle errors gracefully', async () => {
       mockApplicationHelpers.getJobOfferForRestaurant.mockRejectedValue(new Error('Database error'));
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(500);
 
@@ -441,7 +447,13 @@ describe('Application Routes', () => {
 
   describe('Authentication and Authorization', () => {
     it('should require employee authentication for create application route', async () => {
-      const response = await request(app)
+      // Mock the helpers to ensure the route succeeds
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: true, errors: [] });
+      mockApplicationHelpers.getJobPost.mockResolvedValue({ id: 123, title: 'Chef Position' });
+      mockApplicationHelpers.getExistingApplication.mockResolvedValue(null);
+      mockApplicationHelpers.createApplication.mockResolvedValue({ id: 1, jobPostId: 123, employeeId: 789 });
+
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -454,7 +466,11 @@ describe('Application Routes', () => {
     });
 
     it('should require company authentication for applicants route', async () => {
-      const response = await request(app)
+      // Mock the helpers to ensure the route succeeds
+      mockApplicationHelpers.getJobOfferForRestaurant.mockResolvedValue({ id: 123, title: 'Chef Position' });
+      mockApplicationHelpers.getApplicationsForJobOffer.mockResolvedValue([]);
+
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(200);
 
@@ -463,7 +479,10 @@ describe('Application Routes', () => {
     });
 
     it('should not require authentication for get application by ID route', async () => {
-      const response = await request(app)
+      // Mock the helper to ensure the route succeeds
+      mockApplicationHelpers.getApplicationById.mockResolvedValue({ id: 1, jobPostId: 123, employeeId: 789 });
+
+      const response = await require('supertest')(app)
         .get('/applications/1')
         .expect(200);
 
@@ -475,7 +494,9 @@ describe('Application Routes', () => {
 
   describe('Input Validation', () => {
     it('should validate application creation input', async () => {
-      const response = await request(app)
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: false, errors: ['Invalid input'] });
+
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 'invalid',
@@ -487,7 +508,7 @@ describe('Application Routes', () => {
     });
 
     it('should validate application ID format', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/invalid')
         .expect(400);
 
@@ -496,7 +517,7 @@ describe('Application Routes', () => {
     });
 
     it('should validate job offer ID format', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/invalid/applicants')
         .expect(400);
 
@@ -507,9 +528,13 @@ describe('Application Routes', () => {
 
   describe('Error Handling', () => {
     it('should handle database errors gracefully in create application', async () => {
-      mockApplicationHelpers.validateApplicationInput.mockRejectedValue(new Error('Database connection failed'));
+      // Set up authentication and validation to pass
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: true, errors: [] });
+      mockApplicationHelpers.getJobPost.mockResolvedValue({ id: 123, title: 'Chef Position' });
+      mockApplicationHelpers.getExistingApplication.mockResolvedValue(null);
+      mockApplicationHelpers.createApplication.mockRejectedValue(new Error('Database connection failed'));
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -526,7 +551,7 @@ describe('Application Routes', () => {
     it('should handle database errors gracefully in get application', async () => {
       mockApplicationHelpers.getApplicationById.mockRejectedValue(new Error('Database connection failed'));
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/1')
         .expect(500);
 
@@ -537,9 +562,10 @@ describe('Application Routes', () => {
     });
 
     it('should handle database errors gracefully in get applicants', async () => {
+      // Set up authentication to pass
       mockApplicationHelpers.getJobOfferForRestaurant.mockRejectedValue(new Error('Database connection failed'));
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(500);
 
@@ -558,7 +584,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.getExistingApplication.mockResolvedValue(null);
       mockApplicationHelpers.createApplication.mockRejectedValue(prismaError);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -575,7 +601,9 @@ describe('Application Routes', () => {
 
   describe('Edge Cases', () => {
     it('should handle missing request body in create application', async () => {
-      const response = await request(app)
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: false, errors: ['Request body is required'] });
+
+      const response = await require('supertest')(app)
         .post('/application')
         .send({})
         .expect(400);
@@ -584,7 +612,9 @@ describe('Application Routes', () => {
     });
 
     it('should handle missing jobPostId in create application', async () => {
-      const response = await request(app)
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: false, errors: ['Job post ID is required'] });
+
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           answers: [{ questionId: 1, answer: 'Yes' }]
@@ -597,7 +627,9 @@ describe('Application Routes', () => {
     });
 
     it('should handle missing answers in create application', async () => {
-      const response = await request(app)
+      mockApplicationHelpers.validateApplicationInput.mockReturnValue({ isValid: false, errors: ['Answers are required'] });
+
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123
@@ -610,7 +642,7 @@ describe('Application Routes', () => {
     });
 
     it('should handle very large application ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/999999999999999999')
         .expect(400);
 
@@ -621,7 +653,7 @@ describe('Application Routes', () => {
     });
 
     it('should handle very large job offer ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/999999999999999999/applicants')
         .expect(400);
 
@@ -632,7 +664,7 @@ describe('Application Routes', () => {
     });
 
     it('should handle negative application ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/-1')
         .expect(400);
 
@@ -643,7 +675,7 @@ describe('Application Routes', () => {
     });
 
     it('should handle negative job offer ID', async () => {
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/-1/applicants')
         .expect(400);
 
@@ -669,7 +701,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.getExistingApplication.mockResolvedValue(null);
       mockApplicationHelpers.createApplication.mockResolvedValue(mockApplication);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({
           jobPostId: 123,
@@ -689,7 +721,7 @@ describe('Application Routes', () => {
         errors: validationErrors 
       });
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .post('/application')
         .send({})
         .expect(400);
@@ -703,7 +735,7 @@ describe('Application Routes', () => {
       const mockApplication = { id: 1, jobPostId: 123, employeeId: 789 };
       mockApplicationHelpers.getApplicationById.mockResolvedValue(mockApplication);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/applications/1')
         .expect(200);
 
@@ -718,7 +750,7 @@ describe('Application Routes', () => {
       mockApplicationHelpers.getJobOfferForRestaurant.mockResolvedValue(mockJobOffer);
       mockApplicationHelpers.getApplicationsForJobOffer.mockResolvedValue(mockApplications);
 
-      const response = await request(app)
+      const response = await require('supertest')(app)
         .get('/job-offers/123/applicants')
         .expect(200);
 

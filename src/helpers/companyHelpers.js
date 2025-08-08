@@ -1,5 +1,5 @@
-import { prisma } from "../db.js";
-import jwt from 'jsonwebtoken';
+const { prisma } = require("../db.js");
+const jwt = require('jsonwebtoken');
 
 /**
  * Get companies with filters and pagination
@@ -9,14 +9,25 @@ import jwt from 'jsonwebtoken';
  * @param {number} skip - Number of items to skip
  * @returns {Array} Array of companies
  */
-export const getCompanies = async (filters, searchConditions, limit, skip) => {
+const getCompanies = async (filters, searchConditions, limit, skip) => {
   return await prisma.restaurant.findMany({
     where: {
-      ...filters,
       ...searchConditions,
+      ...filters,
     },
+    include: {
+      locations: true,
+      jobOffers: {
+        where: { deletedAt: null },
+        include: {
+          applications: { where: { deletedAt: null } },
+        },
+      },
+      _count: { select: { jobOffers: true } },
+    },
+    orderBy: { id: 'desc' },
+    skip,
     take: limit,
-    skip: skip,
   });
 };
 
@@ -26,11 +37,11 @@ export const getCompanies = async (filters, searchConditions, limit, skip) => {
  * @param {Object} searchConditions - Search conditions
  * @returns {number} Total count
  */
-export const getTotalCompanies = async (filters, searchConditions) => {
+const getTotalCompanies = async (filters, searchConditions) => {
   return await prisma.restaurant.count({
     where: {
-      ...filters,
       ...searchConditions,
+      ...filters,
     },
   });
 };
@@ -40,14 +51,11 @@ export const getTotalCompanies = async (filters, searchConditions) => {
  * @param {number} userId - User ID
  * @returns {Object|null} Restaurant user or null if not found
  */
-export const getRestaurantUserByUserId = async (userId) => {
-  return await prisma.restaurantUser.findUnique({
-    where: {
-      userId: parseInt(userId),
-    },
+const getRestaurantUserByUserId = async (userId) => {
+  return await prisma.restaurantUser.findFirst({
+    where: { userId: Number(userId) },
     include: {
-      user: true,
-      restaurant: true,
+      restaurant: { include: { locations: true } },
     },
   });
 };
@@ -57,10 +65,9 @@ export const getRestaurantUserByUserId = async (userId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Array} Array of locations
  */
-export const getCompanyLocations = async (restaurantId) => {
+const getCompanyLocations = async (restaurantId) => {
   return await prisma.location.findMany({
-    where: { restaurantId: parseInt(restaurantId) },
-    select: { id: true, address: true },
+    where: { restaurantId: Number(restaurantId) },
   });
 };
 
@@ -69,11 +76,8 @@ export const getCompanyLocations = async (restaurantId) => {
  * @param {Array} locations - Array of location objects
  * @returns {Array} Formatted locations
  */
-export const formatLocations = (locations) => {
-  return locations.map(({ id, address }) => ({
-    locationId: id,
-    address
-  }));
+const formatLocations = (locations) => {
+  return locations.map(({ id, address, region, comuna }) => ({ id, address, region, comuna }));
 };
 
 /**
@@ -82,20 +86,21 @@ export const formatLocations = (locations) => {
  * @param {number} skip - Number of companies to skip
  * @returns {Array} Array of top rated companies
  */
-export const getTopRatedCompanies = async (limit, skip) => {
+const getTopRatedCompanies = async (limit, skip) => {
   return await prisma.restaurant.findMany({
-    orderBy: {
-      jobOffers: {
-        _count: 'desc',
-      },
-    },
-    take: parseInt(limit, 10),
-    skip: skip,
     include: {
-      _count: {
-        select: { jobOffers: { where: { deletedAt: null } } },
+      locations: true,
+      jobOffers: {
+        where: { deletedAt: null },
+        include: {
+          applications: { where: { deletedAt: null } },
+        },
       },
+      _count: { select: { jobOffers: true } },
     },
+    orderBy: { jobOffers: { _count: 'desc' } },
+    skip,
+    take: limit,
   });
 };
 
@@ -103,7 +108,7 @@ export const getTopRatedCompanies = async (limit, skip) => {
  * Get total companies count
  * @returns {number} Total number of companies
  */
-export const getTotalCompaniesCount = async () => {
+const getTotalCompaniesCount = async () => {
   return await prisma.restaurant.count();
 };
 
@@ -112,15 +117,17 @@ export const getTotalCompaniesCount = async () => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Array} Array of talent applications
  */
-export const getTalentsApplications = async (restaurantId) => {
+const getTalentsApplications = async (restaurantId) => {
   return await prisma.talentPool.findMany({
-    where: {
-      status: "pendent",
-      restaurantId: parseInt(restaurantId, 10),
-    },
+    where: { restaurantId: Number(restaurantId) },
     include: {
-      employee: true,
-    }
+      employee: {
+        include: {
+          educations: true,
+          experiences: true,
+        },
+      },
+    },
   });
 };
 
@@ -129,7 +136,7 @@ export const getTalentsApplications = async (restaurantId) => {
  * @param {Object} companyData - Company data
  * @returns {Object} Created company
  */
-export const createCompanyProfile = async (companyData) => {
+const createCompanyProfile = async (companyData) => {
   const {
     name,
     specialty,
@@ -150,14 +157,6 @@ export const createCompanyProfile = async (companyData) => {
     userId
   } = companyData;
 
-  const benefitsArray = Object.keys(benefits).filter(benefit => benefits[benefit]);
-
-  const formattedLocations = locations.map(location => ({
-    address: location.address,
-    longitude: parseFloat(location.longitude),
-    latitude: parseFloat(location.latitude),
-  }));
-
   return await prisma.restaurant.create({
     data: {
       name,
@@ -168,15 +167,13 @@ export const createCompanyProfile = async (companyData) => {
       legalName,
       region,
       comuna,
-      numberOfRestaurants: parseInt(numberOfRestaurants, 10),
-      workers,
-      weeklyAverageClients,
+      numberOfRestaurants: Number(numberOfRestaurants),
+      workers: String(workers),
+      weeklyAverageClients: String(weeklyAverageClients),
+      benefits,
       profileImageUrl,
       profileCarouselUrls,
-      benefits: benefitsArray,
-      locations: { create: formattedLocations },
-      jobOffers: { create: jobOffers },
-      userId,
+      user: { connect: { id: userId } },
     },
   });
 };
@@ -187,13 +184,12 @@ export const createCompanyProfile = async (companyData) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object} Created restaurant user
  */
-export const createRestaurantUser = async (userId, restaurantId) => {
+const createRestaurantUser = async (userId, restaurantId) => {
   return await prisma.restaurantUser.create({
     data: {
-      userId,
-      restaurantId: restaurantId,
-      role: 'admin'
-    }
+      user: { connect: { id: userId } },
+      restaurant: { connect: { id: restaurantId } },
+    },
   });
 };
 
@@ -203,12 +199,10 @@ export const createRestaurantUser = async (userId, restaurantId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object} Updated user
  */
-export const updateUserWithRestaurant = async (userId, restaurantId) => {
+const updateUserWithRestaurant = async (userId, restaurantId) => {
   return await prisma.user.update({
     where: { id: userId },
-    data: {
-      restaurant: { connect: { id: restaurantId } }
-    }
+    data: { restaurant: { connect: { id: restaurantId } } },
   });
 };
 
@@ -217,16 +211,8 @@ export const updateUserWithRestaurant = async (userId, restaurantId) => {
  * @param {Object} tokenData - Token data
  * @returns {string} JWT token
  */
-export const generateCompanyToken = (tokenData) => {
-  const { userId, restaurantId, restaurantUserId, role } = tokenData;
-  
-  return jwt.sign({
-    userId: userId,
-    userType: 'empresas',
-    restaurantId: restaurantId,
-    restaurantUserId: restaurantUserId,
-    role: role,
-  }, process.env.JWT_SECRET);
+const generateCompanyToken = (tokenData) => {
+  return jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
 /**
@@ -234,14 +220,17 @@ export const generateCompanyToken = (tokenData) => {
  * @param {number} companyId - Company ID
  * @returns {Object|null} Company or null if not found
  */
-export const getCompanyById = async (companyId) => {
+const getCompanyById = async (companyId) => {
   return await prisma.restaurant.findUnique({
-    where: {
-      id: parseInt(companyId),
-    },
+    where: { id: Number(companyId) },
     include: {
       locations: true,
-      jobOffers: { where: { deletedAt: null } },
+      jobOffers: {
+        where: { deletedAt: null },
+        include: {
+          applications: { where: { deletedAt: null } },
+        },
+      },
     },
   });
 };
@@ -251,14 +240,17 @@ export const getCompanyById = async (companyId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object|null} Company or null if not found
  */
-export const getCompanyByRestaurantId = async (restaurantId) => {
+const getCompanyByRestaurantId = async (restaurantId) => {
   return await prisma.restaurant.findUnique({
-    where: {
-      id: parseInt(restaurantId),
-    },
+    where: { id: Number(restaurantId) },
     include: {
       locations: true,
-      jobOffers: { where: { deletedAt: null } },
+      jobOffers: {
+        where: { deletedAt: null },
+        include: {
+          applications: { where: { deletedAt: null } },
+        },
+      },
     },
   });
 };
@@ -268,9 +260,9 @@ export const getCompanyByRestaurantId = async (restaurantId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Array} Array of current locations
  */
-export const getCurrentLocations = async (restaurantId) => {
+const getCurrentLocations = async (restaurantId) => {
   return await prisma.location.findMany({
-    where: { restaurantId },
+    where: { restaurantId: Number(restaurantId) },
   });
 };
 
@@ -279,12 +271,8 @@ export const getCurrentLocations = async (restaurantId) => {
  * @param {Array} locations - All locations
  * @returns {Array} New locations (without ID)
  */
-export const filterNewLocations = (locations) => {
-  return locations.filter(location => !location.id).map(location => ({
-    ...location,
-    longitude: parseFloat(location.longitude),
-    latitude: parseFloat(location.latitude),
-  }));
+const filterNewLocations = (locations) => {
+  return locations.filter(location => !location.id).map(location => ({ address: location.address }));
 };
 
 /**
@@ -292,7 +280,7 @@ export const filterNewLocations = (locations) => {
  * @param {Array} locations - All locations
  * @returns {Array} Existing locations (with ID)
  */
-export const filterExistingLocations = (locations) => {
+const filterExistingLocations = (locations) => {
   return locations.filter(location => location.id);
 };
 
@@ -302,7 +290,7 @@ export const filterExistingLocations = (locations) => {
  * @param {Array} locations - Updated locations from request
  * @returns {Array} Locations to delete
  */
-export const findLocationsToDelete = (currentLocations, locations) => {
+const findLocationsToDelete = (currentLocations, locations) => {
   return currentLocations.filter(currentLocation =>
     !locations.some(location => location.id === currentLocation.id)
   );
@@ -312,7 +300,7 @@ export const findLocationsToDelete = (currentLocations, locations) => {
  * Get plan names mapping
  * @returns {Object} Plan names mapping
  */
-export const getPlanNames = () => {
+const getPlanNames = () => {
   return {
     'starter': 'STARTER',
     'pro': 'PRO',
@@ -328,12 +316,12 @@ export const getPlanNames = () => {
  * @param {number} locationLimit - Location limit for plan
  * @returns {Object} Plan info object
  */
-export const generatePlanInfo = (paymentStatus, requestedLocations, locationLimit) => {
+const generatePlanInfo = (paymentStatus, requestedLocations, locationLimit) => {
   const planNames = getPlanNames();
   const currentPlan = planNames[paymentStatus] || 'STARTER';
-  
   let upgradeMessage;
-  if (requestedLocations === locationLimit) {
+  let remainingLocations = locationLimit - requestedLocations;
+  if (remainingLocations === 0) {
     let nextPlan;
     if (paymentStatus === 'starter') {
       nextPlan = 'PRO';
@@ -342,15 +330,15 @@ export const generatePlanInfo = (paymentStatus, requestedLocations, locationLimi
     } else {
       nextPlan = 'PREMIUM';
     }
-    upgradeMessage = `Has usado todas tus ubicaciones permitidas. Actualiza a ${nextPlan} para más ubicaciones.`;
+    upgradeMessage = `Has usado todas tus ubicaciones. Actualiza a ${nextPlan} para más.`;
   } else {
-    upgradeMessage = `Has creado ${requestedLocations} ubicaciones de tu plan ${currentPlan}.`;
+    upgradeMessage = `Te quedan ${remainingLocations} ubicaciones de tu plan ${currentPlan}.`;
   }
-
   return {
     currentPlan,
-    locationsCreated: requestedLocations,
+    requestedLocations,
     locationLimit,
+    remainingLocations,
     upgradeMessage
   };
 };
@@ -362,12 +350,12 @@ export const generatePlanInfo = (paymentStatus, requestedLocations, locationLimi
  * @param {number} locationLimit - Location limit for plan
  * @returns {Object} Plan info object
  */
-export const generateUpdatePlanInfo = (paymentStatus, requestedLocations, locationLimit) => {
+const generateUpdatePlanInfo = (paymentStatus, requestedLocations, locationLimit) => {
   const planNames = getPlanNames();
   const currentPlan = planNames[paymentStatus] || 'STARTER';
-  
   let upgradeMessage;
-  if (requestedLocations === locationLimit) {
+  let remainingLocations = locationLimit - requestedLocations;
+  if (remainingLocations === 0) {
     let nextPlan;
     if (paymentStatus === 'starter') {
       nextPlan = 'PRO';
@@ -376,15 +364,39 @@ export const generateUpdatePlanInfo = (paymentStatus, requestedLocations, locati
     } else {
       nextPlan = 'PREMIUM';
     }
-    upgradeMessage = `Has usado todas tus ubicaciones permitidas. Actualiza a ${nextPlan} para más ubicaciones.`;
+    upgradeMessage = `Has usado todas tus ubicaciones. Actualiza a ${nextPlan} para más.`;
   } else {
-    upgradeMessage = `Has actualizado ${requestedLocations} ubicaciones de tu plan ${currentPlan}.`;
+    upgradeMessage = `Te quedan ${remainingLocations} ubicaciones de tu plan ${currentPlan}.`;
   }
-
   return {
     currentPlan,
-    locationsUpdated: requestedLocations,
+    requestedLocations,
     locationLimit,
+    remainingLocations,
     upgradeMessage
   };
+}; 
+
+module.exports = {
+  getCompanies,
+  getTotalCompanies,
+  getRestaurantUserByUserId,
+  getCompanyLocations,
+  formatLocations,
+  getTopRatedCompanies,
+  getTotalCompaniesCount,
+  getTalentsApplications,
+  createCompanyProfile,
+  createRestaurantUser,
+  updateUserWithRestaurant,
+  generateCompanyToken,
+  getCompanyById,
+  getCompanyByRestaurantId,
+  getCurrentLocations,
+  filterNewLocations,
+  filterExistingLocations,
+  findLocationsToDelete,
+  getPlanNames,
+  generatePlanInfo,
+  generateUpdatePlanInfo,
 }; 

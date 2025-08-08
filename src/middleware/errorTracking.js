@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = require('path');
 
 // Error tracking storage
 const errorStorage = {
@@ -155,7 +155,7 @@ const getPrismaErrorType = (code) => {
 /**
  * Error tracking middleware
  */
-export const errorTrackingMiddleware = (error, req, res, next) => {
+const errorTrackingMiddleware = (error, req, res, next) => {
   const errorId = generateErrorId();
   const timestamp = new Date().toISOString();
   const category = categorizeError(error, req);
@@ -213,18 +213,18 @@ export const errorTrackingMiddleware = (error, req, res, next) => {
       userId: errorInfo.userId,
       ip: errorInfo.ip
     });
+  } else {
+    // Log the error (only if not critical, since critical errors are already logged above)
+    Logger.error(`Error ${errorId}: ${error.message}`, {
+      errorId,
+      category: category.category,
+      severity: category.severity,
+      endpoint,
+      statusCode: errorInfo.statusCode,
+      userId: errorInfo.userId,
+      stack: error.stack
+    });
   }
-
-  // Log the error
-  Logger.error(`Error ${errorId}: ${error.message}`, {
-    errorId,
-    category: category.category,
-    severity: category.severity,
-    endpoint,
-    statusCode: errorInfo.statusCode,
-    userId: errorInfo.userId,
-    stack: error.stack
-  });
 
   // Clean old data
   if (errorStorage.errors.length > 1000) {
@@ -279,7 +279,7 @@ const sanitizeHeaders = (headers) => {
 /**
  * Get error statistics
  */
-export const getErrorStats = () => {
+const getErrorStats = () => {
   const now = Date.now();
   const oneHourAgo = now - 60 * 60 * 1000;
   const oneDayAgo = now - 24 * 60 * 60 * 1000;
@@ -370,7 +370,7 @@ const getErrorTrend = (errors) => {
 /**
  * Search errors
  */
-export const searchErrors = (query = {}) => {
+const searchErrors = (query = {}) => {
   let filteredErrors = [...errorStorage.errors];
 
   if (query.category) {
@@ -401,5 +401,9 @@ export const searchErrors = (query = {}) => {
   return filteredErrors.slice(0, 100); // Limit results
 };
 
-export { Logger };
-export default errorTrackingMiddleware; 
+module.exports = {
+  errorTrackingMiddleware,
+  getErrorStats,
+  searchErrors,
+  Logger,
+}; 

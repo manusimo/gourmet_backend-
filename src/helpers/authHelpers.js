@@ -1,15 +1,15 @@
-import { prisma } from "../db.js";
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
-import { sendEmail } from './email.js';
+const { prisma } = require("../db.js");
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
+const { sendEmail } = require('./email.js');
 
 /**
  * Validate signup input data
  * @param {Object} data - Signup data
  * @returns {Object} Validation result
  */
-export const validateSignupInput = (data) => {
+const validateSignupInput = (data) => {
   const { email, password, passwordConfirmation, userType, name, phoneNumber } = data;
   const errors = [];
 
@@ -31,6 +31,8 @@ export const validateSignupInput = (data) => {
 
   if (!userType) {
     errors.push('User type is required');
+  } else if (!['empresas', 'profesionales'].includes(userType)) {
+    errors.push('Invalid user type');
   }
 
   if (!name) {
@@ -48,7 +50,7 @@ export const validateSignupInput = (data) => {
  * @param {Object} data - Signin data
  * @returns {Object} Validation result
  */
-export const validateSigninInput = (data) => {
+const validateSigninInput = (data) => {
   const { email, password } = data;
   const errors = [];
 
@@ -71,7 +73,7 @@ export const validateSigninInput = (data) => {
  * @param {string} email - User email
  * @returns {Object|null} User or null if not found
  */
-export const getUserByEmail = async (email) => {
+const getUserByEmail = async (email) => {
   return await prisma.user.findUnique({
     where: { email: email.toLowerCase() },
     include: {
@@ -91,7 +93,7 @@ export const getUserByEmail = async (email) => {
  * @param {Object} userData - User data
  * @returns {Object} Created user
  */
-export const createUser = async (userData) => {
+const createUser = async (userData) => {
   const { email, password, userType, name, phoneNumber } = userData;
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -113,7 +115,7 @@ export const createUser = async (userData) => {
  * @param {string} hashedPassword - Hashed password
  * @returns {boolean} True if password matches
  */
-export const verifyPassword = async (password, hashedPassword) => {
+const verifyPassword = async (password, hashedPassword) => {
   return await bcrypt.compare(password, hashedPassword);
 };
 
@@ -122,7 +124,7 @@ export const verifyPassword = async (password, hashedPassword) => {
  * @param {Object} payload - Token payload
  * @returns {string} JWT token
  */
-export const generateToken = (payload) => {
+const generateToken = (payload) => {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 };
 
@@ -131,7 +133,7 @@ export const generateToken = (payload) => {
  * @param {string} token - JWT token
  * @returns {Object} Decoded token payload
  */
-export const verifyToken = (token) => {
+const verifyToken = (token) => {
   return jwt.verify(token, process.env.JWT_SECRET);
 };
 
@@ -140,19 +142,17 @@ export const verifyToken = (token) => {
  * @param {Object} user - User object with related data
  * @returns {string} Profile image URL
  */
-export const getUserProfileImage = (user) => {
-  let profileImageUrl = 'defaultImage.jpg';
-  
-  if (user.userType === 'profesionales' && user.employee) {
-    profileImageUrl = user.employee.profileImageUrl;
+const getUserProfileImage = (user) => {
+  if (user.userType === 'profesionales' && user.employee?.profileImageUrl) {
+    return user.employee.profileImageUrl;
   } else if (user.userType === 'empresas') {
-    const restaurant = user.restaurant || user.restaurantUsers[0]?.restaurant;
-    if (restaurant) {
-      profileImageUrl = restaurant.profileImageUrl;
+    const restaurant = user.restaurant || user.restaurantUsers?.[0]?.restaurant;
+    if (restaurant?.profileImageUrl) {
+      return restaurant.profileImageUrl;
     }
   }
   
-  return profileImageUrl;
+  return 'defaultImage.jpg';
 };
 
 /**
@@ -160,7 +160,7 @@ export const getUserProfileImage = (user) => {
  * @param {Object} user - User object
  * @returns {Object} Token payload
  */
-export const buildTokenPayload = (user) => {
+const buildTokenPayload = (user) => {
   const payload = {
     userId: user.id,
     email: user.email,
@@ -186,7 +186,7 @@ export const buildTokenPayload = (user) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Array} Array of restaurant users
  */
-export const getRestaurantUsers = async (restaurantId) => {
+const getRestaurantUsers = async (restaurantId) => {
   return await prisma.restaurantUser.findMany({
     where: {
       restaurantId: parseInt(restaurantId),
@@ -202,7 +202,7 @@ export const getRestaurantUsers = async (restaurantId) => {
  * @param {number} userId - User ID
  * @returns {Object|null} User or null if not found
  */
-export const getUserById = async (userId) => {
+const getUserById = async (userId) => {
   return await prisma.user.findUnique({
     where: {
       id: parseInt(userId),
@@ -215,7 +215,7 @@ export const getUserById = async (userId) => {
  * @param {string} email - Email to check
  * @returns {Object|null} User or null if not found
  */
-export const checkUserExists = async (email) => {
+const checkUserExists = async (email) => {
   return await prisma.user.findUnique({
     where: { email: email.toLowerCase() },
   });
@@ -228,7 +228,7 @@ export const checkUserExists = async (email) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Promise} Email sending result
  */
-export const sendConfirmationEmail = async (email, userType, restaurantId) => {
+const sendConfirmationEmail = async (email, userType, restaurantId) => {
   const confirmationToken = jwt.sign(
     { email, userType, restaurantId }, 
     process.env.JWT_SECRET, 
@@ -252,7 +252,7 @@ export const sendConfirmationEmail = async (email, userType, restaurantId) => {
  * @param {Object} userData - User data
  * @returns {Object} User object
  */
-export const createOrUpdateUserWithPassword = async (userData) => {
+const createOrUpdateUserWithPassword = async (userData) => {
   const { email, password, userType, name, phoneNumber } = userData;
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -274,7 +274,7 @@ export const createOrUpdateUserWithPassword = async (userData) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object} Created restaurant user
  */
-export const createRestaurantUser = async (userId, restaurantId) => {
+const createRestaurantUser = async (userId, restaurantId) => {
   return await prisma.restaurantUser.create({
     data: {
       userId,
@@ -289,7 +289,7 @@ export const createRestaurantUser = async (userId, restaurantId) => {
  * @param {number} userId - User ID
  * @returns {Object|null} User with full details or null
  */
-export const getUserWithDetails = async (userId) => {
+const getUserWithDetails = async (userId) => {
   return await prisma.user.findUnique({
     where: { id: parseInt(userId) },
     include: { 
@@ -309,7 +309,7 @@ export const getUserWithDetails = async (userId) => {
  * @param {number} userId - User ID
  * @returns {Object|null} User info or null
  */
-export const getUserInfo = async (userId) => {
+const getUserInfo = async (userId) => {
   return await prisma.user.findUnique({
     where: {
       id: parseInt(userId),
@@ -331,7 +331,7 @@ export const getUserInfo = async (userId) => {
  * @param {string} newPassword - New password
  * @returns {Object} Updated user
  */
-export const updateUserPassword = async (email, newPassword) => {
+const updateUserPassword = async (email, newPassword) => {
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   
   return await prisma.user.update({
@@ -345,7 +345,7 @@ export const updateUserPassword = async (email, newPassword) => {
  * @param {string} email - User email
  * @returns {Promise} Email sending result
  */
-export const sendPasswordResetEmail = async (email) => {
+const sendPasswordResetEmail = async (email) => {
   const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '1h' });
   const resetLink = `http://localhost:3001/reset-password?token=${resetToken}`;
   const emailBody = `Click the link below to reset your password:\n\n${resetLink}`;
@@ -362,7 +362,7 @@ export const sendPasswordResetEmail = async (email) => {
  * @param {Object} user - User object
  * @returns {string} Chat JWT token
  */
-export const generateChatToken = (user) => {
+const generateChatToken = (user) => {
   const chatTokenPayload = {
     userId: user.id,
     userType: user.userType,
@@ -387,7 +387,7 @@ export const generateChatToken = (user) => {
  * @param {Object} updateData - Data to update
  * @returns {Object} Updated user
  */
-export const updateUserProfile = async (userId, updateData) => {
+const updateUserProfile = async (userId, updateData) => {
   return await prisma.user.update({
     where: { 
       id: parseInt(userId) 
@@ -405,7 +405,7 @@ export const updateUserProfile = async (userId, updateData) => {
  * @param {number} excludeUserId - User ID to exclude from check
  * @returns {Object|null} Conflicting user or null
  */
-export const checkEmailConflict = async (email, excludeUserId) => {
+const checkEmailConflict = async (email, excludeUserId) => {
   return await prisma.user.findFirst({
     where: {
       email: email.toLowerCase(),
@@ -414,4 +414,29 @@ export const checkEmailConflict = async (email, excludeUserId) => {
       }
     }
   });
+}; 
+
+module.exports = {
+  validateSignupInput,
+  validateSigninInput,
+  getUserByEmail,
+  createUser,
+  verifyPassword,
+  generateToken,
+  verifyToken,
+  getUserProfileImage,
+  buildTokenPayload,
+  getRestaurantUsers,
+  getUserById,
+  checkUserExists,
+  sendConfirmationEmail,
+  createOrUpdateUserWithPassword,
+  createRestaurantUser,
+  getUserWithDetails,
+  getUserInfo,
+  updateUserPassword,
+  sendPasswordResetEmail,
+  generateChatToken,
+  updateUserProfile,
+  checkEmailConflict,
 }; 

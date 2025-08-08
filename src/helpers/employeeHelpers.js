@@ -1,12 +1,12 @@
-import { prisma } from "../db.js";
-import jwt from 'jsonwebtoken';
+const { prisma } = require("../db.js");
+const jwt = require('jsonwebtoken');
 
 /**
  * Get employee profile by ID
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Employee profile or null if not found
  */
-export const getEmployeeById = async (employeeId) => {
+const getEmployeeById = async (employeeId) => {
   return await prisma.employee.findUnique({
     where: { id: employeeId },
     include: {
@@ -22,7 +22,7 @@ export const getEmployeeById = async (employeeId) => {
  * @param {number} userId - User ID
  * @returns {Object|null} Employee profile or null if not found
  */
-export const getEmployeeByUserId = async (userId) => {
+const getEmployeeByUserId = async (userId) => {
   return await prisma.employee.findUnique({
     where: { userId },
   });
@@ -33,7 +33,7 @@ export const getEmployeeByUserId = async (userId) => {
  * @param {Object} employeeData - Employee data
  * @returns {Object} Created employee profile
  */
-export const createEmployeeProfile = async (employeeData) => {
+const createEmployeeProfile = async (employeeData) => {
   const {
     name,
     position,
@@ -84,7 +84,7 @@ export const createEmployeeProfile = async (employeeData) => {
  * @param {Object} tokenData - Token data
  * @returns {string} JWT token
  */
-export const generateEmployeeToken = (tokenData) => {
+const generateEmployeeToken = (tokenData) => {
   const { userId, employeeId } = tokenData;
   
   return jwt.sign(
@@ -102,7 +102,7 @@ export const generateEmployeeToken = (tokenData) => {
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Employee profile or null if not found
  */
-export const getEmployeeProfile = async (employeeId) => {
+const getEmployeeProfile = async (employeeId) => {
   return await prisma.employee.findUnique({
     where: { id: employeeId },
     include: {
@@ -118,7 +118,7 @@ export const getEmployeeProfile = async (employeeId) => {
  * @param {Array} experiences - All experiences
  * @returns {Array} New experiences (without ID)
  */
-export const filterNewExperiences = (experiences) => {
+const filterNewExperiences = (experiences) => {
   return experiences.filter(experience => !experience.id);
 };
 
@@ -127,7 +127,7 @@ export const filterNewExperiences = (experiences) => {
  * @param {Array} experiences - All experiences
  * @returns {Array} Existing experiences (with ID)
  */
-export const filterExistingExperiences = (experiences) => {
+const filterExistingExperiences = (experiences) => {
   return experiences.filter(experience => experience.id);
 };
 
@@ -136,7 +136,7 @@ export const filterExistingExperiences = (experiences) => {
  * @param {Array} educations - All educations
  * @returns {Array} New educations (without ID)
  */
-export const filterNewEducations = (educations) => {
+const filterNewEducations = (educations) => {
   return educations.filter(education => !education.id);
 };
 
@@ -145,7 +145,7 @@ export const filterNewEducations = (educations) => {
  * @param {Array} educations - All educations
  * @returns {Array} Existing educations (with ID)
  */
-export const filterExistingEducations = (educations) => {
+const filterExistingEducations = (educations) => {
   return educations.filter(education => education.id);
 };
 
@@ -155,7 +155,7 @@ export const filterExistingEducations = (educations) => {
  * @param {Object} updateData - Data to update
  * @returns {Object} Updated employee
  */
-export const updateEmployeeProfile = async (employeeId, updateData) => {
+const updateEmployeeProfile = async (employeeId, updateData) => {
   const {
     name,
     position,
@@ -236,7 +236,7 @@ export const updateEmployeeProfile = async (employeeId, updateData) => {
  * @param {Object} experienceData - Experience data
  * @returns {Object} Created experience
  */
-export const createExperience = async (experienceData) => {
+const createExperience = async (experienceData) => {
   const { companyName, description, startDate, endDate, role, employeeId } = experienceData;
   
   return await prisma.experience.create({
@@ -256,7 +256,7 @@ export const createExperience = async (experienceData) => {
  * @param {Object} educationData - Education data
  * @returns {Object} Created education
  */
-export const createEducation = async (educationData) => {
+const createEducation = async (educationData) => {
   const { study, institution, startDate, endDate, description, employeeId } = educationData;
   
   return await prisma.education.create({
@@ -276,7 +276,7 @@ export const createEducation = async (educationData) => {
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Employee with full details or null
  */
-export const getEmployeeWithDetails = async (employeeId) => {
+const getEmployeeWithDetails = async (employeeId) => {
   return await prisma.employee.findUnique({
     where: { id: employeeId },
     include: {
@@ -291,7 +291,7 @@ export const getEmployeeWithDetails = async (employeeId) => {
  * @param {Object} searchFilters - Search filters
  * @returns {Array} Array of employees matching filters
  */
-export const searchEmployees = async (searchFilters) => {
+const searchEmployees = async (searchFilters) => {
   const { position, experience, region, comuna, available, schedule } = searchFilters;
   
   return await prisma.employee.findMany({
@@ -330,7 +330,7 @@ export const searchEmployees = async (searchFilters) => {
  * @param {number} jobPostId - Job post ID
  * @returns {Object|null} Job offer or null if not found
  */
-export const getJobOfferById = async (jobPostId) => {
+const getJobOfferById = async (jobPostId) => {
   return await prisma.jobOffer.findFirst({
     where: { id: parseInt(jobPostId), deletedAt: null },
   });
@@ -341,7 +341,7 @@ export const getJobOfferById = async (jobPostId) => {
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Employee or null if not found
  */
-export const getEmployeeByEmployeeId = async (employeeId) => {
+const getEmployeeByEmployeeId = async (employeeId) => {
   return await prisma.employee.findUnique({
     where: { id: employeeId },
   });
@@ -353,7 +353,7 @@ export const getEmployeeByEmployeeId = async (employeeId) => {
  * @param {number} jobPostId - Job post ID
  * @returns {Object|null} Favorite job or null if not found
  */
-export const checkFavoriteJobExists = async (employeeId, jobPostId) => {
+const checkFavoriteJobExists = async (employeeId, jobPostId) => {
   return await prisma.favouriteJob.findFirst({
     where: {
       employeeId: employeeId,
@@ -369,7 +369,7 @@ export const checkFavoriteJobExists = async (employeeId, jobPostId) => {
  * @param {number} jobPostId - Job post ID
  * @returns {Object} Created favorite job
  */
-export const createFavoriteJob = async (employeeId, jobPostId) => {
+const createFavoriteJob = async (employeeId, jobPostId) => {
   return await prisma.favouriteJob.create({
     data: {
       employeeId: employeeId,
@@ -384,7 +384,7 @@ export const createFavoriteJob = async (employeeId, jobPostId) => {
  * @param {number} jobPostId - Job post ID
  * @returns {Object|null} Favorite job or null if not found
  */
-export const getFavoriteJobById = async (employeeId, jobPostId) => {
+const getFavoriteJobById = async (employeeId, jobPostId) => {
   return await prisma.favouriteJob.findFirst({
     where: {
       jobOfferId: parseInt(jobPostId),
@@ -399,7 +399,7 @@ export const getFavoriteJobById = async (employeeId, jobPostId) => {
  * @param {number} favoriteJobId - Favorite job ID
  * @returns {Object} Deleted favorite job
  */
-export const deleteFavoriteJob = async (favoriteJobId) => {
+const deleteFavoriteJob = async (favoriteJobId) => {
   return await prisma.favouriteJob.delete({
     where: { id: favoriteJobId },
   });
@@ -410,7 +410,7 @@ export const deleteFavoriteJob = async (favoriteJobId) => {
  * @param {number} employeeId - Employee ID
  * @returns {Array} Array of favorite jobs
  */
-export const getFavoriteJobs = async (employeeId) => {
+const getFavoriteJobs = async (employeeId) => {
   return await prisma.favouriteJob.findMany({
     where: {
       employeeId: employeeId,
@@ -433,7 +433,7 @@ export const getFavoriteJobs = async (employeeId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object|null} Talent pool record or null if not found
  */
-export const checkTalentPoolRecord = async (employeeId, restaurantId) => {
+const checkTalentPoolRecord = async (employeeId, restaurantId) => {
   return await prisma.talentPool.findFirst({
     where: {
       employeeId: parseInt(employeeId),
@@ -448,7 +448,7 @@ export const checkTalentPoolRecord = async (employeeId, restaurantId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object} Created talent pool record
  */
-export const createTalentPoolRecord = async (employeeId, restaurantId) => {
+const createTalentPoolRecord = async (employeeId, restaurantId) => {
   return await prisma.talentPool.create({
     data: {
       employeeId: parseInt(employeeId),
@@ -456,4 +456,30 @@ export const createTalentPoolRecord = async (employeeId, restaurantId) => {
       status: 'pendent',
     },
   });
+}; 
+
+module.exports = {
+  getEmployeeById,
+  getEmployeeByUserId,
+  createEmployeeProfile,
+  generateEmployeeToken,
+  getEmployeeProfile,
+  filterNewExperiences,
+  filterExistingExperiences,
+  filterNewEducations,
+  filterExistingEducations,
+  updateEmployeeProfile,
+  createExperience,
+  createEducation,
+  getEmployeeWithDetails,
+  searchEmployees,
+  getJobOfferById,
+  getEmployeeByEmployeeId,
+  checkFavoriteJobExists,
+  createFavoriteJob,
+  getFavoriteJobById,
+  deleteFavoriteJob,
+  getFavoriteJobs,
+  checkTalentPoolRecord,
+  createTalentPoolRecord,
 }; 

@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { parseIntervalToAverage } from '../utils/parseIntervalToAverage.js';
+const { PrismaClient } = require('@prisma/client');
+const { parseIntervalToAverage } = require('../utils/parseIntervalToAverage.js');
 
 const prisma = new PrismaClient();
 
@@ -60,4 +60,4 @@ async function getOrderByCriteriaCompanies(orderBy) {
   return {}; // Default case: no specific order
 }
 
-export { getOrderByCriteriaCompanies };
+module.exports = { getOrderByCriteriaCompanies };

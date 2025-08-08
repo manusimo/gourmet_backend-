@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+const jwt = require('jsonwebtoken');
 
 const checkUserType = (requiredUserType) => (req, res, next) => {
   const token = req.cookies.manu; 
@@ -88,4 +88,4 @@ const checkEmployee = checkUserType('profesionales');
 const checkCompany = checkUserType('empresas');
 const setUserRole = checkUserRole()
 
-export { checkUserType, checkEmployee, checkCompany, setUserRole, setUserType};
+module.exports = { checkEmployee, checkCompany, setUserRole };

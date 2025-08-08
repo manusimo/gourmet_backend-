@@ -1,4 +1,4 @@
-import { performance } from 'perf_hooks';
+const { performance } = require('perf_hooks');
 
 // Performance tracking
 const performanceMetrics = {
@@ -12,7 +12,7 @@ const performanceMetrics = {
 /**
  * Performance monitoring middleware
  */
-export const performanceMonitoring = (req, res, next) => {
+const performanceMonitoring = (req, res, next) => {
   const startTime = performance.now();
   const startMemory = process.memoryUsage();
   
@@ -108,7 +108,7 @@ const captureMetrics = (req, res, startTime, startMemory) => {
 /**
  * Get performance statistics
  */
-export const getPerformanceStats = () => {
+const getPerformanceStats = () => {
   const now = Date.now();
   const fiveMinutesAgo = now - 5 * 60 * 1000;
   const oneHourAgo = now - 60 * 60 * 1000;
@@ -198,7 +198,7 @@ const getResponseTimeTrend = (requests) => {
 /**
  * Health check for performance monitoring
  */
-export const getHealthStatus = () => {
+const getHealthStatus = () => {
   const stats = getPerformanceStats();
   const memory = process.memoryUsage();
   
@@ -239,4 +239,8 @@ export const getHealthStatus = () => {
   };
 };
 
-export default performanceMonitoring; 
+module.exports = {
+  performanceMonitoring,
+  getPerformanceStats,
+  getHealthStatus,
+}; 

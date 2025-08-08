@@ -1,10 +1,10 @@
-import { Router } from "express";
-import { prisma } from "../db.js";
-import { getMonitoringStats, resetMonitoring } from "../middleware/ddosMonitoring.js";
-import { getPerformanceStats, getHealthStatus } from "../middleware/performanceMonitoring.js";
-import { getErrorStats, searchErrors } from "../middleware/errorTracking.js";
+const express = require('express');
+const { prisma } = require('../db.js');
+const { getMonitoringStats, resetMonitoring } = require('../middleware/ddosMonitoring.js');
+const { getPerformanceStats, getHealthStatus } = require('../middleware/performanceMonitoring.js');
+const { getErrorStats, searchErrors } = require('../middleware/errorTracking.js');
 
-const router = Router();
+const router = express.Router();
 
 // GET /admin/total-counts - Get total counts for dashboard
 router.get('/total-counts', async (req, res) => {
@@ -347,4 +347,4 @@ router.get('/system/logs', (req, res) => {
   }
 });
 
-export default router;
+module.exports = router;

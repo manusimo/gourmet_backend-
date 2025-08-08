@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -36,7 +36,7 @@ const getTalentPool = async (restaurantId, filter) => {
   }
 };
 
-export { getTalentPool };
+module.exports = { getTalentPool };
 
 
 

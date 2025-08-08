@@ -1,7 +1,7 @@
-import crypto from 'crypto';
-import speakeasy from 'speakeasy';
-import qrcode from 'qrcode';
-import { prisma } from '../db.js';
+const crypto = require('crypto');
+const speakeasy = require('speakeasy');
+const qrcode = require('qrcode');
+const { prisma } = require('../db.js');
 
 // ============================================================================
 // TOKEN BLACKLIST MANAGEMENT
@@ -17,26 +17,28 @@ const tokenBlacklistCleanup = new Map(); // token -> expiry time
 /**
  * Add token to blacklist
  */
-export const invalidateToken = (token) => {
+const invalidateToken = (token) => {
   tokenBlacklist.add(token);
   // Set cleanup time (tokens expire in 24 hours by default)
   const expiryTime = Date.now() + (24 * 60 * 60 * 1000);
   tokenBlacklistCleanup.set(token, expiryTime);
   
-  console.log(`🔒 Token blacklisted: ${token.substring(0, 20)}...`);
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(`🔒 Token blacklisted: ${token.substring(0, 20)}...`);
+  }
 };
 
 /**
  * Check if token is blacklisted
  */
-export const isTokenBlacklisted = (token) => {
+const isTokenBlacklisted = (token) => {
   return tokenBlacklist.has(token);
 };
 
 /**
  * Clean up expired tokens from blacklist (run periodically)
  */
-export const cleanupBlacklist = () => {
+const cleanupBlacklist = () => {
   const now = Date.now();
   let cleanedCount = 0;
   
@@ -49,12 +51,16 @@ export const cleanupBlacklist = () => {
   }
   
   if (cleanedCount > 0) {
-    console.log(`🧹 Cleaned ${cleanedCount} expired tokens from blacklist`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`🧹 Cleaned ${cleanedCount} expired tokens from blacklist`);
+    }
   }
 };
 
-// Run cleanup every hour
-setInterval(cleanupBlacklist, 60 * 60 * 1000);
+// Run cleanup every hour (only in production)
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(cleanupBlacklist, 60 * 60 * 1000);
+}
 
 // ============================================================================
 // ACCOUNT LOCKOUT MECHANISM
@@ -80,7 +86,7 @@ const LOCKOUT_CONFIG = {
 /**
  * Record failed login attempt
  */
-export const recordFailedAttempt = (userId) => {
+const recordFailedAttempt = (userId) => {
   const now = Date.now();
   const lockoutData = accountLockouts.get(userId) || { attempts: 0, lockUntil: 0, lastAttempt: 0 };
   
@@ -98,7 +104,9 @@ export const recordFailedAttempt = (userId) => {
     const lockoutDuration = LOCKOUT_CONFIG.lockoutDurations[durationIndex];
     lockoutData.lockUntil = now + lockoutDuration;
     
-    console.log(`🔒 Account locked for user ${userId}: ${lockoutData.attempts} attempts, locked for ${lockoutDuration / 60000} minutes`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`🔒 Account locked for user ${userId}: ${lockoutData.attempts} attempts, locked for ${lockoutDuration / 60000} minutes`);
+    }
   }
   
   accountLockouts.set(userId, lockoutData);
@@ -108,7 +116,7 @@ export const recordFailedAttempt = (userId) => {
 /**
  * Check if account is currently locked
  */
-export const isAccountLocked = (userId) => {
+const isAccountLocked = (userId) => {
   const lockoutData = accountLockouts.get(userId);
   if (!lockoutData) return false;
   
@@ -128,10 +136,12 @@ export const isAccountLocked = (userId) => {
 /**
  * Reset account lockout (after successful login)
  */
-export const resetAccountLockout = (userId) => {
+const resetAccountLockout = (userId) => {
   if (accountLockouts.has(userId)) {
     accountLockouts.delete(userId);
-    console.log(`✅ Account lockout reset for user ${userId}`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`✅ Account lockout reset for user ${userId}`);
+    }
   }
 };
 
@@ -140,35 +150,39 @@ export const resetAccountLockout = (userId) => {
 // ============================================================================
 
 /**
- * SQL injection patterns to detect
- */
-const SQL_INJECTION_PATTERNS = [
-  // Common SQL keywords
-  /(\b(union|select|insert|delete|update|drop|exec|execute|script|declare|create|alter)\b)/gi,
-  // SQL operators and characters
-  /(\'|\"|;|--|\*|\/\*|\*\/|\||&)/g,
-  // SQL functions
-  /(\b(concat|char|ascii|substring|length|mid|count|sum|avg)\b)/gi,
-  // Comments and SQL injection techniques
-  /(\/\*[\s\S]*?\*\/|--[^\r\n]*|#[^\r\n]*)/g,
-  // UNION attacks
-  /(\bunion\b.*\bselect\b)/gi,
-  // Boolean-based attacks
-  /(\b(and|or)\b.*[=<>].*(\b(true|false|null)\b|\d+))/gi,
-  // Time-based attacks
-  /(\b(sleep|waitfor|benchmark|pg_sleep)\b)/gi
-];
-
-/**
  * Detect potential SQL injection attempts
  */
-export const detectSQLInjection = (input) => {
+const detectSQLInjection = (input) => {
   if (typeof input !== 'string') return false;
   
   const suspiciousPatterns = [];
   
-  for (let i = 0; i < SQL_INJECTION_PATTERNS.length; i++) {
-    const pattern = SQL_INJECTION_PATTERNS[i];
+  // Check for actual SQL injection patterns
+  const dangerousPatterns = [
+    // SQL keywords in suspicious context
+    /\b(union|select|insert|delete|update|drop|exec|execute|script|declare|create|alter)\b/gi,
+    // SQL comments (only when they look like actual comments)
+    /--\s+[^\r\n]*|#\s+[^\r\n]*|\/\*[\s\S]*?\*\//g,
+    // UNION attacks
+    /\bunion\b.*\bselect\b/gi,
+    // Boolean-based attacks
+    /\b(and|or)\b.*[=<>].*(\b(true|false|null)\b|\d+)/gi,
+    // Time-based attacks
+    /\b(sleep|waitfor|benchmark|pg_sleep)\b/gi,
+    // SQL functions in suspicious context
+    /\b(concat|char|ascii|substring|length|mid|count|sum|avg)\b/gi,
+    // Dangerous quote patterns with SQL keywords
+    /['"].*(\b(union|select|insert|delete|update|drop|exec|execute|script|declare|create|alter)\b).*['"]/gi,
+    // Specific SQL injection attempts
+    /';.*--|";.*--|';.*#|";.*#/gi,
+    // Boolean logic attacks
+    /\b(true|false)\s+(or|and)\s+\d+\s*=\s*\d+/gi,
+    // Simple boolean attacks
+    /\b(or|and)\s+\d+\s*=\s*\d+/gi
+  ];
+  
+  for (let i = 0; i < dangerousPatterns.length; i++) {
+    const pattern = dangerousPatterns[i];
     if (pattern.test(input)) {
       suspiciousPatterns.push({
         pattern: pattern.source,
@@ -183,23 +197,31 @@ export const detectSQLInjection = (input) => {
 /**
  * SQL injection detection middleware
  */
-export const sqlInjectionDetection = (req, res, next) => {
-  const checkObject = (obj, path = '') => {
+const sqlInjectionDetection = (req, res, next) => {
+  const checkObject = (obj, path = '', visited = new WeakSet()) => {
+    // Prevent circular references
+    if (visited.has(obj)) {
+      return null;
+    }
+    visited.add(obj);
+    
     for (const [key, value] of Object.entries(obj)) {
       const currentPath = path ? `${path}.${key}` : key;
       
       if (typeof value === 'string') {
         const suspiciousPatterns = detectSQLInjection(value);
         if (suspiciousPatterns) {
-          console.log(`🚨 SQL Injection attempt detected:`, {
-            ip: req.ip,
-            userAgent: req.get('User-Agent'),
-            path: req.originalUrl,
-            field: currentPath,
-            value: value,
-            patterns: suspiciousPatterns,
-            timestamp: new Date().toISOString()
-          });
+          if (process.env.NODE_ENV !== 'test') {
+            console.log(`🚨 SQL Injection attempt detected:`, {
+              ip: req.ip,
+              userAgent: req.get('User-Agent'),
+              path: req.originalUrl,
+              field: currentPath,
+              value: value,
+              patterns: suspiciousPatterns,
+              timestamp: new Date().toISOString()
+            });
+          }
           
           // Log to error tracking
           if (global.errorTracking) {
@@ -220,10 +242,11 @@ export const sqlInjectionDetection = (req, res, next) => {
           });
         }
       } else if (typeof value === 'object' && value !== null) {
-        const result = checkObject(value, currentPath);
+        const result = checkObject(value, currentPath, visited);
         if (result) return result;
       }
     }
+    return null;
   };
   
   // Check query parameters
@@ -248,7 +271,7 @@ export const sqlInjectionDetection = (req, res, next) => {
 /**
  * Generate MFA secret for user
  */
-export const generateMFASecret = (userEmail, serviceName = 'Gourmet Platform') => {
+const generateMFASecret = (userEmail, serviceName = 'Gourmet Platform') => {
   const secret = speakeasy.generateSecret({
     name: userEmail,
     issuer: serviceName,
@@ -265,7 +288,7 @@ export const generateMFASecret = (userEmail, serviceName = 'Gourmet Platform') =
 /**
  * Generate backup codes for MFA
  */
-export const generateBackupCodes = () => {
+const generateBackupCodes = () => {
   const codes = [];
   for (let i = 0; i < 8; i++) {
     codes.push(crypto.randomBytes(4).toString('hex').toUpperCase());
@@ -276,7 +299,7 @@ export const generateBackupCodes = () => {
 /**
  * Generate QR code for MFA setup
  */
-export const generateMFAQRCode = async (otpauthUrl) => {
+const generateMFAQRCode = async (otpauthUrl) => {
   try {
     const qrCodeDataUrl = await qrcode.toDataURL(otpauthUrl);
     return qrCodeDataUrl;
@@ -289,7 +312,7 @@ export const generateMFAQRCode = async (otpauthUrl) => {
 /**
  * Verify MFA token
  */
-export const verifyMFAToken = (secret, token, window = 1) => {
+const verifyMFAToken = (secret, token, window = 1) => {
   return speakeasy.totp.verify({
     secret: secret,
     encoding: 'base32',
@@ -301,7 +324,7 @@ export const verifyMFAToken = (secret, token, window = 1) => {
 /**
  * MFA verification middleware
  */
-export const requireMFA = async (req, res, next) => {
+const requireMFA = async (req, res, next) => {
   const userId = req.userId;
   const mfaToken = req.headers['x-mfa-token'] || req.body.mfaToken;
   
@@ -343,14 +366,18 @@ export const requireMFA = async (req, res, next) => {
     const isValidToken = verifyMFAToken(user.mfaSecret, mfaToken);
     
     if (!isValidToken) {
-      console.log(`🔒 Invalid MFA token for user ${userId}`);
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`🔒 Invalid MFA token for user ${userId}`);
+      }
       return res.status(403).json({
         success: false,
         message: 'Invalid MFA token'
       });
     }
     
-    console.log(`✅ MFA verified for user ${userId}`);
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`✅ MFA verified for user ${userId}`);
+    }
     next();
     
   } catch (error) {
@@ -369,7 +396,7 @@ export const requireMFA = async (req, res, next) => {
 /**
  * Combined security middleware that applies multiple protections
  */
-export const enhancedSecurityMiddleware = (req, res, next) => {
+const enhancedSecurityMiddleware = (req, res, next) => {
   // Add security headers if not already present
   if (!res.get('X-Security-Enhanced')) {
     res.setHeader('X-Security-Enhanced', 'true');
@@ -392,7 +419,7 @@ export const enhancedSecurityMiddleware = (req, res, next) => {
 /**
  * Get security statistics
  */
-export const getSecurityStats = () => {
+const getSecurityStats = () => {
   return {
     tokenBlacklist: {
       count: tokenBlacklist.size,
@@ -419,35 +446,43 @@ export const getSecurityStats = () => {
 /**
  * Reset security data (for admin use)
  */
-export const resetSecurityData = (type) => {
+const resetSecurityData = (type) => {
   switch (type) {
     case 'blacklist':
       tokenBlacklist.clear();
       tokenBlacklistCleanup.clear();
-      console.log('🧹 Token blacklist cleared');
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('🧹 Token blacklist cleared');
+      }
       break;
     case 'lockouts':
       accountLockouts.clear();
-      console.log('🧹 Account lockouts cleared');
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('🧹 Account lockouts cleared');
+      }
       break;
     case 'all':
       tokenBlacklist.clear();
       tokenBlacklistCleanup.clear();
       accountLockouts.clear();
-      console.log('🧹 All security data cleared');
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('🧹 All security data cleared');
+      }
       break;
   }
 };
 
-export default {
+module.exports = {
   invalidateToken,
   isTokenBlacklisted,
+  cleanupBlacklist,
   recordFailedAttempt,
   isAccountLocked,
   resetAccountLockout,
   detectSQLInjection,
   sqlInjectionDetection,
   generateMFASecret,
+  generateBackupCodes,
   generateMFAQRCode,
   verifyMFAToken,
   requireMFA,

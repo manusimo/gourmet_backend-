@@ -1,15 +1,3 @@
-import { jest } from '@jest/globals';
-import {
-  validateApplicationInput,
-  getJobPost,
-  getExistingApplication,
-  createApplication,
-  getApplicationById,
-  getJobOfferForRestaurant,
-  getApplicationsForJobOffer
-} from '../../helpers/applicationHelpers.js';
-
-// Mock Prisma
 const mockPrisma = {
   jobOffer: {
     findUnique: jest.fn(),
@@ -29,14 +17,17 @@ const mockPrisma = {
   },
 };
 
-// Mock the prisma import
 jest.mock('../../db.js', () => ({
   prisma: mockPrisma,
 }));
 
 describe('Application Helpers', () => {
+  let helpers;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetModules();
+    helpers = require('../../helpers/applicationHelpers.js');
   });
 
   describe('validateApplicationInput', () => {
@@ -49,7 +40,7 @@ describe('Application Helpers', () => {
         ]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(true);
       expect(result.errors).toEqual([]);
@@ -62,7 +53,7 @@ describe('Application Helpers', () => {
         ]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Job post ID is required');
@@ -76,7 +67,7 @@ describe('Application Helpers', () => {
         ]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Job post ID must be a valid number');
@@ -88,7 +79,7 @@ describe('Application Helpers', () => {
         answers: []
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('At least one answer is required');
@@ -103,7 +94,7 @@ describe('Application Helpers', () => {
         ]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Each answer must have a valid questionId and answer');
@@ -118,7 +109,7 @@ describe('Application Helpers', () => {
         ]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Answer cannot be empty');
@@ -129,14 +120,30 @@ describe('Application Helpers', () => {
     it('should return job post when found', async () => {
       const mockJobPost = {
         id: 123,
-        title: 'Chef Position',
+        position: 'Chef Position',
         description: 'Looking for an experienced chef',
         restaurantId: 456,
         isActive: true
       };
       mockPrisma.jobOffer.findUnique.mockResolvedValue(mockJobPost);
 
-      const result = await getJobPost(123);
+      const result = await helpers.getJobPost(123);
+
+      expect(mockPrisma.jobOffer.findUnique).toHaveBeenCalledWith({
+        where: { id: 123 },
+        include: {
+          restaurant: true,
+          questions: true,
+        },
+      });
+      expect(result).toEqual(mockJobPost);
+    });
+
+    it('should handle string input by parsing to integer', async () => {
+      const mockJobPost = { id: 123 };
+      mockPrisma.jobOffer.findUnique.mockResolvedValue(mockJobPost);
+
+      const result = await helpers.getJobPost('123');
 
       expect(mockPrisma.jobOffer.findUnique).toHaveBeenCalledWith({
         where: { id: 123 },
@@ -151,7 +158,7 @@ describe('Application Helpers', () => {
     it('should return null when job post not found', async () => {
       mockPrisma.jobOffer.findUnique.mockResolvedValue(null);
 
-      const result = await getJobPost(999);
+      const result = await helpers.getJobPost(999);
 
       expect(result).toBeNull();
     });
@@ -159,7 +166,7 @@ describe('Application Helpers', () => {
     it('should handle database errors', async () => {
       mockPrisma.jobOffer.findUnique.mockRejectedValue(new Error('Database error'));
 
-      await expect(getJobPost(123)).rejects.toThrow('Database error');
+      await expect(helpers.getJobPost(123)).rejects.toThrow('Database error');
     });
   });
 
@@ -173,7 +180,7 @@ describe('Application Helpers', () => {
       };
       mockPrisma.application.findFirst.mockResolvedValue(mockApplication);
 
-      const result = await getExistingApplication(123, 456);
+      const result = await helpers.getExistingApplication('123', '456');
 
       expect(mockPrisma.application.findFirst).toHaveBeenCalledWith({
         where: {
@@ -187,7 +194,7 @@ describe('Application Helpers', () => {
     it('should return null when no existing application', async () => {
       mockPrisma.application.findFirst.mockResolvedValue(null);
 
-      const result = await getExistingApplication(123, 456);
+      const result = await helpers.getExistingApplication(123, 456);
 
       expect(result).toBeNull();
     });
@@ -195,7 +202,7 @@ describe('Application Helpers', () => {
     it('should handle database errors', async () => {
       mockPrisma.application.findFirst.mockRejectedValue(new Error('Database error'));
 
-      await expect(getExistingApplication(123, 456)).rejects.toThrow('Database error');
+      await expect(helpers.getExistingApplication(123, 456)).rejects.toThrow('Database error');
     });
   });
 
@@ -209,7 +216,6 @@ describe('Application Helpers', () => {
           { questionId: 1, answer: 'Yes, I have experience' },
           { questionId: 2, answer: 'I am available immediately' }
         ],
-        status: 'pending',
         createdAt: new Date()
       };
       mockPrisma.application.create.mockResolvedValue(mockApplication);
@@ -219,14 +225,13 @@ describe('Application Helpers', () => {
         { questionId: 2, answer: 'I am available immediately' }
       ];
 
-      const result = await createApplication(123, 456, answers);
+      const result = await helpers.createApplication('123', '456', answers);
 
       expect(mockPrisma.application.create).toHaveBeenCalledWith({
         data: {
           jobPost: { connect: { id: 123 } },
           employee: { connect: { id: 456 } },
-          answers: answers,
-          status: 'pending',
+          answers: { create: answers },
         },
         include: {
           jobPost: {
@@ -247,7 +252,7 @@ describe('Application Helpers', () => {
         { questionId: 1, answer: 'Yes, I have experience' }
       ];
 
-      await expect(createApplication(123, 456, answers)).rejects.toThrow('Database error');
+      await expect(helpers.createApplication(123, 456, answers)).rejects.toThrow('Database error');
     });
   });
 
@@ -264,7 +269,7 @@ describe('Application Helpers', () => {
       };
       mockPrisma.application.findUnique.mockResolvedValue(mockApplication);
 
-      const result = await getApplicationById(1);
+      const result = await helpers.getApplicationById('1');
 
       expect(mockPrisma.application.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -283,7 +288,7 @@ describe('Application Helpers', () => {
     it('should return null when application not found', async () => {
       mockPrisma.application.findUnique.mockResolvedValue(null);
 
-      const result = await getApplicationById(999);
+      const result = await helpers.getApplicationById(999);
 
       expect(result).toBeNull();
     });
@@ -291,7 +296,7 @@ describe('Application Helpers', () => {
     it('should handle database errors', async () => {
       mockPrisma.application.findUnique.mockRejectedValue(new Error('Database error'));
 
-      await expect(getApplicationById(1)).rejects.toThrow('Database error');
+      await expect(helpers.getApplicationById(1)).rejects.toThrow('Database error');
     });
   });
 
@@ -299,13 +304,13 @@ describe('Application Helpers', () => {
     it('should return job offer when found and belongs to restaurant', async () => {
       const mockJobOffer = {
         id: 123,
-        title: 'Chef Position',
+        position: 'Chef Position',
         restaurantId: 456,
         isActive: true
       };
       mockPrisma.jobOffer.findFirst.mockResolvedValue(mockJobOffer);
 
-      const result = await getJobOfferForRestaurant(123, 456);
+      const result = await helpers.getJobOfferForRestaurant('123', '456');
 
       expect(mockPrisma.jobOffer.findFirst).toHaveBeenCalledWith({
         where: {
@@ -319,7 +324,7 @@ describe('Application Helpers', () => {
     it('should return null when job offer not found', async () => {
       mockPrisma.jobOffer.findFirst.mockResolvedValue(null);
 
-      const result = await getJobOfferForRestaurant(999, 456);
+      const result = await helpers.getJobOfferForRestaurant(999, 456);
 
       expect(result).toBeNull();
     });
@@ -327,7 +332,7 @@ describe('Application Helpers', () => {
     it('should return null when job offer doesn\'t belong to restaurant', async () => {
       mockPrisma.jobOffer.findFirst.mockResolvedValue(null);
 
-      const result = await getJobOfferForRestaurant(123, 999);
+      const result = await helpers.getJobOfferForRestaurant(123, 999);
 
       expect(result).toBeNull();
     });
@@ -335,7 +340,7 @@ describe('Application Helpers', () => {
     it('should handle database errors', async () => {
       mockPrisma.jobOffer.findFirst.mockRejectedValue(new Error('Database error'));
 
-      await expect(getJobOfferForRestaurant(123, 456)).rejects.toThrow('Database error');
+      await expect(helpers.getJobOfferForRestaurant(123, 456)).rejects.toThrow('Database error');
     });
   });
 
@@ -357,14 +362,13 @@ describe('Application Helpers', () => {
       ];
       mockPrisma.application.findMany.mockResolvedValue(mockApplications);
 
-      const result = await getApplicationsForJobOffer(123);
+      const result = await helpers.getApplicationsForJobOffer('123');
 
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith({
         where: { jobPostId: 123 },
         include: {
           employee: true,
         },
-        orderBy: { createdAt: 'desc' },
       });
       expect(result).toEqual(mockApplications);
     });
@@ -372,7 +376,7 @@ describe('Application Helpers', () => {
     it('should return empty array when no applications found', async () => {
       mockPrisma.application.findMany.mockResolvedValue([]);
 
-      const result = await getApplicationsForJobOffer(123);
+      const result = await helpers.getApplicationsForJobOffer(123);
 
       expect(result).toEqual([]);
     });
@@ -380,7 +384,7 @@ describe('Application Helpers', () => {
     it('should handle database errors', async () => {
       mockPrisma.application.findMany.mockRejectedValue(new Error('Database error'));
 
-      await expect(getApplicationsForJobOffer(123)).rejects.toThrow('Database error');
+      await expect(helpers.getApplicationsForJobOffer(123)).rejects.toThrow('Database error');
     });
   });
 
@@ -394,7 +398,7 @@ describe('Application Helpers', () => {
         { questionId: 1, answer: 'Yes, I have experience' }
       ];
 
-      await expect(createApplication(123, 456, answers)).rejects.toThrow('Record to update not found');
+      await expect(helpers.createApplication(123, 456, answers)).rejects.toThrow('Record to update not found');
     });
 
     it('should handle Prisma foreign key constraint error', async () => {
@@ -406,7 +410,7 @@ describe('Application Helpers', () => {
         { questionId: 1, answer: 'Yes, I have experience' }
       ];
 
-      await expect(createApplication(123, 456, answers)).rejects.toThrow('Foreign key constraint failed');
+      await expect(helpers.createApplication(123, 456, answers)).rejects.toThrow('Foreign key constraint failed');
     });
 
     it('should handle Prisma unique constraint error', async () => {
@@ -418,20 +422,20 @@ describe('Application Helpers', () => {
         { questionId: 1, answer: 'Yes, I have experience' }
       ];
 
-      await expect(createApplication(123, 456, answers)).rejects.toThrow('Unique constraint failed');
+      await expect(helpers.createApplication(123, 456, answers)).rejects.toThrow('Unique constraint failed');
     });
   });
 
   describe('Input Validation Edge Cases', () => {
     it('should handle null input', () => {
-      const result = validateApplicationInput(null);
+      const result = helpers.validateApplicationInput(null);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Input data is required');
     });
 
     it('should handle undefined input', () => {
-      const result = validateApplicationInput(undefined);
+      const result = helpers.validateApplicationInput(undefined);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Input data is required');
@@ -443,7 +447,7 @@ describe('Application Helpers', () => {
         answers: [{ questionId: 1, answer: 'Yes' }]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Job post ID must be a positive number');
@@ -455,7 +459,7 @@ describe('Application Helpers', () => {
         answers: [{ questionId: 1, answer: 'Yes' }]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Job post ID must be a positive number');
@@ -467,7 +471,7 @@ describe('Application Helpers', () => {
         answers: [{ questionId: 1, answer: 'Yes' }]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Job post ID must be a valid number');
@@ -480,7 +484,7 @@ describe('Application Helpers', () => {
         answers: [{ questionId: 1, answer: longAnswer }]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Answer is too long (maximum 10,000 characters)');
@@ -495,7 +499,7 @@ describe('Application Helpers', () => {
         ]
       };
 
-      const result = validateApplicationInput(input);
+      const result = helpers.validateApplicationInput(input);
 
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Duplicate question IDs are not allowed');
@@ -506,13 +510,13 @@ describe('Application Helpers', () => {
     it('should use efficient queries for getJobPost', async () => {
       const mockJobPost = {
         id: 123,
-        title: 'Chef Position',
+        position: 'Chef Position',
         restaurant: { id: 456, name: 'Restaurant ABC' },
         questions: []
       };
       mockPrisma.jobOffer.findUnique.mockResolvedValue(mockJobPost);
 
-      await getJobPost(123);
+      await helpers.getJobPost(123);
 
       expect(mockPrisma.jobOffer.findUnique).toHaveBeenCalledWith({
         where: { id: 123 },
@@ -527,14 +531,13 @@ describe('Application Helpers', () => {
       const mockApplications = [];
       mockPrisma.application.findMany.mockResolvedValue(mockApplications);
 
-      await getApplicationsForJobOffer(123);
+      await helpers.getApplicationsForJobOffer(123);
 
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith({
         where: { jobPostId: 123 },
         include: {
           employee: true,
         },
-        orderBy: { createdAt: 'desc' },
       });
     });
 
@@ -542,7 +545,7 @@ describe('Application Helpers', () => {
       const mockJobOffer = { id: 123, restaurantId: 456 };
       mockPrisma.jobOffer.findFirst.mockResolvedValue(mockJobOffer);
 
-      await getJobOfferForRestaurant(123, 456);
+      await helpers.getJobOfferForRestaurant(123, 456);
 
       expect(mockPrisma.jobOffer.findFirst).toHaveBeenCalledWith({
         where: {

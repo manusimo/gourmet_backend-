@@ -1,27 +1,27 @@
-import express from 'express';
-import cors from 'cors';
-import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
-import xss from 'xss';
-import cookieParser from 'cookie-parser';
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const xss = require('xss');
+const cookieParser = require('cookie-parser');
 
 // Import middleware
-import { ddosMonitoring } from './middleware/ddosMonitoring.js';
-import { performanceMonitoring } from './middleware/performanceMonitoring.js';
-import { errorTrackingMiddleware, Logger } from './middleware/errorTracking.js';
-import { enhancedSecurityMiddleware } from './middleware/security.js';
+const { ddosMonitoring } = require('./middleware/ddosMonitoring.js');
+const { performanceMonitoring } = require('./middleware/performanceMonitoring.js');
+const { errorTrackingMiddleware, Logger } = require('./middleware/errorTracking.js');
+const { enhancedSecurityMiddleware } = require('./middleware/security.js');
 
 // Import routes
-import authRoutes from './routes/auth.route.js';
-import contactRoutes from './routes/contact.route.js';
-import employeeRoutes from './routes/employee.route.js';
-import companyRoutes from './routes/company.route.js';
-import jobRoutes from './routes/job.route.js';
-import applicationRoutes from './routes/application.route.js';
-import poolRoutes from './routes/pool.route.js';
-import chatRoutes from './routes/chat.route.js';
-import adminRoutes from './routes/admin.route.js';
-import csrfProtectionRoutes from './routes/csrfProtection.route.js';
+const authRoutes = require('./routes/auth.route.js');
+const contactRoutes = require('./routes/contact.route.js');
+const employeeRoutes = require('./routes/employee.route.js');
+const companyRoutes = require('./routes/company.route.js');
+const jobRoutes = require('./routes/job.route.js');
+const applicationRoutes = require('./routes/application.route.js');
+const poolRoutes = require('./routes/pool.route.js');
+const chatRoutes = require('./routes/chat.route.js');
+const adminRoutes = require('./routes/admin.route.js');
+const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -441,4 +441,4 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection:', reason);
 });
 
-export default app;
+module.exports = app;

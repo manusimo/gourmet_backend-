@@ -1,11 +1,11 @@
-import { prisma } from "../db.js";
+const { prisma } = require("../db.js");
 
 /**
  * Get conversation by ID with full details
  * @param {number} conversationId - Conversation ID
  * @returns {Object|null} Conversation or null if not found
  */
-export const getConversationById = async (conversationId) => {
+const getConversationById = async (conversationId) => {
   return await prisma.conversation.findFirst({
     where: { 
       id: parseInt(conversationId), 
@@ -26,7 +26,7 @@ export const getConversationById = async (conversationId) => {
  * @param {number} conversationId - Conversation ID
  * @returns {Object|null} Conversation with messages or null if not found
  */
-export const getConversationWithMessages = async (conversationId) => {
+const getConversationWithMessages = async (conversationId) => {
   return await prisma.conversation.findFirst({
     where: { 
       id: parseInt(conversationId), 
@@ -44,7 +44,7 @@ export const getConversationWithMessages = async (conversationId) => {
  * @param {number} employeeId - Employee ID
  * @returns {boolean} True if employee has access
  */
-export const validateEmployeeAccess = (conversation, employeeId) => {
+const validateEmployeeAccess = (conversation, employeeId) => {
   return conversation.employeeId === employeeId;
 };
 
@@ -54,7 +54,7 @@ export const validateEmployeeAccess = (conversation, employeeId) => {
  * @param {number} restaurantUserId - Restaurant user ID
  * @returns {boolean} True if restaurant user has access
  */
-export const validateRestaurantUserAccess = (conversation, restaurantUserId) => {
+const validateRestaurantUserAccess = (conversation, restaurantUserId) => {
   return conversation.restaurantUserId === restaurantUserId;
 };
 
@@ -63,7 +63,7 @@ export const validateRestaurantUserAccess = (conversation, restaurantUserId) => 
  * @param {Object} messageData - Message data
  * @returns {Object} Created message
  */
-export const createMessage = async (messageData) => {
+const createMessage = async (messageData) => {
   const { 
     text, 
     conversationId, 
@@ -97,7 +97,7 @@ export const createMessage = async (messageData) => {
  * @param {number} restaurantUserId - Restaurant user ID
  * @returns {Object|null} Conversation or null if not found
  */
-export const checkTalentConversation = async (employeeId, restaurantUserId) => {
+const checkTalentConversation = async (employeeId, restaurantUserId) => {
   return await prisma.conversation.findFirst({
     where: {
       employeeId: parseInt(employeeId),
@@ -114,7 +114,7 @@ export const checkTalentConversation = async (employeeId, restaurantUserId) => {
  * @param {number} restaurantUserId - Restaurant user ID
  * @returns {Object|null} Conversation or null if not found
  */
-export const checkApplicationConversation = async (employeeId, restaurantUserId) => {
+const checkApplicationConversation = async (employeeId, restaurantUserId) => {
   return await prisma.conversation.findFirst({
     where: {
       employeeId: parseInt(employeeId),
@@ -133,7 +133,7 @@ export const checkApplicationConversation = async (employeeId, restaurantUserId)
  * @param {string} type - Conversation type
  * @returns {Object|null} Conversation or null if not found
  */
-export const findConversationByJobPost = async (employeeId, jobPostId, restaurantUserId, type) => {
+const findConversationByJobPost = async (employeeId, jobPostId, restaurantUserId, type) => {
   return await prisma.conversation.findFirst({
     where: {
       employeeId: parseInt(employeeId),
@@ -153,7 +153,7 @@ export const findConversationByJobPost = async (employeeId, jobPostId, restauran
  * @param {string} type - Conversation type
  * @returns {Object|null} Conversation or null if not found
  */
-export const findConversationByTalentPool = async (employeeId, talentPoolId, restaurantUserId, type) => {
+const findConversationByTalentPool = async (employeeId, talentPoolId, restaurantUserId, type) => {
   return await prisma.conversation.findFirst({
     where: {
       employeeId: parseInt(employeeId),
@@ -170,7 +170,7 @@ export const findConversationByTalentPool = async (employeeId, talentPoolId, res
  * @param {Object} conversationData - Conversation data
  * @returns {Object} Created conversation
  */
-export const createConversation = async (conversationData) => {
+const createConversation = async (conversationData) => {
   const { employeeId, jobPostId, talentPoolId, restaurantUserId, type } = conversationData;
   
   return await prisma.conversation.create({
@@ -191,7 +191,7 @@ export const createConversation = async (conversationData) => {
  * @param {string} type - Conversation type
  * @returns {Array} Array of conversations
  */
-export const getRestaurantConversations = async (restaurantUserId, employeeId, type) => {
+const getRestaurantConversations = async (restaurantUserId, employeeId, type) => {
   return await prisma.conversation.findMany({
     where: {
       restaurantUserId: parseInt(restaurantUserId),
@@ -215,7 +215,7 @@ export const getRestaurantConversations = async (restaurantUserId, employeeId, t
  * @param {string} type - Conversation type
  * @returns {Array} Array of conversations
  */
-export const getEmployeeConversations = async (employeeId, type) => {
+const getEmployeeConversations = async (employeeId, type) => {
   return await prisma.conversation.findMany({
     where: {
       employeeId: employeeId,
@@ -245,7 +245,7 @@ export const getEmployeeConversations = async (employeeId, type) => {
  * @param {string} type - Conversation type
  * @returns {Array} Array of conversations
  */
-export const getRestaurantUserConversations = async (restaurantUserId, type) => {
+const getRestaurantUserConversations = async (restaurantUserId, type) => {
   return await prisma.conversation.findMany({
     where: {
       restaurantUserId: parseInt(restaurantUserId),
@@ -265,7 +265,7 @@ export const getRestaurantUserConversations = async (restaurantUserId, type) => 
  * @param {number} conversationId - Conversation ID
  * @returns {Object} Deleted conversation
  */
-export const deleteConversation = async (conversationId) => {
+const deleteConversation = async (conversationId) => {
   // First delete all messages in the conversation
   await prisma.message.deleteMany({
     where: { conversationId: parseInt(conversationId) },
@@ -284,7 +284,7 @@ export const deleteConversation = async (conversationId) => {
  * @param {number} restaurantUserId - Restaurant user ID
  * @returns {boolean} True if user has access
  */
-export const validateConversationAccess = (conversation, employeeId, restaurantUserId) => {
+const validateConversationAccess = (conversation, employeeId, restaurantUserId) => {
   if (employeeId && conversation.employeeId !== employeeId) {
     return false;
   }
@@ -294,4 +294,22 @@ export const validateConversationAccess = (conversation, employeeId, restaurantU
   }
   
   return true;
+}; 
+
+module.exports = {
+  getConversationById,
+  getConversationWithMessages,
+  validateEmployeeAccess,
+  validateRestaurantUserAccess,
+  createMessage,
+  checkTalentConversation,
+  checkApplicationConversation,
+  findConversationByJobPost,
+  findConversationByTalentPool,
+  createConversation,
+  getRestaurantConversations,
+  getEmployeeConversations,
+  getRestaurantUserConversations,
+  deleteConversation,
+  validateConversationAccess,
 }; 

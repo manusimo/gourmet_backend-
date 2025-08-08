@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -77,4 +77,8 @@ async function createNewLocations(newLocations, restaurantId) {
   }
 }
 
-export { deleteLocations, updateCompanyProfile, createNewLocations };
+module.exports = {
+  deleteLocations,
+  updateCompanyProfile,
+  createNewLocations,
+};

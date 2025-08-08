@@ -1,13 +1,6 @@
-export default {
-  preset: 'default',
+module.exports = {
   testEnvironment: 'node',
-  extensionsToTreatAsEsm: ['.js'],
-  globals: {
-    'ts-jest': {
-      useESM: true,
-    },
-  },
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {},
@@ -25,7 +18,6 @@ export default {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/src/tests/setup.js'],
   testTimeout: 10000,
   verbose: true,
   clearMocks: true,

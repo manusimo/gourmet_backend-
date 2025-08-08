@@ -1,13 +1,14 @@
-import Router from "express";
-import csrf from 'csurf';
-import { checkCompany, setUserRole } from '../helpers/authenticateToken.js';
-import { getUserIdFromCookie, getRestaurantIdFromCookie } from '../helpers/cookies.js';
-import { requirePlan, checkLocationLimit } from '../middleware/checkPlan.js';
-import { buildFilters, buildSearchConditions } from "../helpers/filterHelpers.js";
-import { deleteLocations, updateCompanyProfile, createNewLocations } from '../helpers/company.js';
-import { getOrderByCriteriaCompanies } from '../helpers/orderBy.js';
-import { verifyCSRFToken } from "../helpers/csrf.js";
-import {
+const express = require('express');
+const csrf = require('csurf');
+const { prisma } = require('../db.js');
+const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
+const { getUserIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
+const { requirePlan, checkLocationLimit } = require('../middleware/checkPlan.js');
+const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
+const { deleteLocations, updateCompanyProfile, createNewLocations } = require('../helpers/company.js');
+const { getOrderByCriteriaCompanies } = require('../helpers/orderBy.js');
+const { verifyCSRFToken } = require('../helpers/csrf.js');
+const {
   getCompanies,
   getTotalCompanies,
   getRestaurantUserByUserId,
@@ -28,10 +29,10 @@ import {
   findLocationsToDelete,
   generatePlanInfo,
   generateUpdatePlanInfo
-} from '../helpers/companyHelpers.js';
+} = require('../helpers/companyHelpers.js');
 
 const csrfProtection = csrf({ cookie: true });
-const router = Router();
+const router = express.Router();
 
 // GET /companies - Get companies with filters and pagination
 router.get('/companies', async (req, res) => {
@@ -285,9 +286,8 @@ router.get('/company/:id', async (req, res) => {
     const { id } = req.params;
     const restaurant = await getCompanyById(id);
 
-    console.log('this is the restaurant', restaurant.benefits);
-
     if (restaurant) {
+      console.log('this is the restaurant', restaurant.benefits);
       res.status(200).json({ 
         success: true,
         data: restaurant 
@@ -398,4 +398,4 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, checkLocationL
   }
 });
 
-export default router;
+module.exports = router;

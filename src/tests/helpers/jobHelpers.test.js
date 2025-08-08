@@ -1,5 +1,4 @@
-import { jest } from '@jest/globals';
-import {
+const {
   createJobOffer,
   getJobOfferWithLocation,
   generateJobPlanInfo,
@@ -12,7 +11,7 @@ import {
   getRestaurantUserWithDetails,
   getRestaurantWithLocations,
   generateCompletePlanInfo
-} from '../../helpers/jobHelpers.js';
+} = require('../../helpers/jobHelpers.js');
 
 // Mock Prisma
 const mockPrisma = {
@@ -44,8 +43,14 @@ jest.mock('../../db.js', () => ({
 }));
 
 describe('Job Helpers', () => {
+  let helpers;
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetModules();
+    helpers = require('../../helpers/jobHelpers.js');
+  });
+  afterEach(() => {
+    delete global.mockPrisma;
   });
 
   describe('createJobOffer', () => {
@@ -76,7 +81,7 @@ describe('Job Helpers', () => {
         restaurantUserId: 1
       };
 
-      const result = await createJobOffer(jobData);
+      const result = await helpers.createJobOffer(jobData);
 
       expect(mockPrisma.jobOffer.create).toHaveBeenCalledWith({
         data: {
@@ -120,7 +125,7 @@ describe('Job Helpers', () => {
         restaurantUserId: 1
       };
 
-      await createJobOffer(jobData);
+      await helpers.createJobOffer(jobData);
 
       expect(mockPrisma.jobOffer.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -140,7 +145,7 @@ describe('Job Helpers', () => {
       };
       mockPrisma.jobOffer.findUnique.mockResolvedValue(mockJobOffer);
 
-      const result = await getJobOfferWithLocation(1);
+      const result = await helpers.getJobOfferWithLocation(1);
 
       expect(mockPrisma.jobOffer.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -152,7 +157,7 @@ describe('Job Helpers', () => {
     it('should return null when job offer not found', async () => {
       mockPrisma.jobOffer.findUnique.mockResolvedValue(null);
 
-      const result = await getJobOfferWithLocation(1);
+      const result = await helpers.getJobOfferWithLocation(1);
 
       expect(result).toBeNull();
     });
@@ -166,7 +171,7 @@ describe('Job Helpers', () => {
         jobOfferLimit: 5
       };
 
-      const result = generateJobPlanInfo(planData);
+      const result = helpers.generateJobPlanInfo(planData);
 
       expect(result).toEqual({
         currentPlan: 'PRO',
@@ -183,7 +188,7 @@ describe('Job Helpers', () => {
         jobOfferLimit: 1
       };
 
-      const result = generateJobPlanInfo(planData);
+      const result = helpers.generateJobPlanInfo(planData);
 
       expect(result).toEqual({
         currentPlan: 'STARTER',
@@ -200,7 +205,7 @@ describe('Job Helpers', () => {
         jobOfferLimit: 3
       };
 
-      const result = generateJobPlanInfo(planData);
+      const result = helpers.generateJobPlanInfo(planData);
 
       expect(result.currentPlan).toBe('STARTER');
     });
@@ -211,7 +216,7 @@ describe('Job Helpers', () => {
       const mockEmployee = { id: 1, name: 'John Doe' };
       mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
 
-      const result = await getEmployeeById(1);
+      const result = await helpers.getEmployeeById(1);
 
       expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -222,7 +227,7 @@ describe('Job Helpers', () => {
     it('should return null when employee not found', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(null);
 
-      const result = await getEmployeeById(1);
+      const result = await helpers.getEmployeeById(1);
 
       expect(result).toBeNull();
     });
@@ -236,7 +241,7 @@ describe('Job Helpers', () => {
       ];
       mockPrisma.application.findMany.mockResolvedValue(mockApplications);
 
-      const result = await getEmployeeApplications(1);
+      const result = await helpers.getEmployeeApplications(1);
 
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith({
         where: {
@@ -276,7 +281,7 @@ describe('Job Helpers', () => {
       const limit = 10;
       const skip = 0;
 
-      const result = await getJobsWithFilters(filters, searchConditions, orderByCriteria, limit, skip);
+      const result = await helpers.getJobsWithFilters(filters, searchConditions, orderByCriteria, limit, skip);
 
       expect(mockPrisma.jobOffer.findMany).toHaveBeenCalledWith({
         where: {
@@ -306,7 +311,7 @@ describe('Job Helpers', () => {
       const filters = { specialty: 'Restaurant' };
       const searchConditions = { position: { contains: 'Chef' } };
 
-      const result = await getTotalJobsCount(filters, searchConditions);
+      const result = await helpers.getTotalJobsCount(filters, searchConditions);
 
       expect(mockPrisma.jobOffer.count).toHaveBeenCalledWith({
         where: {
@@ -329,7 +334,7 @@ describe('Job Helpers', () => {
       ];
       mockPrisma.jobOffer.findMany.mockResolvedValue(mockJobOffers);
 
-      const result = await getRestaurantJobOffers(1);
+      const result = await helpers.getRestaurantJobOffers(1);
 
       expect(mockPrisma.jobOffer.findMany).toHaveBeenCalledWith({
         where: {
@@ -361,7 +366,7 @@ describe('Job Helpers', () => {
       };
       mockPrisma.jobOffer.findFirst.mockResolvedValue(mockJobOffer);
 
-      const result = await getJobOfferById(1);
+      const result = await helpers.getJobOfferById(1);
 
       expect(mockPrisma.jobOffer.findFirst).toHaveBeenCalledWith({
         where: {
@@ -381,7 +386,7 @@ describe('Job Helpers', () => {
     it('should return null when job offer not found', async () => {
       mockPrisma.jobOffer.findFirst.mockResolvedValue(null);
 
-      const result = await getJobOfferById(1);
+      const result = await helpers.getJobOfferById(1);
 
       expect(result).toBeNull();
     });
@@ -390,7 +395,7 @@ describe('Job Helpers', () => {
       const mockJobOffer = { id: 1, position: 'Chef' };
       mockPrisma.jobOffer.findFirst.mockResolvedValue(mockJobOffer);
 
-      await getJobOfferById('1');
+      await helpers.getJobOfferById('1');
 
       expect(mockPrisma.jobOffer.findFirst).toHaveBeenCalledWith({
         where: {
@@ -418,7 +423,7 @@ describe('Job Helpers', () => {
       };
       mockPrisma.restaurantUser.findUnique.mockResolvedValue(mockRestaurantUser);
 
-      const result = await getRestaurantUserWithDetails(1);
+      const result = await helpers.getRestaurantUserWithDetails(1);
 
       expect(mockPrisma.restaurantUser.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -441,7 +446,7 @@ describe('Job Helpers', () => {
     it('should return null when restaurant user not found', async () => {
       mockPrisma.restaurantUser.findUnique.mockResolvedValue(null);
 
-      const result = await getRestaurantUserWithDetails(1);
+      const result = await helpers.getRestaurantUserWithDetails(1);
 
       expect(result).toBeNull();
     });
@@ -459,7 +464,7 @@ describe('Job Helpers', () => {
       };
       mockPrisma.restaurant.findUnique.mockResolvedValue(mockRestaurant);
 
-      const result = await getRestaurantWithLocations(1);
+      const result = await helpers.getRestaurantWithLocations(1);
 
       expect(mockPrisma.restaurant.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -473,7 +478,7 @@ describe('Job Helpers', () => {
     it('should return null when restaurant not found', async () => {
       mockPrisma.restaurant.findUnique.mockResolvedValue(null);
 
-      const result = await getRestaurantWithLocations(1);
+      const result = await helpers.getRestaurantWithLocations(1);
 
       expect(result).toBeNull();
     });
@@ -502,7 +507,7 @@ describe('Job Helpers', () => {
         currentLocations: 2
       };
 
-      const result = generateCompletePlanInfo(planData);
+      const result = helpers.generateCompletePlanInfo(planData);
 
       expect(result).toHaveProperty('planInfo');
       expect(result.planInfo).toHaveProperty('currentPlan', 'PRO');
@@ -530,7 +535,7 @@ describe('Job Helpers', () => {
         currentLocations: 0
       };
 
-      const result = generateCompletePlanInfo(planData);
+      const result = helpers.generateCompletePlanInfo(planData);
 
       expect(result.planInfo.currentPlan).toBe('STARTER');
       expect(result.planInfo.remainingJobOffers).toBe(1);
@@ -553,7 +558,7 @@ describe('Job Helpers', () => {
         currentLocations: 0
       };
 
-      const result = generateCompletePlanInfo(planData);
+      const result = helpers.generateCompletePlanInfo(planData);
 
       expect(result.planInfo.currentPlan).toBe('PREMIUM');
       expect(result.planInfo.remainingJobOffers).toBe(Infinity);

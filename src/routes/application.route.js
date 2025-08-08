@@ -1,7 +1,7 @@
-import { Router } from "express";
-import { getEmployeeIdFromCookie, getRestaurantIdFromCookie } from "../helpers/cookies.js";
-import { checkEmployee, checkCompany } from "../helpers/authenticateToken.js";
-import {
+const express = require('express');
+const { getEmployeeIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
+const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
+const {
   validateApplicationInput,
   getJobPost,
   getExistingApplication,
@@ -9,9 +9,9 @@ import {
   getApplicationById,
   getJobOfferForRestaurant,
   getApplicationsForJobOffer
-} from "../helpers/applicationHelpers.js";
+} = require('../helpers/applicationHelpers.js');
 
-const router = Router();
+const router = express.Router();
 
 // POST /application - Create a new application
 router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
@@ -86,14 +86,15 @@ router.get('/applications/:applicationId', async (req, res) => {
     const { applicationId } = req.params;
 
     // Validate application ID
-    if (!applicationId || isNaN(parseInt(applicationId))) {
+    const parsedId = parseInt(applicationId);
+    if (!applicationId || isNaN(parsedId) || parsedId <= 0 || parsedId > Number.MAX_SAFE_INTEGER) {
       return res.status(400).json({ 
         success: false,
         message: 'Invalid application ID' 
       });
     }
 
-    const application = await getApplicationById(applicationId);
+    const application = await getApplicationById(parsedId);
 
     if (!application) {
       return res.status(404).json({ 
@@ -125,7 +126,8 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     const { restaurantId } = req;
 
     // Validate job offer ID
-    if (!jobOfferId || isNaN(parseInt(jobOfferId))) {
+    const parsedJobOfferId = parseInt(jobOfferId);
+    if (!jobOfferId || isNaN(parsedJobOfferId) || parsedJobOfferId <= 0 || parsedJobOfferId > Number.MAX_SAFE_INTEGER) {
       return res.status(400).json({ 
         success: false,
         message: 'Invalid job offer ID' 
@@ -141,7 +143,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     }
 
     // Check if job offer exists and belongs to restaurant
-    const jobOffer = await getJobOfferForRestaurant(jobOfferId, restaurantId);
+    const jobOffer = await getJobOfferForRestaurant(parsedJobOfferId, restaurantId);
     if (!jobOffer) {
       return res.status(404).json({ 
         success: false,
@@ -150,7 +152,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     }
 
     // Get applications for this job offer
-    const applications = await getApplicationsForJobOffer(jobOfferId);
+    const applications = await getApplicationsForJobOffer(parsedJobOfferId);
 
     res.json({ 
       success: true,
@@ -166,4 +168,4 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
   }
 });
 
-export default router;
+module.exports = router;

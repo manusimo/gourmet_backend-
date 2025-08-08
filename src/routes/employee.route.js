@@ -1,9 +1,10 @@
-import Router from "express";
-import { checkEmployee, checkCompany } from "../helpers/authenticateToken.js";
-import { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } from "../helpers/cookies.js";
-import { requirePlan } from "../middleware/checkPlan.js";
-import { findApplicationDetails } from '../helpers/employee/findApplication.js';
-import {
+const express = require('express');
+const { prisma } = require('../db.js');
+const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
+const { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } = require('../helpers/cookies.js');
+const { requirePlan } = require('../middleware/checkPlan.js');
+const { findApplicationDetails } = require('../helpers/employee/findApplication.js');
+const {
   getEmployeeById,
   getEmployeeByUserId,
   createEmployeeProfile,
@@ -23,9 +24,9 @@ import {
   getFavoriteJobs,
   checkTalentPoolRecord,
   createTalentPoolRecord
-} from '../helpers/employeeHelpers.js';
+} = require('../helpers/employeeHelpers.js');
 
-const router = Router();
+const router = express.Router();
 
 // GET /employee/:id - Get employee by ID
 router.get('/employee/:id', async (req, res) => {
@@ -602,4 +603,4 @@ router.get('/employee/talent-pool/check', getEmployeeIdFromCookie, async (req, r
   }
 });
 
-export default router;
+module.exports = router;

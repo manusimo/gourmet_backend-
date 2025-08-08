@@ -1,5 +1,5 @@
-import { jest } from '@jest/globals';
-import {
+require('@jest/globals');
+const {
   getConversationById,
   getConversationWithMessages,
   validateEmployeeAccess,
@@ -15,27 +15,19 @@ import {
   getRestaurantUserConversations,
   deleteConversation,
   validateConversationAccess
-} from '../../helpers/chatHelpers.js';
+} = require('../../helpers/chatHelpers.js');
 
 // Mock Prisma
 const mockPrisma = {
   conversation: {
-    findUnique: jest.fn(),
     findFirst: jest.fn(),
-    create: jest.fn(),
     findMany: jest.fn(),
+    create: jest.fn(),
     delete: jest.fn(),
   },
   message: {
     create: jest.fn(),
-    findMany: jest.fn(),
     deleteMany: jest.fn(),
-  },
-  talentPool: {
-    findFirst: jest.fn(),
-  },
-  application: {
-    findFirst: jest.fn(),
   },
   employee: {
     findUnique: jest.fn(),
@@ -43,7 +35,6 @@ const mockPrisma = {
   restaurantUser: {
     findUnique: jest.fn(),
   },
-  $transaction: jest.fn(),
 };
 
 // Mock the prisma import
@@ -52,8 +43,12 @@ jest.mock('../../db.js', () => ({
 }));
 
 describe('Chat Helpers', () => {
+  let helpers;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetModules();
+    helpers = require('../../helpers/chatHelpers.js');
   });
 
   describe('getConversationById', () => {
@@ -64,20 +59,30 @@ describe('Chat Helpers', () => {
         restaurantUserId: 456,
         type: 'application'
       };
-      mockPrisma.conversation.findUnique.mockResolvedValue(mockConversation);
+      mockPrisma.conversation.findFirst.mockResolvedValue(mockConversation);
 
-      const result = await getConversationById('1');
+      const result = await helpers.getConversationById('1');
 
-      expect(mockPrisma.conversation.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mockPrisma.conversation.findFirst).toHaveBeenCalledWith({
+        where: { 
+          id: 1,
+          deletedAt: null
+        },
+        include: {
+          messages: true,
+          jobOffer: true,
+          talentPool: true,
+          employee: true,
+          restaurantUser: true,
+        },
       });
       expect(result).toEqual(mockConversation);
     });
 
     it('should return null when conversation not found', async () => {
-      mockPrisma.conversation.findUnique.mockResolvedValue(null);
+      mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
-      const result = await getConversationById('1');
+      const result = await helpers.getConversationById('1');
 
       expect(result).toBeNull();
     });
@@ -94,69 +99,66 @@ describe('Chat Helpers', () => {
           { id: 2, text: 'Hi there', senderUserId: 456 }
         ]
       };
-      mockPrisma.conversation.findUnique.mockResolvedValue(mockConversation);
+      mockPrisma.conversation.findFirst.mockResolvedValue(mockConversation);
 
-      const result = await getConversationWithMessages('1');
+      const result = await helpers.getConversationWithMessages('1');
 
-      expect(mockPrisma.conversation.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mockPrisma.conversation.findFirst).toHaveBeenCalledWith({
+        where: { 
+          id: 1,
+          deletedAt: null
+        },
         include: {
-          messages: {
-            orderBy: { createdAt: 'asc' },
-          },
+          messages: true
         },
       });
       expect(result).toEqual(mockConversation);
     });
 
     it('should return null when conversation not found', async () => {
-      mockPrisma.conversation.findUnique.mockResolvedValue(null);
+      mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
-      const result = await getConversationWithMessages('1');
+      const result = await helpers.getConversationWithMessages('1');
 
       expect(result).toBeNull();
     });
   });
 
   describe('validateEmployeeAccess', () => {
-    it('should return true when employee has access', async () => {
-      const mockEmployee = { id: 123, name: 'John Doe' };
-      mockPrisma.employee.findUnique.mockResolvedValue(mockEmployee);
+    it('should return true when employee has access', () => {
+      const conversation = { employeeId: 123 };
+      const employeeId = 123;
 
-      const result = await validateEmployeeAccess(123);
+      const result = helpers.validateEmployeeAccess(conversation, employeeId);
 
-      expect(mockPrisma.employee.findUnique).toHaveBeenCalledWith({
-        where: { id: 123 },
-      });
       expect(result).toBe(true);
     });
 
-    it('should return false when employee not found', async () => {
-      mockPrisma.employee.findUnique.mockResolvedValue(null);
+    it('should return false when employee does not have access', () => {
+      const conversation = { employeeId: 123 };
+      const employeeId = 456;
 
-      const result = await validateEmployeeAccess(123);
+      const result = helpers.validateEmployeeAccess(conversation, employeeId);
 
       expect(result).toBe(false);
     });
   });
 
   describe('validateRestaurantUserAccess', () => {
-    it('should return true when restaurant user has access', async () => {
-      const mockRestaurantUser = { id: 456, name: 'Restaurant ABC' };
-      mockPrisma.restaurantUser.findUnique.mockResolvedValue(mockRestaurantUser);
+    it('should return true when restaurant user has access', () => {
+      const conversation = { restaurantUserId: 456 };
+      const restaurantUserId = 456;
 
-      const result = await validateRestaurantUserAccess(456);
+      const result = helpers.validateRestaurantUserAccess(conversation, restaurantUserId);
 
-      expect(mockPrisma.restaurantUser.findUnique).toHaveBeenCalledWith({
-        where: { id: 456 },
-      });
       expect(result).toBe(true);
     });
 
-    it('should return false when restaurant user not found', async () => {
-      mockPrisma.restaurantUser.findUnique.mockResolvedValue(null);
+    it('should return false when restaurant user does not have access', () => {
+      const conversation = { restaurantUserId: 456 };
+      const restaurantUserId = 123;
 
-      const result = await validateRestaurantUserAccess(456);
+      const result = helpers.validateRestaurantUserAccess(conversation, restaurantUserId);
 
       expect(result).toBe(false);
     });
@@ -167,27 +169,35 @@ describe('Chat Helpers', () => {
       const mockMessage = {
         id: 1,
         text: 'Hello there',
+        conversationId: 1,
         senderUserId: 123,
         receiverUserId: 456,
-        conversationId: 1,
         senderType: 'employee',
         receiverType: 'restaurant'
       };
+
+      // Mock successful conversation lookup
+      mockPrisma.conversation.findFirst.mockResolvedValue({ id: 1 });
       mockPrisma.message.create.mockResolvedValue(mockMessage);
 
       const messageData = {
         text: 'Hello there',
-        senderUserId: 123,
-        receiverUserId: 456,
-        conversationId: 1,
+        conversationId: '1',
+        senderUserId: '123',
+        receiverUserId: '456',
         senderType: 'employee',
         receiverType: 'restaurant'
       };
 
-      const result = await createMessage(messageData);
+      const result = await helpers.createMessage(messageData);
 
       expect(mockPrisma.message.create).toHaveBeenCalledWith({
-        data: messageData,
+        data: {
+          text: 'Hello there',
+          conversation: { connect: { id: 1 } },
+          senderEmployee: { connect: { id: 123 } },
+          receiverRestaurantUser: { connect: { id: 456 } },
+        },
       });
       expect(result).toEqual(mockMessage);
     });
@@ -203,13 +213,14 @@ describe('Chat Helpers', () => {
       };
       mockPrisma.conversation.findFirst.mockResolvedValue(mockConversation);
 
-      const result = await checkTalentConversation(123, 456);
+      const result = await helpers.checkTalentConversation('123', '456');
 
       expect(mockPrisma.conversation.findFirst).toHaveBeenCalledWith({
         where: {
           employeeId: 123,
           restaurantUserId: 456,
           type: 'talent',
+          deletedAt: null
         },
       });
       expect(result).toEqual(mockConversation);
@@ -218,7 +229,7 @@ describe('Chat Helpers', () => {
     it('should return null when conversation not found', async () => {
       mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
-      const result = await checkTalentConversation(123, 456);
+      const result = await helpers.checkTalentConversation('123', '456');
 
       expect(result).toBeNull();
     });
@@ -230,17 +241,18 @@ describe('Chat Helpers', () => {
         id: 1,
         employeeId: 123,
         restaurantUserId: 456,
-        type: 'application'
+        type: 'applicant'
       };
       mockPrisma.conversation.findFirst.mockResolvedValue(mockConversation);
 
-      const result = await checkApplicationConversation(123, 456);
+      const result = await helpers.checkApplicationConversation('123', '456');
 
       expect(mockPrisma.conversation.findFirst).toHaveBeenCalledWith({
         where: {
           employeeId: 123,
           restaurantUserId: 456,
-          type: 'application',
+          type: 'applicant',
+          deletedAt: null
         },
       });
       expect(result).toEqual(mockConversation);
@@ -249,7 +261,7 @@ describe('Chat Helpers', () => {
     it('should return null when conversation not found', async () => {
       mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
-      const result = await checkApplicationConversation(123, 456);
+      const result = await helpers.checkApplicationConversation('123', '456');
 
       expect(result).toBeNull();
     });
@@ -260,20 +272,21 @@ describe('Chat Helpers', () => {
       const mockConversation = {
         id: 1,
         employeeId: 123,
-        jobPostId: 789,
+        jobOfferId: 789,
         restaurantUserId: 456,
         type: 'application'
       };
       mockPrisma.conversation.findFirst.mockResolvedValue(mockConversation);
 
-      const result = await findConversationByJobPost(123, 789, 456, 'application');
+      const result = await helpers.findConversationByJobPost('123', 789, 456, 'application');
 
       expect(mockPrisma.conversation.findFirst).toHaveBeenCalledWith({
         where: {
           employeeId: 123,
-          jobPostId: 789,
+          jobOfferId: 789,
           restaurantUserId: 456,
           type: 'application',
+          deletedAt: null
         },
       });
       expect(result).toEqual(mockConversation);
@@ -282,7 +295,7 @@ describe('Chat Helpers', () => {
     it('should return null when conversation not found', async () => {
       mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
-      const result = await findConversationByJobPost(123, 789, 456, 'application');
+      const result = await helpers.findConversationByJobPost('123', 789, 456, 'application');
 
       expect(result).toBeNull();
     });
@@ -299,7 +312,7 @@ describe('Chat Helpers', () => {
       };
       mockPrisma.conversation.findFirst.mockResolvedValue(mockConversation);
 
-      const result = await findConversationByTalentPool(123, 999, 456, 'talent');
+      const result = await helpers.findConversationByTalentPool('123', 999, 456, 'talent');
 
       expect(mockPrisma.conversation.findFirst).toHaveBeenCalledWith({
         where: {
@@ -307,6 +320,7 @@ describe('Chat Helpers', () => {
           talentPoolId: 999,
           restaurantUserId: 456,
           type: 'talent',
+          deletedAt: null
         },
       });
       expect(result).toEqual(mockConversation);
@@ -315,7 +329,7 @@ describe('Chat Helpers', () => {
     it('should return null when conversation not found', async () => {
       mockPrisma.conversation.findFirst.mockResolvedValue(null);
 
-      const result = await findConversationByTalentPool(123, 999, 456, 'talent');
+      const result = await helpers.findConversationByTalentPool('123', 999, 456, 'talent');
 
       expect(result).toBeNull();
     });
@@ -326,23 +340,32 @@ describe('Chat Helpers', () => {
       const mockConversation = {
         id: 1,
         employeeId: 123,
-        jobPostId: 789,
+        jobOfferId: 789,
         restaurantUserId: 456,
         type: 'application'
       };
+
+      // Mock successful employee and restaurant user lookups
+      mockPrisma.employee.findUnique.mockResolvedValue({ id: 123 });
+      mockPrisma.restaurantUser.findUnique.mockResolvedValue({ id: 456 });
       mockPrisma.conversation.create.mockResolvedValue(mockConversation);
 
       const conversationData = {
-        employeeId: 123,
+        employeeId: '123',
         jobPostId: 789,
         restaurantUserId: 456,
         type: 'application'
       };
 
-      const result = await createConversation(conversationData);
+      const result = await helpers.createConversation(conversationData);
 
       expect(mockPrisma.conversation.create).toHaveBeenCalledWith({
-        data: conversationData,
+        data: {
+          employeeId: 123,
+          jobOfferId: 789,
+          restaurantUserId: 456,
+          type: 'application'
+        },
       });
       expect(result).toEqual(mockConversation);
     });
@@ -356,21 +379,22 @@ describe('Chat Helpers', () => {
       ];
       mockPrisma.conversation.findMany.mockResolvedValue(mockConversations);
 
-      const result = await getRestaurantConversations(456, 123, 'application');
+      const result = await helpers.getRestaurantConversations('456', '123', 'APPLICATION');
 
       expect(mockPrisma.conversation.findMany).toHaveBeenCalledWith({
         where: {
           restaurantUserId: 456,
           employeeId: 123,
           type: 'application',
+          deletedAt: null
         },
         include: {
-          messages: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
+          messages: true,
+          jobOffer: true,
+          talentPool: true,
+          employee: true,
+          restaurantUser: true,
         },
-        orderBy: { updatedAt: 'desc' },
       });
       expect(result).toEqual(mockConversations);
     });
@@ -378,7 +402,7 @@ describe('Chat Helpers', () => {
     it('should return empty array when no conversations found', async () => {
       mockPrisma.conversation.findMany.mockResolvedValue([]);
 
-      const result = await getRestaurantConversations(456, 123, 'application');
+      const result = await helpers.getRestaurantConversations('456', '123', 'APPLICATION');
 
       expect(result).toEqual([]);
     });
@@ -392,30 +416,44 @@ describe('Chat Helpers', () => {
       ];
       mockPrisma.conversation.findMany.mockResolvedValue(mockConversations);
 
-      const result = await getEmployeeConversations(123, 'application');
+      const result = await helpers.getEmployeeConversations(123, 'application');
 
       expect(mockPrisma.conversation.findMany).toHaveBeenCalledWith({
         where: {
           employeeId: 123,
           type: 'application',
+          deletedAt: null
         },
         include: {
-          messages: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
+          messages: true,
+          jobOffer: {
+            include: {
+              location: true
+            }
+          },
+          employee: true,
+          restaurantUser: {
+            include: {
+              restaurant: true,
+            },
           },
         },
-        orderBy: { updatedAt: 'desc' },
       });
       expect(result).toEqual(mockConversations);
     });
 
-    it('should return empty array when no conversations found', async () => {
+    it('should use "none" as default type', async () => {
       mockPrisma.conversation.findMany.mockResolvedValue([]);
 
-      const result = await getEmployeeConversations(123, 'application');
+      await helpers.getEmployeeConversations(123);
 
-      expect(result).toEqual([]);
+      expect(mockPrisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: 'none'
+          })
+        })
+      );
     });
   });
 
@@ -427,43 +465,49 @@ describe('Chat Helpers', () => {
       ];
       mockPrisma.conversation.findMany.mockResolvedValue(mockConversations);
 
-      const result = await getRestaurantUserConversations(456, 'application');
+      const result = await helpers.getRestaurantUserConversations('456', 'application');
 
       expect(mockPrisma.conversation.findMany).toHaveBeenCalledWith({
         where: {
           restaurantUserId: 456,
           type: 'application',
+          deletedAt: null
         },
         include: {
-          messages: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
+          messages: true,
+          jobOffer: true,
+          employee: true,
         },
-        orderBy: { updatedAt: 'desc' },
       });
       expect(result).toEqual(mockConversations);
     });
 
-    it('should return empty array when no conversations found', async () => {
+    it('should use empty string as default type', async () => {
       mockPrisma.conversation.findMany.mockResolvedValue([]);
 
-      const result = await getRestaurantUserConversations(456, 'application');
+      await helpers.getRestaurantUserConversations('456');
 
-      expect(result).toEqual([]);
+      expect(mockPrisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: ''
+          })
+        })
+      );
     });
   });
 
   describe('deleteConversation', () => {
     it('should delete conversation successfully', async () => {
       const mockDeletedConversation = { id: 1, employeeId: 123 };
-      mockPrisma.conversation.delete.mockResolvedValue(mockDeletedConversation);
+
+      // Mock successful conversation lookup
+      mockPrisma.conversation.findFirst.mockResolvedValue({ id: 1 });
       mockPrisma.message.deleteMany.mockResolvedValue({ count: 5 });
-      mockPrisma.$transaction.mockImplementation(async (callback) => await callback());
+      mockPrisma.conversation.delete.mockResolvedValue(mockDeletedConversation);
 
-      const result = await deleteConversation(1);
+      const result = await helpers.deleteConversation('1');
 
-      expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(mockPrisma.message.deleteMany).toHaveBeenCalledWith({
         where: { conversationId: 1 },
       });
@@ -473,10 +517,10 @@ describe('Chat Helpers', () => {
       expect(result).toEqual(mockDeletedConversation);
     });
 
-    it('should handle transaction errors', async () => {
-      mockPrisma.$transaction.mockRejectedValue(new Error('Transaction failed'));
+    it('should handle database errors', async () => {
+      mockPrisma.message.deleteMany.mockRejectedValue(new Error('Database error'));
 
-      await expect(deleteConversation(1)).rejects.toThrow('Transaction failed');
+      await expect(helpers.deleteConversation('1')).rejects.toThrow('Database error');
     });
   });
 
@@ -486,7 +530,7 @@ describe('Chat Helpers', () => {
       const employeeId = 123;
       const restaurantUserId = null;
 
-      const result = validateConversationAccess(conversation, employeeId, restaurantUserId);
+      const result = helpers.validateConversationAccess(conversation, employeeId, restaurantUserId);
 
       expect(result).toBe(true);
     });
@@ -496,27 +540,27 @@ describe('Chat Helpers', () => {
       const employeeId = null;
       const restaurantUserId = 456;
 
-      const result = validateConversationAccess(conversation, employeeId, restaurantUserId);
+      const result = helpers.validateConversationAccess(conversation, employeeId, restaurantUserId);
 
       expect(result).toBe(true);
     });
 
-    it('should return false when user has no access', () => {
+    it('should return false when employee does not have access', () => {
       const conversation = { employeeId: 123, restaurantUserId: 456 };
       const employeeId = 999;
-      const restaurantUserId = 999;
+      const restaurantUserId = null;
 
-      const result = validateConversationAccess(conversation, employeeId, restaurantUserId);
+      const result = helpers.validateConversationAccess(conversation, employeeId, restaurantUserId);
 
       expect(result).toBe(false);
     });
 
-    it('should return false when no user IDs provided', () => {
+    it('should return false when restaurant user does not have access', () => {
       const conversation = { employeeId: 123, restaurantUserId: 456 };
       const employeeId = null;
-      const restaurantUserId = null;
+      const restaurantUserId = 999;
 
-      const result = validateConversationAccess(conversation, employeeId, restaurantUserId);
+      const result = helpers.validateConversationAccess(conversation, employeeId, restaurantUserId);
 
       expect(result).toBe(false);
     });

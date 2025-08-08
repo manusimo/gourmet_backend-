@@ -1,12 +1,11 @@
-import { jest } from '@jest/globals';
-import {
+const {
   checkTalentPoolEntry,
   createTalentPoolEntry,
   buildTalentPoolFilters,
   getTalentPoolEntryWithConversations,
   deleteTalentPoolEntry,
-  approveTalentPoolEntry
-} from '../../helpers/poolHelpers.js';
+  approveTalentPoolEntry,
+} = require('../../helpers/poolHelpers.js');
 
 // Mock Prisma
 const mockPrisma = {
@@ -31,8 +30,12 @@ jest.mock('../../db.js', () => ({
 }));
 
 describe('Pool Helpers', () => {
+  let helpers;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.resetModules();
+    helpers = require('../../helpers/poolHelpers.js');
   });
 
   describe('checkTalentPoolEntry', () => {
@@ -40,7 +43,7 @@ describe('Pool Helpers', () => {
       const mockEntry = { id: 1, employeeId: 123, restaurantId: 456 };
       mockPrisma.talentPool.findFirst.mockResolvedValue(mockEntry);
 
-      const result = await checkTalentPoolEntry(123, 456);
+      const result = await helpers.checkTalentPoolEntry(123, 456);
 
       expect(mockPrisma.talentPool.findFirst).toHaveBeenCalledWith({
         where: {
@@ -54,7 +57,7 @@ describe('Pool Helpers', () => {
     it('should return null when talent pool entry not found', async () => {
       mockPrisma.talentPool.findFirst.mockResolvedValue(null);
 
-      const result = await checkTalentPoolEntry(123, 456);
+      const result = await helpers.checkTalentPoolEntry(123, 456);
 
       expect(result).toBeNull();
     });
@@ -63,12 +66,12 @@ describe('Pool Helpers', () => {
       const mockEntry = { id: 1, employeeId: 123, restaurantId: 456 };
       mockPrisma.talentPool.findFirst.mockResolvedValue(mockEntry);
 
-      await checkTalentPoolEntry('123', 456);
+      await helpers.checkTalentPoolEntry('123', '456');
 
       expect(mockPrisma.talentPool.findFirst).toHaveBeenCalledWith({
         where: {
-          employeeId: 123,
-          restaurantId: 456,
+          employeeId: 123,  // employeeId is parsed
+          restaurantId: '456',  // restaurantId is not parsed
         }
       });
     });
@@ -85,7 +88,7 @@ describe('Pool Helpers', () => {
         restaurantUserId: 789
       };
 
-      const result = await createTalentPoolEntry(talentData);
+      const result = await helpers.createTalentPoolEntry(talentData);
 
       expect(mockPrisma.talentPool.create).toHaveBeenCalledWith({
         data: {
@@ -98,23 +101,23 @@ describe('Pool Helpers', () => {
       expect(result).toEqual(mockEntry);
     });
 
-    it('should handle string employeeId by converting to integer', async () => {
-      const mockEntry = { id: 1, employeeId: 123, restaurantId: 456, status: 'accepted' };
+    it('should handle string IDs by converting only employeeId to integer', async () => {
+      const mockEntry = { id: 1, employeeId: 123, restaurantId: '456', status: 'accepted' };
       mockPrisma.talentPool.create.mockResolvedValue(mockEntry);
 
       const talentData = {
         employeeId: '123',
-        restaurantId: 456,
-        restaurantUserId: 789
+        restaurantId: '456',
+        restaurantUserId: '789'
       };
 
-      await createTalentPoolEntry(talentData);
+      await helpers.createTalentPoolEntry(talentData);
 
       expect(mockPrisma.talentPool.create).toHaveBeenCalledWith({
         data: {
-          employee: { connect: { id: 123 } },
-          restaurant: { connect: { id: 456 } },
-          addedByUser: { connect: { id: 789 } },
+          employee: { connect: { id: 123 } },  // employeeId is parsed
+          restaurant: { connect: { id: '456' } },  // restaurantId is not parsed
+          addedByUser: { connect: { id: '789' } },  // restaurantUserId is not parsed
           status: 'accepted',
         }
       });
@@ -132,7 +135,7 @@ describe('Pool Helpers', () => {
         schedule: 'Morning'
       };
 
-      const result = buildTalentPoolFilters(queryParams);
+      const result = helpers.buildTalentPoolFilters(queryParams);
 
       expect(result).toEqual({
         position: 'Chef',
@@ -149,7 +152,7 @@ describe('Pool Helpers', () => {
         region: 'Santiago'
       };
 
-      const result = buildTalentPoolFilters(queryParams);
+      const result = helpers.buildTalentPoolFilters(queryParams);
 
       expect(result).toEqual({
         position: 'Chef',
@@ -160,7 +163,7 @@ describe('Pool Helpers', () => {
     it('should return empty object when no parameters provided', () => {
       const queryParams = {};
 
-      const result = buildTalentPoolFilters(queryParams);
+      const result = helpers.buildTalentPoolFilters(queryParams);
 
       expect(result).toEqual({});
     });
@@ -172,13 +175,29 @@ describe('Pool Helpers', () => {
         region: 'Santiago'
       };
 
-      const result = buildTalentPoolFilters(queryParams);
+      const result = helpers.buildTalentPoolFilters(queryParams);
 
       expect(result).toEqual({
         position: 'Chef',
         region: 'Santiago'
       });
       expect(result.experience).toBeUndefined();
+    });
+
+    it('should pass filter values through without modification', () => {
+      const queryParams = {
+        position: 'CHEF',  // uppercase
+        region: 'santiago',  // lowercase
+        comuna: 'Providencia ',  // trailing space
+      };
+
+      const result = helpers.buildTalentPoolFilters(queryParams);
+
+      expect(result).toEqual({
+        position: 'CHEF',
+        region: 'santiago',
+        comuna: 'Providencia ',
+      });
     });
   });
 
@@ -195,7 +214,7 @@ describe('Pool Helpers', () => {
       };
       mockPrisma.talentPool.findUnique.mockResolvedValue(mockEntry);
 
-      const result = await getTalentPoolEntryWithConversations(1);
+      const result = await helpers.getTalentPoolEntryWithConversations(1);
 
       expect(mockPrisma.talentPool.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -207,9 +226,21 @@ describe('Pool Helpers', () => {
     it('should return null when talent pool entry not found', async () => {
       mockPrisma.talentPool.findUnique.mockResolvedValue(null);
 
-      const result = await getTalentPoolEntryWithConversations(1);
+      const result = await helpers.getTalentPoolEntryWithConversations(1);
 
       expect(result).toBeNull();
+    });
+
+    it('should not parse talentId to integer', async () => {
+      const mockEntry = { id: '1', conversations: [] };
+      mockPrisma.talentPool.findUnique.mockResolvedValue(mockEntry);
+
+      await helpers.getTalentPoolEntryWithConversations('1');
+
+      expect(mockPrisma.talentPool.findUnique).toHaveBeenCalledWith({
+        where: { id: '1' },
+        include: { conversations: true }
+      });
     });
   });
 
@@ -243,7 +274,7 @@ describe('Pool Helpers', () => {
 
       mockPrisma.$transaction.mockImplementation(mockTransaction);
 
-      const result = await deleteTalentPoolEntry(1);
+      const result = await helpers.deleteTalentPoolEntry(1);
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(result).toEqual(mockEntry);
@@ -268,7 +299,7 @@ describe('Pool Helpers', () => {
 
       mockPrisma.$transaction.mockImplementation(mockTransaction);
 
-      await expect(deleteTalentPoolEntry(1)).rejects.toThrow('Talent not found in the pool.');
+      await expect(helpers.deleteTalentPoolEntry(1)).rejects.toThrow('Talent not found in the pool.');
     });
 
     it('should handle empty conversations array', async () => {
@@ -297,9 +328,43 @@ describe('Pool Helpers', () => {
 
       mockPrisma.$transaction.mockImplementation(mockTransaction);
 
-      const result = await deleteTalentPoolEntry(1);
+      const result = await helpers.deleteTalentPoolEntry(1);
 
       expect(result).toEqual(mockEntry);
+    });
+
+    it('should not parse talentId to integer', async () => {
+      const mockEntry = { id: '1', conversations: [] };
+
+      const mockTalentPoolFindUnique = jest.fn().mockResolvedValue(mockEntry);
+      const mockTalentPoolDelete = jest.fn().mockResolvedValue(mockEntry);
+      const mockMessageDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
+      const mockConversationDeleteMany = jest.fn().mockResolvedValue({ count: 0 });
+
+      const mockTransaction = jest.fn(async (callback) => {
+        const tx = {
+          talentPool: {
+            findUnique: mockTalentPoolFindUnique,
+            delete: mockTalentPoolDelete
+          },
+          message: {
+            deleteMany: mockMessageDeleteMany
+          },
+          conversation: {
+            deleteMany: mockConversationDeleteMany
+          }
+        };
+        return await callback(tx);
+      });
+
+      mockPrisma.$transaction.mockImplementation(mockTransaction);
+
+      await helpers.deleteTalentPoolEntry('1');
+
+      expect(mockTalentPoolFindUnique).toHaveBeenCalledWith({
+        where: { id: '1' },
+        include: { conversations: true }
+      });
     });
   });
 
@@ -313,7 +378,7 @@ describe('Pool Helpers', () => {
       };
       mockPrisma.talentPool.update.mockResolvedValue(mockEntry);
 
-      const result = await approveTalentPoolEntry(1, 789);
+      const result = await helpers.approveTalentPoolEntry(1, 789);
 
       expect(mockPrisma.talentPool.update).toHaveBeenCalledWith({
         where: { id: 1 },
@@ -325,7 +390,7 @@ describe('Pool Helpers', () => {
       expect(result).toEqual(mockEntry);
     });
 
-    it('should handle string talentId by converting to integer', async () => {
+    it('should handle string IDs by converting only talentId to integer', async () => {
       const mockEntry = {
         id: 1,
         employeeId: 123,
@@ -334,13 +399,13 @@ describe('Pool Helpers', () => {
       };
       mockPrisma.talentPool.update.mockResolvedValue(mockEntry);
 
-      await approveTalentPoolEntry('1', 789);
+      await helpers.approveTalentPoolEntry('1', '789');
 
       expect(mockPrisma.talentPool.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: 1 },  // talentId is parsed
         data: {
           status: "approved",
-          addedByUser: { connect: { id: 789 } }
+          addedByUser: { connect: { id: '789' } }  // restaurantUserId is not parsed
         }
       });
     });

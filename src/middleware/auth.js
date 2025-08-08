@@ -1,6 +1,6 @@
-import jwt from 'jsonwebtoken';
-import { prisma } from '../db.js';
-import { isTokenBlacklisted } from './security.js';
+const jwt = require('jsonwebtoken');
+const { prisma } = require('../db.js');
+const { isTokenBlacklisted } = require('./security.js');
 
 // ============================================================================
 // TOKEN VALIDATION WITH BLACKLIST CHECK
@@ -9,7 +9,7 @@ import { isTokenBlacklisted } from './security.js';
 /**
  * Enhanced token validation with blacklist checking
  */
-export const validateTokenAndIdentifyUser = async (req, res, next) => {
+const validateTokenAndIdentifyUser = async (req, res, next) => {
   try {
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
@@ -59,9 +59,7 @@ export const validateTokenAndIdentifyUser = async (req, res, next) => {
       select: {
         id: true,
         email: true,
-        userType: true,
-        accountLocked: true,
-        mfaEnabled: true
+        userType: true
       }
     });
 
@@ -70,14 +68,6 @@ export const validateTokenAndIdentifyUser = async (req, res, next) => {
         success: false,
         message: 'User no longer exists',
         error: 'USER_NOT_FOUND'
-      });
-    }
-
-    if (user.accountLocked) {
-      return res.status(423).json({
-        success: false,
-        message: 'Account is locked',
-        error: 'ACCOUNT_LOCKED'
       });
     }
 
@@ -102,7 +92,7 @@ export const validateTokenAndIdentifyUser = async (req, res, next) => {
 /**
  * Optional authentication - doesn't fail if no token provided
  */
-export const optionalAuth = async (req, res, next) => {
+const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -126,12 +116,11 @@ export const optionalAuth = async (req, res, next) => {
         select: {
           id: true,
           email: true,
-          userType: true,
-          accountLocked: true
+          userType: true
         }
       });
 
-      if (user && !user.accountLocked) {
+      if (user) {
         req.userId = decoded.userId;
         req.userEmail = decoded.email;
         req.userType = decoded.userType;
@@ -157,7 +146,7 @@ export const optionalAuth = async (req, res, next) => {
 /**
  * Check if user is an employee
  */
-export const checkEmployee = async (req, res, next) => {
+const checkEmployee = async (req, res, next) => {
   try {
     if (!req.userId) {
       return res.status(401).json({
@@ -193,7 +182,7 @@ export const checkEmployee = async (req, res, next) => {
 /**
  * Check if user is a company/restaurant
  */
-export const checkCompany = async (req, res, next) => {
+const checkCompany = async (req, res, next) => {
   try {
     if (!req.userId) {
       return res.status(401).json({
@@ -229,7 +218,7 @@ export const checkCompany = async (req, res, next) => {
 /**
  * Set user role based on database relationships
  */
-export const setUserRole = async (req, res, next) => {
+const setUserRole = async (req, res, next) => {
   try {
     if (!req.userId) {
       return next();
@@ -268,7 +257,7 @@ export const setUserRole = async (req, res, next) => {
 /**
  * Set user type from token/database
  */
-export const setUserType = (req, res, next) => {
+const setUserType = (req, res, next) => {
   try {
     if (req.userType) {
       req.type = req.userType;
@@ -291,7 +280,7 @@ export const setUserType = (req, res, next) => {
 /**
  * Require specific plan for access
  */
-export const requirePlan = (requiredPlan) => {
+const requirePlan = (requiredPlan) => {
   return async (req, res, next) => {
     try {
       if (!req.userId || !req.restaurantId) {
@@ -341,7 +330,7 @@ export const requirePlan = (requiredPlan) => {
 /**
  * Check location limit based on plan
  */
-export const checkLocationLimit = async (req, res, next) => {
+const checkLocationLimit = async (req, res, next) => {
   try {
     if (!req.restaurantId) {
       return next();
@@ -395,7 +384,7 @@ export const checkLocationLimit = async (req, res, next) => {
 /**
  * Check job offer limit based on plan
  */
-export const checkJobOfferLimit = async (req, res, next) => {
+const checkJobOfferLimit = async (req, res, next) => {
   try {
     if (!req.restaurantId) {
       return next();
@@ -457,7 +446,7 @@ export const checkJobOfferLimit = async (req, res, next) => {
 /**
  * Admin access only
  */
-export const requireAdmin = (req, res, next) => {
+const requireAdmin = (req, res, next) => {
   if (req.userType !== 'admin') {
     return res.status(403).json({
       success: false,
@@ -470,7 +459,7 @@ export const requireAdmin = (req, res, next) => {
 /**
  * Check if user type matches required type
  */
-export const requireUserType = (requiredType) => {
+const requireUserType = (requiredType) => {
   return (req, res, next) => {
     if (req.userType !== requiredType) {
       return res.status(403).json({
@@ -485,7 +474,7 @@ export const requireUserType = (requiredType) => {
 /**
  * Log authentication events for audit trail
  */
-export const logAuthEvent = (event) => {
+const logAuthEvent = (event) => {
   return (req, res, next) => {
     console.log(`🔐 Auth Event: ${event}`, {
       userId: req.userId,
@@ -498,7 +487,7 @@ export const logAuthEvent = (event) => {
   };
 };
 
-export default {
+module.exports = {
   validateTokenAndIdentifyUser,
   optionalAuth,
   checkEmployee,

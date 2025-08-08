@@ -1,6 +1,5 @@
-import { jest } from '@jest/globals';
-import request from 'supertest';
-import express from 'express';
+const request = require('supertest');
+const express = require('express');
 
 // Mock the helpers
 const mockAdminHelpers = {
@@ -30,7 +29,7 @@ jest.mock('../../db.js', () => ({
 }));
 
 // Import the router after mocking
-import adminRouter from '../../routes/admin.route.js';
+const adminRouter = require('../../routes/admin.route.js');
 
 describe('Admin Routes', () => {
   let app;

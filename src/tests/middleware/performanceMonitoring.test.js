@@ -1,5 +1,4 @@
-import { jest } from '@jest/globals';
-import { performanceMonitoring, getPerformanceStats, getHealthStatus } from '../../middleware/performanceMonitoring.js';
+const { performanceMonitoring, getPerformanceStats, getHealthStatus } = require('../../middleware/performanceMonitoring.js');
 
 // Mock performance module
 jest.mock('perf_hooks', () => ({
@@ -17,7 +16,7 @@ describe('Performance Monitoring Middleware', () => {
     jest.clearAllMocks();
     
     // Mock performance.now
-    const { performance } = await import('perf_hooks');
+    const { performance } = await require('perf_hooks');
     mockPerformance = performance;
     
     // Setup request/response mocks

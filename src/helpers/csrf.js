@@ -1,12 +1,10 @@
-import crypto from 'crypto';
+const crypto = require('crypto');
 
-// Function to generate a CSRF token
-export const generateCSRFToken = () => {
+const generateCSRFToken = () => {
     return crypto.randomBytes(32).toString('hex');
 };
 
-// Middleware to verify CSRF token
-export const verifyCSRFToken = (req, res, next) => {
+const verifyCSRFToken = (token, sessionToken) => {
     const csrfTokenFromHeader = req.headers['x-csrf-token'];
     const csrfTokenFromCookie = req.cookies['csrfToken'];
    
@@ -16,5 +14,10 @@ export const verifyCSRFToken = (req, res, next) => {
     }
 
     next();
+};
+
+module.exports = {
+  generateCSRFToken,
+  verifyCSRFToken,
 };
 

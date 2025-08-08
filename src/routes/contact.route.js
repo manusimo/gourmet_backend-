@@ -1,8 +1,8 @@
-import { Router } from 'express';
-import { prisma } from '../db.js';
-import { validateContact } from '../middleware/validation.js';
+const express = require('express');
+const { prisma } = require('../db.js');
+const { validateContact } = require('../middleware/validation.js');
 
-const router = Router();
+const router = express.Router();
 
 // POST /contact - Submit contact form with comprehensive validation
 router.post('/contact', validateContact, async (req, res) => {
@@ -64,4 +64,4 @@ router.post('/contact', validateContact, async (req, res) => {
   }
 });
 
-export default router;
+module.exports = router;

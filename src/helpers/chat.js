@@ -1,4 +1,4 @@
-import { prisma } from '../db.js';
+const { prisma } = require('../db.js');
 
 async function checkJoinAuthorization(req, res, next) {
   const { conversationId, userId } = req.body;
@@ -41,4 +41,4 @@ async function checkSendMessageAuthorization(req, res, next) {
 }
 
 
-export { checkJoinAuthorization, checkSendMessageAuthorization };
+module.exports = { checkJoinAuthorization, checkSendMessageAuthorization };

@@ -1,4 +1,4 @@
-import { prisma } from "../db.js";
+const { prisma } = require("../db.js");
 
 /**
  * Check if talent pool entry exists
@@ -6,7 +6,7 @@ import { prisma } from "../db.js";
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object|null} Talent pool entry or null if not found
  */
-export const checkTalentPoolEntry = async (employeeId, restaurantId) => {
+const checkTalentPoolEntry = async (employeeId, restaurantId) => {
   return await prisma.talentPool.findFirst({
     where: {
       employeeId: parseInt(employeeId),
@@ -20,7 +20,7 @@ export const checkTalentPoolEntry = async (employeeId, restaurantId) => {
  * @param {Object} talentData - Talent pool data
  * @returns {Object} Created talent pool entry
  */
-export const createTalentPoolEntry = async (talentData) => {
+const createTalentPoolEntry = async (talentData) => {
   const { employeeId, restaurantId, restaurantUserId } = talentData;
   
   return await prisma.talentPool.create({
@@ -38,7 +38,7 @@ export const createTalentPoolEntry = async (talentData) => {
  * @param {Object} queryParams - Query parameters
  * @returns {Object} Filter conditions
  */
-export const buildTalentPoolFilters = (queryParams) => {
+const buildTalentPoolFilters = (queryParams) => {
   const { position, experience, region, comuna, available, schedule } = queryParams;
   
   let filter = {};
@@ -56,7 +56,7 @@ export const buildTalentPoolFilters = (queryParams) => {
  * @param {number} talentId - Talent pool entry ID
  * @returns {Object|null} Talent pool entry with conversations or null
  */
-export const getTalentPoolEntryWithConversations = async (talentId) => {
+const getTalentPoolEntryWithConversations = async (talentId) => {
   return await prisma.talentPool.findUnique({
     where: { id: talentId },
     include: { conversations: true }
@@ -68,7 +68,7 @@ export const getTalentPoolEntryWithConversations = async (talentId) => {
  * @param {number} talentId - Talent pool entry ID
  * @returns {Object} Deleted talent pool entry
  */
-export const deleteTalentPoolEntry = async (talentId) => {
+const deleteTalentPoolEntry = async (talentId) => {
   return await prisma.$transaction(async (tx) => {
     const existingEntry = await tx.talentPool.findUnique({
       where: { id: talentId },
@@ -101,7 +101,7 @@ export const deleteTalentPoolEntry = async (talentId) => {
  * @param {number} restaurantUserId - Restaurant user ID
  * @returns {Object} Updated talent pool entry
  */
-export const approveTalentPoolEntry = async (talentId, restaurantUserId) => {
+const approveTalentPoolEntry = async (talentId, restaurantUserId) => {
   return await prisma.talentPool.update({
     where: { id: parseInt(talentId) },
     data: {
@@ -109,4 +109,13 @@ export const approveTalentPoolEntry = async (talentId, restaurantUserId) => {
       addedByUser: { connect: { id: restaurantUserId } }
     }
   });
+}; 
+
+module.exports = {
+  checkTalentPoolEntry,
+  createTalentPoolEntry,
+  buildTalentPoolFilters,
+  getTalentPoolEntryWithConversations,
+  deleteTalentPoolEntry,
+  approveTalentPoolEntry,
 }; 

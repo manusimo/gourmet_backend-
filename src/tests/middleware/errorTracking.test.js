@@ -1,30 +1,48 @@
-import { jest } from '@jest/globals';
-import fs from 'fs';
-import path from 'path';
-import { errorTrackingMiddleware, getErrorStats, searchErrors, Logger } from '../../middleware/errorTracking.js';
+// Mock dependencies
+const mockFs = {
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  appendFile: jest.fn((file, data, callback) => callback()),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn()
+};
 
-// Mock fs module
-jest.mock('fs');
-jest.mock('path');
+const mockPath = {
+  join: jest.fn(),
+  dirname: jest.fn()
+};
+
+jest.mock('fs', () => mockFs);
+jest.mock('path', () => mockPath);
+
+const { errorTrackingMiddleware, getErrorStats, searchErrors, Logger } = require('../../middleware/errorTracking.js');
 
 describe('Error Tracking Middleware', () => {
   let req, res, next;
   let mockError;
+  let now;
 
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
     
-    // Mock path.join
-    path.join.mockReturnValue('/mock/logs/error.log');
+    // Mock path.join to handle both error.log and combined.log
+    mockPath.join.mockImplementation((...args) => {
+      if (args.includes('combined.log')) {
+        return '/mock/logs/combined.log';
+      }
+      return '/mock/logs/error.log';
+    });
+    mockPath.dirname.mockReturnValue('/mock/logs');
     
     // Mock fs operations
-    fs.existsSync.mockReturnValue(true);
-    fs.mkdirSync.mockImplementation();
-    fs.appendFile.mockImplementation((file, data, callback) => {
-      if (callback) callback();
-    });
-
+    mockFs.existsSync.mockReturnValue(true);
+    mockFs.readFileSync.mockReturnValue('[]');
+    
+    // Mock Date.now for consistent testing
+    now = 1000000000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    
     // Mock process
     global.process.pid = 12345;
     global.process.memoryUsage = jest.fn(() => ({
@@ -56,6 +74,15 @@ describe('Error Tracking Middleware', () => {
     mockError = new Error('Test error message');
     mockError.status = 500;
     mockError.stack = 'Error: Test error\n    at test.js:1:1';
+
+    // Mock console methods
+    jest.spyOn(console, 'log').mockImplementation();
+    jest.spyOn(console, 'error').mockImplementation();
+    jest.spyOn(console, 'warn').mockImplementation();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('errorTrackingMiddleware', () => {
@@ -118,7 +145,7 @@ describe('Error Tracking Middleware', () => {
       errorTrackingMiddleware(mockError, req, res, next);
 
       // The password and token should be redacted in logs
-      expect(fs.appendFile).toHaveBeenCalled();
+      expect(mockFs.appendFile).toHaveBeenCalled();
     });
 
     test('should sanitize sensitive headers', () => {
@@ -131,7 +158,7 @@ describe('Error Tracking Middleware', () => {
 
       errorTrackingMiddleware(mockError, req, res, next);
 
-      expect(fs.appendFile).toHaveBeenCalled();
+      expect(mockFs.appendFile).toHaveBeenCalled();
     });
 
     test('should track critical errors separately', () => {
@@ -213,13 +240,13 @@ describe('Error Tracking Middleware', () => {
     test('should write logs to files', () => {
       Logger.error('Test error');
 
-      expect(fs.appendFile).toHaveBeenCalledWith(
+      expect(mockFs.appendFile).toHaveBeenCalledWith(
         expect.stringContaining('error.log'),
         expect.any(String),
         expect.any(Function)
       );
 
-      expect(fs.appendFile).toHaveBeenCalledWith(
+      expect(mockFs.appendFile).toHaveBeenCalledWith(
         expect.stringContaining('combined.log'),
         expect.any(String),
         expect.any(Function)
@@ -231,7 +258,7 @@ describe('Error Tracking Middleware', () => {
       
       Logger.error('Test error with metadata', metadata);
 
-      expect(fs.appendFile).toHaveBeenCalledWith(
+      expect(mockFs.appendFile).toHaveBeenCalledWith(
         expect.any(String),
         expect.stringContaining('userId'),
         expect.any(Function)

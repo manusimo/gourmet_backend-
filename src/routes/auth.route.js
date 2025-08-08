@@ -1,25 +1,23 @@
-import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { prisma } from '../db.js';
-import { 
-  checkEmployee, 
-  checkCompany, 
-  setUserRole, 
-  setUserType, 
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { prisma } = require('../db.js');
+const {
+  checkEmployee,
+  checkCompany,
+  setUserRole,
+  setUserType,
   validateTokenAndIdentifyUser,
   optionalAuth
-} from '../middleware/auth.js';
-import { 
-  validateSignup, 
-  validateSignin, 
+} = require('../middleware/auth.js');
+const {
+  validateSignup,
+  validateSignin,
   validateUserId,
   validatePasswordReset,
   validatePasswordResetConfirm
-} from "../middleware/validation.js";
-
-// Import new security functions
-import {
+} = require('../middleware/validation.js');
+const {
   recordFailedAttempt,
   isAccountLocked,
   resetAccountLockout,
@@ -29,9 +27,9 @@ import {
   generateMFAQRCode,
   verifyMFAToken,
   enhancedSecurityMiddleware
-} from '../middleware/security.js';
+} = require('../middleware/security.js');
 
-const router = Router();
+const router = express.Router();
 
 // Apply enhanced security middleware to all auth routes
 router.use(enhancedSecurityMiddleware);
@@ -86,10 +84,10 @@ router.post('/signup', validateSignup, async (req, res) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: newUser.id, 
-        email: newUser.email, 
-        userType: newUser.userType 
+      {
+        userId: newUser.id,
+        email: newUser.email,
+        userType: newUser.userType
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -109,7 +107,7 @@ router.post('/signup', validateSignup, async (req, res) => {
 
   } catch (error) {
     console.error('Signup error:', error);
-    
+
     if (error.code === 'P2002') {
       return res.status(409).json({
         success: false,
@@ -168,11 +166,11 @@ router.post('/signin', validateSignin, async (req, res) => {
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    
+
     if (!isPasswordValid) {
       // Record failed attempt
       const lockoutData = recordFailedAttempt(user.id);
-      
+
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
@@ -196,7 +194,7 @@ router.post('/signin', validateSignin, async (req, res) => {
       if (!isMFAValid) {
         // Record failed attempt for invalid MFA
         recordFailedAttempt(user.id);
-        
+
         return res.status(403).json({
           success: false,
           message: 'Invalid MFA token'
@@ -215,10 +213,10 @@ router.post('/signin', validateSignin, async (req, res) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
-        userId: user.id, 
-        email: user.email, 
-        userType: user.userType 
+      {
+        userId: user.id,
+        email: user.email,
+        userType: user.userType
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -290,7 +288,7 @@ router.post('/mfa/setup', validateTokenAndIdentifyUser, async (req, res) => {
     // Store secret temporarily (user needs to confirm setup)
     await prisma.user.update({
       where: { id: userId },
-      data: { 
+      data: {
         mfaSecret: mfaData.secret,
         mfaBackupCodes: JSON.stringify(mfaData.backupCodes)
       }
@@ -431,7 +429,7 @@ router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
     // Disable MFA
     await prisma.user.update({
       where: { id: userId },
-      data: { 
+      data: {
         mfaEnabled: false,
         mfaSecret: null,
         mfaBackupCodes: null
@@ -466,7 +464,7 @@ router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
 router.post('/logout', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (token) {
       // Add token to blacklist
       invalidateToken(token);
@@ -709,4 +707,4 @@ router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req
 router.use(setUserRole);
 router.use(setUserType);
 
-export default router;
+module.exports = router;

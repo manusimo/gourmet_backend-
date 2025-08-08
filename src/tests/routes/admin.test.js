@@ -1,19 +1,26 @@
-import { jest } from '@jest/globals';
-import request from 'supertest';
-import express from 'express';
-import adminRouter from '../../routes/admin.route.js';
+const request = require('supertest');
+const express = require('express');
+const adminRouter = require('../../routes/admin.route.js');
 
 // Mock all monitoring modules
 jest.mock('../../middleware/ddosMonitoring.js');
 jest.mock('../../middleware/performanceMonitoring.js');
 jest.mock('../../middleware/errorTracking.js');
-jest.mock('../../db.js');
+// Provide a full mock for prisma with required nested structure
+jest.mock('../../db.js', () => ({
+  prisma: {
+    restaurant: {},
+    employee: {},
+    jobOffer: {},
+    application: {},
+  },
+}));
 
 // Import mocked modules
-import { getMonitoringStats, resetMonitoring } from '../../middleware/ddosMonitoring.js';
-import { getPerformanceStats, getHealthStatus } from '../../middleware/performanceMonitoring.js';
-import { getErrorStats, searchErrors } from '../../middleware/errorTracking.js';
-import { prisma } from '../../db.js';
+const { getMonitoringStats, resetMonitoring } = require('../../middleware/ddosMonitoring.js');
+const { getPerformanceStats, getHealthStatus } = require('../../middleware/performanceMonitoring.js');
+const { getErrorStats, searchErrors } = require('../../middleware/errorTracking.js');
+const { prisma } = require('../../db.js');
 
 describe('Admin Routes', () => {
   let app;
@@ -28,10 +35,10 @@ describe('Admin Routes', () => {
     app.use('/api/admin', adminRouter);
 
     // Mock Prisma queries
-    prisma.restaurant.count.mockResolvedValue(45);
-    prisma.employee.count.mockResolvedValue(234);
-    prisma.jobOffer.count.mockResolvedValue(89);
-    prisma.application.count.mockResolvedValue(156);
+    prisma.restaurant.count = jest.fn().mockResolvedValue(45);
+    prisma.employee.count = jest.fn().mockResolvedValue(234);
+    prisma.jobOffer.count = jest.fn().mockResolvedValue(89);
+    prisma.application.count = jest.fn().mockResolvedValue(156);
 
     // Mock monitoring functions
     getMonitoringStats.mockReturnValue({

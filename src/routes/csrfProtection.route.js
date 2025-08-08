@@ -1,7 +1,7 @@
-import { Router } from 'express';
-import { generateCSRFToken, verifyCSRFToken } from '../helpers/csrf.js';
+const express = require('express');
+const { generateCSRFToken, verifyCSRFToken } = require('../helpers/csrf.js');
 
-const router = Router();
+const router = express.Router();
 
 router.get('/csrf-token', (req, res) => {
     const csrfToken = generateCSRFToken();
@@ -16,5 +16,5 @@ router.get('/csrf-token', (req, res) => {
 });
 
 
-export default router;
+module.exports = router;
 

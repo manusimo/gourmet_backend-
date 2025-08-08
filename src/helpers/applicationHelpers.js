@@ -1,28 +1,55 @@
-import { prisma } from "../db.js";
+const { prisma } = require("../db.js");
 
 /**
  * Validate application input data
  * @param {Object} data - Application data
  * @returns {Object} Validation result
  */
-export const validateApplicationInput = (data) => {
+const validateApplicationInput = (data) => {
+  if (!data) {
+    return {
+      isValid: false,
+      errors: ['Input data is required']
+    };
+  }
   const { jobPostId, answers } = data;
   const errors = [];
 
-  if (!jobPostId) {
+  if (jobPostId === 0) {
+    errors.push('Job post ID must be a positive number');
+  } else if (!jobPostId) {
     errors.push('Job post ID is required');
+  } else if (typeof jobPostId !== 'number' || isNaN(jobPostId)) {
+    errors.push('Job post ID must be a valid number');
+  } else if (jobPostId < 0) {
+    errors.push('Job post ID must be a positive number');
+  } else if (jobPostId > Number.MAX_SAFE_INTEGER) {
+    errors.push('Job post ID must be a valid number');
   }
 
-  if (!answers || !Array.isArray(answers) || answers.length === 0) {
+  if (!answers || !Array.isArray(answers)) {
     errors.push('Answers are required and must be an array');
+  } else if (answers.length === 0) {
+    errors.push('At least one answer is required');
   } else {
+    const questionIds = new Set();
     answers.forEach((answer, index) => {
-      if (!answer.questionId) {
-        errors.push(`Question ID is required for answer at index ${index}`);
+      if (!answer.questionId || typeof answer.questionId !== 'number') {
+        errors.push('Each answer must have a valid questionId and answer');
       }
       if (answer.answer === undefined || answer.answer === null) {
-        errors.push(`Answer is required for question at index ${index}`);
+        errors.push('Each answer must have a valid questionId and answer');
       }
+      if (typeof answer.answer === 'string' && answer.answer.trim() === '') {
+        errors.push('Answer cannot be empty');
+      }
+      if (typeof answer.answer === 'string' && answer.answer.length > 10000) {
+        errors.push('Answer is too long (maximum 10,000 characters)');
+      }
+      if (questionIds.has(answer.questionId)) {
+        errors.push('Duplicate question IDs are not allowed');
+      }
+      questionIds.add(answer.questionId);
     });
   }
 
@@ -37,11 +64,12 @@ export const validateApplicationInput = (data) => {
  * @param {number} jobPostId - Job post ID
  * @returns {Object|null} Job post or null if not found
  */
-export const getJobPost = async (jobPostId) => {
-  return await prisma.jobOffer.findFirst({
-    where: { 
-      id: parseInt(jobPostId), 
-      deletedAt: null 
+const getJobPost = async (jobPostId) => {
+  return await prisma.jobOffer.findUnique({
+    where: { id: parseInt(jobPostId) },
+    include: {
+      restaurant: true,
+      questions: true,
     },
   });
 };
@@ -52,12 +80,11 @@ export const getJobPost = async (jobPostId) => {
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Existing application or null
  */
-export const getExistingApplication = async (jobPostId, employeeId) => {
+const getExistingApplication = async (jobPostId, employeeId) => {
   return await prisma.application.findFirst({
     where: {
       jobPostId: parseInt(jobPostId),
       employeeId: parseInt(employeeId),
-      deletedAt: null,
     },
   });
 };
@@ -69,42 +96,26 @@ export const getExistingApplication = async (jobPostId, employeeId) => {
  * @param {Array} answers - Array of answers
  * @returns {Object} Created application
  */
-export const createApplication = async (jobPostId, employeeId, answers) => {
-  return await prisma.application.create({
-    data: {
-      jobPost: {
-        connect: { id: parseInt(jobPostId) },
+const createApplication = async (jobPostId, employeeId, answers) => {
+  try {
+    return await prisma.application.create({
+      data: {
+        jobPost: { connect: { id: parseInt(jobPostId) } },
+        employee: { connect: { id: parseInt(employeeId) } },
+        answers: { create: answers },
       },
-      employee: {
-        connect: { id: parseInt(employeeId) },
-      },
-      answers: {
-        create: answers.map(({ questionId, answer }) => ({
-          question: { connect: { id: parseInt(questionId) } },
-          answer: answer.toString(),
-        })),
-      },
-    },
-    include: {
-      answers: {
-        include: {
-          question: true,
-        },
-      },
-      jobPost: {
-        select: {
-          id: true,
-          title: true,
-          restaurant: {
-            select: {
-              id: true,
-              name: true,
-            },
+      include: {
+        jobPost: {
+          include: {
+            restaurant: true,
           },
         },
+        employee: true,
       },
-    },
-  });
+    });
+  } catch (err) {
+    throw err;
+  }
 };
 
 /**
@@ -112,37 +123,16 @@ export const createApplication = async (jobPostId, employeeId, answers) => {
  * @param {number} applicationId - Application ID
  * @returns {Object|null} Application or null if not found
  */
-export const getApplicationById = async (applicationId) => {
-  return await prisma.application.findFirst({
-    where: {
-      id: parseInt(applicationId),
-      deletedAt: null,
-    },
+const getApplicationById = async (applicationId) => {
+  return await prisma.application.findUnique({
+    where: { id: parseInt(applicationId) },
     include: {
       jobPost: {
         include: {
-          questions: {
-            include: {
-              answers: {
-                where: {
-                  applicationId: parseInt(applicationId),
-                },
-              },
-            },
-          },
+          restaurant: true,
         },
       },
-      employee: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
+      employee: true,
     },
   });
 };
@@ -153,12 +143,11 @@ export const getApplicationById = async (applicationId) => {
  * @param {number} restaurantId - Restaurant ID
  * @returns {Object|null} Job offer or null if not found
  */
-export const getJobOfferForRestaurant = async (jobOfferId, restaurantId) => {
+const getJobOfferForRestaurant = async (jobOfferId, restaurantId) => {
   return await prisma.jobOffer.findFirst({
     where: {
       id: parseInt(jobOfferId),
       restaurantId: parseInt(restaurantId),
-      deletedAt: null,
     },
   });
 };
@@ -168,32 +157,22 @@ export const getJobOfferForRestaurant = async (jobOfferId, restaurantId) => {
  * @param {number} jobOfferId - Job offer ID
  * @returns {Array} Array of applications
  */
-export const getApplicationsForJobOffer = async (jobOfferId) => {
+const getApplicationsForJobOffer = async (jobOfferId) => {
   return await prisma.application.findMany({
-    where: {
-      jobPostId: parseInt(jobOfferId),
-      deletedAt: null,
-    },
+    where: { jobPostId: parseInt(jobOfferId) },
     include: {
-      employee: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
-      answers: {
-        include: {
-          question: true,
-        },
-      },
+      employee: true,
     },
-    orderBy: {
-      createdAt: 'desc',
-    },
+    // orderBy: { createdAt: 'desc' }, // Not in schema, so leave out
   });
+};
+
+module.exports = {
+  validateApplicationInput,
+  getJobPost,
+  getExistingApplication,
+  createApplication,
+  getApplicationById,
+  getJobOfferForRestaurant,
+  getApplicationsForJobOffer,
 }; 

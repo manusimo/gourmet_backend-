@@ -1,17 +1,17 @@
-import Router from "express";
-import { checkCompany, setUserRole } from '../helpers/authenticateToken.js';
-import { getUserIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } from '../helpers/cookies.js';
-import { getTalentPool } from "../helpers/pool.js";
-import {
+const express = require('express');
+const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
+const { getUserIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
+const { getTalentPool } = require('../helpers/pool.js');
+const {
   checkTalentPoolEntry,
   createTalentPoolEntry,
   buildTalentPoolFilters,
   getTalentPoolEntryWithConversations,
   deleteTalentPoolEntry,
   approveTalentPoolEntry
-} from '../helpers/poolHelpers.js';
+} = require('../helpers/poolHelpers.js');
 
-const router = Router();
+const router = express.Router();
 
 // GET /talent-pool/check - Check if talent pool entry exists
 router.get('/talent-pool/check', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
@@ -160,4 +160,4 @@ router.patch('/talent-pool/:id/approve', checkCompany, getRestaurantIdFromCookie
   }
 });
 
-export default router;
+module.exports = router;

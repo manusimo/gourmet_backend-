@@ -1,15 +1,15 @@
-import Router from "express";
-import { checkCompany, checkEmployee } from '../helpers/authenticateToken.js';
-import { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } from '../helpers/cookies.js';
-import { buildFilters, buildSearchConditions } from '../helpers/filterHelpers.js';
-import { checkJobOfferLimit } from '../middleware/checkPlan.js';
-import {
+const express = require('express');
+const { checkCompany, checkEmployee } = require('../helpers/authenticateToken.js');
+const { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } = require('../helpers/cookies.js');
+const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
+const { checkJobOfferLimit } = require('../middleware/checkPlan.js');
+const {
   fetchTopRatedJobs,
   fetchJobsByNameAndLocation,
   softDeleteJobCascade,
   updateJobOffer,
-} from '../helpers/jobs.js';
-import {
+} = require('../helpers/jobs.js');
+const {
   createJobOffer,
   getJobOfferWithLocation,
   generateJobPlanInfo,
@@ -22,9 +22,9 @@ import {
   getRestaurantUserWithDetails,
   getRestaurantWithLocations,
   generateCompletePlanInfo
-} from '../helpers/jobHelpers.js';
+} = require('../helpers/jobHelpers.js');
 
-const router = Router();
+const router = express.Router();
 
 // POST /job - Create job offer
 router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, checkJobOfferLimit(), async (req, res) => {
@@ -393,4 +393,4 @@ router.get('/my-plan-info', checkCompany, getRestaurantUserIdFromCookie, async (
   }
 });
 
-export default router;
+module.exports = router;

@@ -1,7 +1,7 @@
-import { prisma } from '../db.js';
+const { prisma } = require('../db.js');
 
 // Middleware para filtrar rutas según el plan del usuario (solo para restaurantes/empresas)
-export function requirePlan(plans = []) {
+function requirePlan(plans = []) {
   return async (req, res, next) => {
     try {
       // Solo verificar planes para usuarios de restaurantes
@@ -64,7 +64,7 @@ export function requirePlan(plans = []) {
 }
 
 // Middleware para verificar límites de job offers según el plan (solo para restaurantes/empresas)
-export function checkJobOfferLimit() {
+function checkJobOfferLimit() {
   return async (req, res, next) => {
     try {
       // Solo verificar límites para usuarios de restaurantes
@@ -157,7 +157,7 @@ export function checkJobOfferLimit() {
 }
 
 // Middleware para verificar límites de ubicaciones según el plan
-export function checkLocationLimit() {
+function checkLocationLimit() {
   return async (req, res, next) => {
     try {
       // Obtener el userId del request (para creación de restaurantes)
@@ -241,3 +241,9 @@ export function checkLocationLimit() {
     }
   };
 } 
+
+module.exports = {
+  requirePlan,
+  checkLocationLimit,
+  checkJobOfferLimit,
+}; 
