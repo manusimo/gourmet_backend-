@@ -42,8 +42,14 @@ const createJobOffer = async (jobData) => {
     functions,
     tips,
     questions: { create: questions },
-    restaurantUser: { connect: { id: restaurantUserId } },
   };
+  
+  // Only connect restaurantUser if restaurantUserId is provided (for staff members)
+  // Restaurant owners don't have restaurantUserId
+  if (restaurantUserId) {
+    data.restaurantUser = { connect: { id: restaurantUserId } };
+  }
+  
   if (!isNaN(parsedVacancies)) data.vacancies = parsedVacancies;
   // yearsOfExperience: always present, number or null
   data.yearsOfExperience = isNaN(parsedYearsOfExperience) ? null : parsedYearsOfExperience;

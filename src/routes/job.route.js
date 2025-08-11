@@ -1,6 +1,7 @@
 const express = require('express');
+const { prisma } = require('../db.js');
 const { checkCompany, checkEmployee } = require('../helpers/authenticateToken.js');
-const { getUserIdFromCookie, getRestaurantIdFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } = require('../helpers/cookies.js');
+const { getUserIdFromCookie, getAuthFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } = require('../helpers/cookies.js');
 const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
 const { checkJobOfferLimit } = require('../middleware/checkPlan.js');
 const {
@@ -27,7 +28,7 @@ const {
 const router = express.Router();
 
 // POST /job - Create job offer
-router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, checkJobOfferLimit(), async (req, res) => {
+router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCookie, checkJobOfferLimit(), async (req, res) => {
   try {
     const {
       position,
@@ -77,20 +78,10 @@ router.post('/job', checkCompany, getRestaurantIdFromCookie, getRestaurantUserId
 
     console.log('this is the job offer', jobOfferCheck);
 
-    // Calcular ofertas restantes
-    const remainingJobOffers = req.remainingJobOffers - 1;
-
-    const planInfo = generateJobPlanInfo({
-      paymentStatus: req.user.payment_status,
-      remainingJobOffers,
-      jobOfferLimit: req.jobOfferLimit
-    });
-
     res.status(201).json({
       success: true,
       message: 'Job offer created successfully',
-      data: jobOffer,
-      planInfo
+      data: jobOffer
     });
   } catch (error) {
     console.error('Error creating job offer:', error);
@@ -113,9 +104,9 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
 
     formattedJobs = await fetchJobsByNameAndLocation(jobName, location, null, finishedDateParsed);
 
-    res.status(200).json({
+    res.json({
       success: true,
-      data: formattedJobs,
+      data: formattedJobs, // Use consistent 'data' property
     });
   } catch (error) {
     console.error('Error fetching recommended jobs:', error);
@@ -140,7 +131,7 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: formattedJobs,
+      data: formattedJobs, // Use consistent 'data' property
     });
   } catch (error) {
     console.error('Error fetching top-rated jobs:', error);
@@ -152,7 +143,7 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
 });
 
 // PATCH /job/:id - Update job offer
-router.patch('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+router.patch('/job/:id', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
     const jobId = parseInt(req.params.id, 10);
     const updated = await updateJobOffer(jobId, req.restaurantId, req.body);
@@ -275,7 +266,7 @@ router.get('/jobs', async (req, res) => {
 });
 
 // GET /jobs/restaurant - Get restaurant job offers
-router.get('/jobs/restaurant', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+router.get('/jobs/restaurant', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
     const restaurantId = req.restaurantId;
     const jobOffers = await getRestaurantJobOffers(restaurantId);
@@ -326,7 +317,7 @@ router.get('/jobs/:jobId', async (req, res) => {
 });
 
 // DELETE /job/:id - Delete job offer
-router.delete('/job/:id', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+router.delete('/job/:id', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
     const jobId = parseInt(req.params.id, 10);
     const restaurantId = req.restaurantId;

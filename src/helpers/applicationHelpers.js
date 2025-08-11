@@ -130,6 +130,16 @@ const getApplicationById = async (applicationId) => {
       jobPost: {
         include: {
           restaurant: true,
+          location: true,
+          questions: {
+            include: {
+              answers: {
+                where: {
+                  applicationId: parseInt(applicationId)
+                }
+              }
+            }
+          }
         },
       },
       employee: true,

@@ -147,7 +147,7 @@ app.use(cors(corsOptions));
 // General rate limiting with enhanced security
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
+  max: 1000, // Increased from 100 to 1000 requests per window for development
   message: { 
     success: false, 
     error: 'Too many requests, please try again later' 
@@ -155,8 +155,8 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health' || req.path === '/api/health';
+    // Skip rate limiting for health checks and development
+    return req.path === '/health' || req.path === '/api/health' || process.env.NODE_ENV === 'development';
   },
   onLimitReached: (req, res) => {
     Logger.warn('Rate limit exceeded', {

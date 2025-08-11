@@ -118,8 +118,13 @@ const getTotalCompaniesCount = async () => {
  * @returns {Array} Array of talent applications
  */
 const getTalentsApplications = async (restaurantId) => {
-  return await prisma.talentPool.findMany({
-    where: { restaurantId: Number(restaurantId) },
+  console.log('🔍 getTalentsApplications called with restaurantId:', restaurantId);
+  
+  const result = await prisma.talentPool.findMany({
+    where: { 
+      restaurantId: Number(restaurantId),
+      status: 'pendent'  // Only get applications with 'pendent' status
+    },
     include: {
       employee: {
         include: {
@@ -129,6 +134,11 @@ const getTalentsApplications = async (restaurantId) => {
       },
     },
   });
+  
+  console.log('🔍 getTalentsApplications found:', result.length, 'applications');
+  console.log('🔍 Applications:', result);
+  
+  return result;
 };
 
 /**
@@ -157,7 +167,8 @@ const createCompanyProfile = async (companyData) => {
     userId
   } = companyData;
 
-  return await prisma.restaurant.create({
+  // Create restaurant first
+  const restaurant = await prisma.restaurant.create({
     data: {
       name,
       specialty,
@@ -176,6 +187,22 @@ const createCompanyProfile = async (companyData) => {
       user: { connect: { id: userId } },
     },
   });
+
+  // Create locations separately if they exist
+  if (locations && locations.length > 0) {
+    const locationData = locations.map(location => ({
+      address: location.address || '',
+      latitude: location.latitude ? parseFloat(location.latitude) : 0,
+      longitude: location.longitude ? parseFloat(location.longitude) : 0,
+      restaurantId: restaurant.id
+    }));
+
+    await prisma.location.createMany({
+      data: locationData
+    });
+  }
+
+  return restaurant;
 };
 
 /**

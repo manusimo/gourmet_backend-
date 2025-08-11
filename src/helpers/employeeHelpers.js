@@ -294,29 +294,55 @@ const getEmployeeWithDetails = async (employeeId) => {
 const searchEmployees = async (searchFilters) => {
   const { position, experience, region, comuna, available, schedule } = searchFilters;
   
+  // Build where conditions dynamically based on provided filters
+  const whereConditions = {};
+  
+  if (position && position.trim() !== '') {
+    whereConditions.position = {
+      contains: position,
+      mode: 'insensitive',
+    };
+  }
+  
+  if (region && region.trim() !== '') {
+    whereConditions.region = {
+      contains: region,
+      mode: 'insensitive',
+    };
+  }
+  
+  if (comuna && comuna.trim() !== '') {
+    whereConditions.comuna = {
+      contains: comuna,
+      mode: 'insensitive',
+    };
+  }
+  
+  if (available && available.trim() !== '') {
+    whereConditions.available = {
+      contains: available,
+      mode: 'insensitive',
+    };
+  }
+  
+  if (schedule && schedule.trim() !== '') {
+    whereConditions.schedule = {
+      contains: schedule,
+      mode: 'insensitive',
+    };
+  }
+  
+  if (experience && experience.trim() !== '') {
+    whereConditions.yearsOfExperience = {
+      contains: experience,
+      mode: 'insensitive',
+    };
+  }
+  
+  console.log('🔍 Search where conditions:', whereConditions);
+  
   return await prisma.employee.findMany({
-    where: {
-      position: {
-        contains: position,
-        mode: 'insensitive',
-      },
-      region: {
-        contains: region,
-        mode: 'insensitive',
-      },
-      comuna: {
-        contains: comuna,
-        mode: 'insensitive',
-      },
-      available: {
-        contains: available,
-        mode: 'insensitive',
-      },
-      schedule: {
-        contains: schedule,
-        mode: 'insensitive',
-      },
-    },
+    where: whereConditions,
     include: {
       user: true,
       experiences: true,

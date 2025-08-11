@@ -32,29 +32,35 @@ const router = express.Router();
 router.get('/employee/:id', async (req, res) => {
   try {
     const employeeId = parseInt(req.params.id, 10);
+    console.log('🔍 GET /employee/:id - Requested employee ID:', employeeId);
 
     if (isNaN(employeeId)) {
+      console.log('❌ Invalid employee ID:', req.params.id);
       return res.status(400).json({ 
         success: false,
         error: 'Invalid employee ID' 
       });
     }
 
+    console.log('🔍 Fetching employee profile for ID:', employeeId);
     const employeeProfile = await getEmployeeById(employeeId);
+    console.log('🔍 Employee profile found:', employeeProfile ? 'Yes' : 'No');
 
     if (!employeeProfile) {
+      console.log('❌ Employee profile not found for ID:', employeeId);
       return res.status(404).json({ 
         success: false,
         error: 'Employee profile not found' 
       });
     }
 
+    console.log('✅ Employee profile found, returning data');
     res.status(200).json({ 
       success: true,
       data: employeeProfile 
     });
   } catch (error) {
-    console.error('Error fetching employee profile:', error.message);
+    console.error('❌ Error fetching employee profile:', error.message);
     res.status(500).json({ 
       success: false,
       error: 'Internal Server Error' 
@@ -332,7 +338,7 @@ router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req
 });
 
 // GET /employees/search - Search employees
-router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, requirePlan(['plus', 'premium']), async (req, res) => {
+router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     console.log('Here we start the search');
     const { position, experience, region, comuna, available, schedule } = req.query;

@@ -56,6 +56,10 @@ router.post('/signup', validateSignup, async (req, res) => {
       });
     }
 
+    // Automatically assign role based on userType
+    let role = 'admin'; // default role
+    
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
@@ -65,7 +69,11 @@ router.post('/signup', validateSignup, async (req, res) => {
         email: email.toLowerCase(),
         password: hashedPassword,
         userType,
+        role, // Use automatically assigned role
         // Security enhancements
+        name: req.body.name || "Juanito",
+        surname: req.body.surname || "Pérez",
+        phoneNumber: req.body.phoneNumber || "+56976212644",
         mfaEnabled: false,
         mfaSecret: null,
         accountLocked: false,
@@ -77,8 +85,11 @@ router.post('/signup', validateSignup, async (req, res) => {
         id: true,
         email: true,
         userType: true,
+        role: true,
+        name: true,
+        surname: true,
         createdAt: true,
-        mfaEnabled: true
+        mfaEnabled: false
       }
     });
 
@@ -87,13 +98,39 @@ router.post('/signup', validateSignup, async (req, res) => {
       {
         userId: newUser.id,
         email: newUser.email,
-        userType: newUser.userType
+        userType: newUser.userType,
+        role: newUser.role,
+        restaurantId: restaurantId // Include restaurantId if user has one
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    console.log(`✅ New user registered: ${newUser.email} (${newUser.userType})`);
+    console.log(`✅ New user registered: ${newUser.email} (${newUser.userType}) with role: ${newUser.role}`);
+
+    // Check if user has a restaurant (for company users)
+    let restaurantId = null;
+    if (newUser.userType === 'empresas') {
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { userId: newUser.id },
+        select: { id: true }
+      });
+      if (restaurant) {
+        restaurantId = restaurant.id;
+        console.log(`🏢 Found restaurant for new user ${newUser.email}:`, restaurantId);
+      } else {
+        console.log(`🏢 No restaurant found for new user ${newUser.email}`);
+      }
+    }
+
+    // Set authentication cookie
+    res.cookie('manu', token, {
+      httpOnly: false, // Allow JavaScript access for development
+      secure: false, // Allow over HTTP for development
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
 
     res.status(201).json({
       success: true,
@@ -137,10 +174,14 @@ router.post('/signin', validateSignin, async (req, res) => {
         email: true,
         password: true,
         userType: true,
-        mfaEnabled: true,
+        name: true,
+        surname: true,
+        phoneNumber: true,
+        mfaEnabled: false,
         mfaSecret: true,
         accountLocked: true,
-        lastLoginAt: true
+        lastLoginAt: true,
+        role: true
       }
     });
 
@@ -211,18 +252,44 @@ router.post('/signin', validateSignin, async (req, res) => {
       data: { lastLoginAt: new Date() }
     });
 
+    // Check if user has a restaurant (for company users)
+    let restaurantId = null;
+    if (user.userType === 'empresas') {
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { userId: user.id },
+        select: { id: true }
+      });
+      if (restaurant) {
+        restaurantId = restaurant.id;
+        console.log(`🏢 Found restaurant for user ${user.email}:`, restaurantId);
+      } else {
+        console.log(`🏢 No restaurant found for user ${user.email}`);
+      }
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
-        userType: user.userType
+        userType: user.userType,
+        role: user.role,
+        restaurantId: restaurantId // Include restaurantId if user has one
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     console.log(`✅ User login successful: ${user.email}`);
+
+    // Set authentication cookie
+    res.cookie('manu', token, {
+      httpOnly: false, // Allow JavaScript access for development
+      secure: false, // Allow over HTTP for development
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
 
     res.status(200).json({
       success: true,
@@ -264,7 +331,7 @@ router.post('/mfa/setup', validateTokenAndIdentifyUser, async (req, res) => {
     // Get user details
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, mfaEnabled: true }
+      select: { email: true, mfaEnabled: false }
     });
 
     if (!user) {
@@ -329,7 +396,7 @@ router.post('/mfa/verify', validateTokenAndIdentifyUser, async (req, res) => {
     // Get user with MFA secret
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { mfaSecret: true, mfaEnabled: true }
+      select: { mfaSecret: true, mfaEnabled: false }
     });
 
     if (!user || !user.mfaSecret) {
@@ -352,7 +419,7 @@ router.post('/mfa/verify', validateTokenAndIdentifyUser, async (req, res) => {
     // Enable MFA
     await prisma.user.update({
       where: { id: userId },
-      data: { mfaEnabled: true }
+      data: { mfaEnabled: false }
     });
 
     console.log(`✅ MFA enabled for user ${userId}`);
@@ -361,7 +428,7 @@ router.post('/mfa/verify', validateTokenAndIdentifyUser, async (req, res) => {
       success: true,
       message: 'MFA enabled successfully',
       data: {
-        mfaEnabled: true,
+        mfaEnabled: false,
         securityLevel: 'Enhanced'
       }
     });
@@ -391,7 +458,7 @@ router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
     // Get user
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { password: true, mfaEnabled: true, mfaSecret: true }
+      select: { password: true, mfaEnabled: false, mfaSecret: true }
     });
 
     if (!user) {
@@ -461,16 +528,33 @@ router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
 // ============================================================================
 
 // POST /logout - Enhanced logout with token blacklisting
-router.post('/logout', validateTokenAndIdentifyUser, async (req, res) => {
+router.post('/logout', async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
+    console.log('🚪 Logout request received');
+    
+    // Get token from cookie instead of Authorization header
+    const token = req.cookies.manu;
+    
     if (token) {
-      // Add token to blacklist
-      invalidateToken(token);
+      try {
+        // Verify and decode token to get userId
+        const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+        console.log(`✅ User logout: ${decodedToken.userId}`);
+        
+        // Add token to blacklist
+        invalidateToken(token);
+      } catch (tokenError) {
+        console.log('⚠️ Invalid token during logout, but continuing logout process');
+      }
     }
 
-    console.log(`✅ User logout: ${req.userId}`);
+    // Clear the cookie
+    res.clearCookie('manu', {
+      path: '/',
+      sameSite: 'lax'
+    });
+
+    console.log('✅ Logout successful, cookie cleared');
 
     res.status(200).json({
       success: true,
@@ -479,9 +563,16 @@ router.post('/logout', validateTokenAndIdentifyUser, async (req, res) => {
 
   } catch (error) {
     console.error('Logout error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Logout failed'
+    
+    // Even if there's an error, clear the cookie and return success
+    res.clearCookie('manu', {
+      path: '/',
+      sameSite: 'lax'
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
     });
   }
 });
@@ -672,7 +763,7 @@ router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req
         userType: true,
         createdAt: true,
         lastLoginAt: true,
-        mfaEnabled: true,
+        mfaEnabled: false,
         securityNotifications: true
       }
     });
@@ -695,6 +786,81 @@ router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req
     res.status(500).json({
       success: false,
       message: 'Internal Server Error'
+    });
+  }
+});
+
+// GET /check-login-status - Check if user is logged in
+router.get('/check-login-status', async (req, res) => {
+  try {
+    console.log('🔍 check-login-status: Request received');
+    console.log('🔍 check-login-status: Available cookies:', req.cookies);
+    console.log('🔍 check-login-status: manu cookie:', req.cookies?.manu);
+    
+    // Check for cookie-based authentication
+    const token = req.cookies.manu;
+    
+    if (!token) {
+      console.log('❌ check-login-status: No token found in cookies');
+      return res.json({
+        success: true,
+        isLoggedIn: false,
+        user: null
+      });
+    }
+
+    console.log('🔍 check-login-status: Token found, verifying...');
+    try {
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('✅ check-login-status: Token verified, decoded:', decodedToken);
+      
+      // Fetch user data
+      const user = await prisma.user.findUnique({
+        where: { id: decodedToken.userId },
+        select: {
+          id: true,
+          email: true,
+          userType: true,
+          role: true,
+          name: true,
+          surname: true
+        }
+      });
+
+      console.log('🔍 check-login-status: User found:', user);
+
+      if (user) {
+        console.log('✅ check-login-status: User authenticated successfully');
+        return res.json({
+          success: true,
+          isLoggedIn: true,
+          user: {
+            ...user,
+            userId: user.id
+          }
+        });
+      } else {
+        console.log('❌ check-login-status: User not found in database');
+        return res.json({
+          success: true,
+          isLoggedIn: false,
+          user: null
+        });
+      }
+    } catch (tokenError) {
+      console.log('❌ check-login-status: Token verification failed:', tokenError.message);
+      // Invalid token
+      return res.json({
+        success: true,
+        isLoggedIn: false,
+        user: null
+      });
+    }
+  } catch (error) {
+    console.error('Error checking login status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 });

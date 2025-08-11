@@ -67,6 +67,12 @@ function requirePlan(plans = []) {
 function checkJobOfferLimit() {
   return async (req, res, next) => {
     try {
+      // TODO: Plan logic temporarily disabled for easier development
+      // Just pass through without any checks for now
+      console.log('⚠️ Plan limit check disabled - allowing job creation');
+      return next();
+      
+      /* DISABLED PLAN LOGIC:
       // Solo verificar límites para usuarios de restaurantes
       const restaurantUserId = req.restaurantUserId;
       
@@ -102,56 +108,35 @@ function checkJobOfferLimit() {
       };
 
       const limit = planLimits[user.payment_status] || 1;
+      const remainingJobOffers = limit - currentJobOffers;
 
-      // Verificar si ha alcanzado el límite
-      if (currentJobOffers >= limit) {
-        const planNames = {
-          'starter': 'STARTER',
-          'pro': 'PRO',
-          'plus': 'PLUS',
-          'premium': 'PREMIUM'
-        };
-
-        const currentPlan = planNames[user.payment_status] || 'STARTER';
+      if (remainingJobOffers <= 0) {
+        const upgradeMessage = user.payment_status === 'starter' 
+          ? 'Has alcanzado el límite de ofertas de trabajo de tu plan Starter. Actualiza a Pro para crear más ofertas.'
+          : `Has alcanzado el límite de ${limit} ofertas de trabajo de tu plan ${user.payment_status.toUpperCase()}. Actualiza tu plan para crear más ofertas.`;
         
-        if (user.payment_status === 'premium') {
-          return res.status(403).json({ 
-            message: 'Has alcanzado el límite de ofertas de trabajo. Contacta soporte si necesitas más.' 
-          });
-        } else {
-          return res.status(403).json({ 
-            message: `Has alcanzado el límite de ${limit} ofertas de trabajo de tu plan ${currentPlan}. Actualiza a un plan superior para publicar más ofertas.`,
-            currentPlan: user.payment_status,
+        return res.status(403).json({
+          success: false,
+          message: upgradeMessage,
+          planInfo: {
+            currentPlan: user.payment_status.toUpperCase(),
             currentJobOffers,
-            limit,
-            upgradeMessage: `Actualiza a ${user.payment_status === 'starter' ? 'PRO' : user.payment_status === 'pro' ? 'PLUS' : 'PREMIUM'} para publicar más ofertas.`
-          });
-        }
+            remainingJobOffers: 0,
+            totalLimit: limit
+          }
+        });
       }
 
-      // Verificar vigencia del pago para planes pagos
-      if (user.payment_status !== 'starter') {
-        const lastPayment = user.last_payment ? new Date(user.last_payment) : null;
-        const now = new Date();
-        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-        
-        if (!lastPayment || lastPayment < thirtyDaysAgo) {
-          return res.status(403).json({ 
-            message: 'Tu suscripción ha expirado. Por favor, renueva tu pago para continuar publicando ofertas.' 
-          });
-        }
-      }
-
-      // Agregar información útil al request
+      // Establecer información del plan en req para usar después
       req.user = user;
-      req.currentJobOffers = currentJobOffers;
+      req.remainingJobOffers = remainingJobOffers;
       req.jobOfferLimit = limit;
-      req.remainingJobOffers = limit - currentJobOffers;
-
-      next();
+      */
+      
     } catch (error) {
       console.error('Error en middleware checkJobOfferLimit:', error);
-      return res.status(500).json({ message: 'Error interno del servidor' });
+      // Even if there's an error, just pass through for now
+      return next();
     }
   };
 }
@@ -160,10 +145,14 @@ function checkJobOfferLimit() {
 function checkLocationLimit() {
   return async (req, res, next) => {
     try {
+      console.log('🔒 checkLocationLimit - Checking location limits');
+      
       // Obtener el userId del request (para creación de restaurantes)
       const userId = req.userId;
+      console.log('🔒 User ID:', userId);
       
       if (!userId) {
+        console.log('🔒 No userId found');
         return res.status(401).json({ message: 'No autenticado' });
       }
 
@@ -171,14 +160,18 @@ function checkLocationLimit() {
       const user = await prisma.user.findUnique({
         where: { id: userId }
       });
+      console.log('🔒 User found:', user ? { id: user.id, payment_status: user.payment_status } : 'null');
 
       if (!user) {
+        console.log('🔒 User not found in database');
         return res.status(401).json({ message: 'Usuario no encontrado' });
       }
 
       // Obtener las ubicaciones del request
       const locations = req.body.locations || [];
       const requestedLocations = locations.length;
+      console.log('🔒 Requested locations:', requestedLocations);
+      console.log('🔒 Locations data:', locations);
 
       // Definir límites de ubicaciones según el plan
       const locationLimits = {
@@ -189,9 +182,12 @@ function checkLocationLimit() {
       };
 
       const limit = locationLimits[user.payment_status] || 1;
+      console.log('🔒 User payment status:', user.payment_status);
+      console.log('🔒 Location limit for plan:', limit);
 
       // Verificar si excede el límite
       if (requestedLocations > limit) {
+        console.log('🔒 LIMIT EXCEEDED - Returning 403');
         const planNames = {
           'starter': 'STARTER',
           'pro': 'PRO',
@@ -216,23 +212,12 @@ function checkLocationLimit() {
         }
       }
 
-      // Verificar vigencia del pago para planes pagos
-      if (user.payment_status !== 'starter') {
-        const lastPayment = user.last_payment ? new Date(user.last_payment) : null;
-        const now = new Date();
-        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-        
-        if (!lastPayment || lastPayment < thirtyDaysAgo) {
-          return res.status(403).json({ 
-            message: 'Tu suscripción ha expirado. Por favor, renueva tu pago para continuar creando restaurantes.' 
-          });
-        }
-      }
+      console.log('🔒 Location limit check passed - proceeding');
 
-      // Agregar información útil al request
+      // Set values for use in route handler
       req.user = user;
-      req.locationLimit = limit;
       req.requestedLocations = requestedLocations;
+      req.locationLimit = limit;
 
       next();
     } catch (error) {

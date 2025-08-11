@@ -1,79 +1,56 @@
 const jwt = require('jsonwebtoken');
 
 const checkUserType = (requiredUserType) => (req, res, next) => {
-  const token = req.cookies.manu; 
-
+  const token = req.cookies.manu;
 
   if (!token) {
-    return res.status(401).json({ message: 'Debes crear tu perfil para usar la plataforma' });
+    return res.status(401).json({ message: 'Unauthorized. Token missing.' });
   }
 
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-
+    
+    console.log(`🔍 checkUserType: Required userType: ${requiredUserType}`);
+    console.log(`🔍 checkUserType: Decoded token:`, decodedToken);
   
     const userType = decodedToken.userType; 
-   
+    console.log(`🔍 checkUserType: User userType from token: ${userType}`);
 
     if (userType !== requiredUserType) {
+      console.log(`❌ checkUserType: Access denied. User has userType '${userType}' but '${requiredUserType}' is required`);
       const errorMessage =
-        requiredUserType === 'profesionales' || requiredUserType === 'employee'
-          ? 'Access forbidden for non-professional/employee users'
-          : 'Access forbidden for non-company/restaurant users';
+        requiredUserType === 'empresas' 
+          ? 'Access forbidden for non-company/restaurant users'
+          : 'Access denied';
       return res.status(403).json({ message: errorMessage });
     }
 
-    req.userType = userType;
+    console.log(`✅ checkUserType: Access granted for userType '${userType}'`);
+    req.userId = decodedToken.userId;
+    req.userType = decodedToken.userType;
+    req.userRole = decodedToken.role;
+    req.restaurantId = decodedToken.restaurantId;
+    req.restaurantUserId = decodedToken.restaurantUserId;
     next();
   } catch (error) {
-    console.error('Error in checkUserType middleware:', error);
+    console.error('JWT Error in checkUserType:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-};
-
-const setUserType = () => (req, res, next) => {
-  const token = req.cookies.manu; 
-  
-  if (!token) {
-    return res.status(401).json({ message: 'JWT token is missing or undefined' });
-  }
-
-  try {
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-
-    const userType = decodedToken.userType; 
-   
-    req.userType = userType;
-    next();
-  } catch (error) {
-    console.error('Error in checkUserType middleware:', error);
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-    res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 };
 
 const checkUserRole = () => (req, res, next) => {
-  const token = req.cookies.manu; 
-  
-  if (!token) {
-    return res.status(401).json({ message: 'JWT token is missing or undefined' });
-  }
-
   try {
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-  
-    const userRole = decodedToken.role; 
-  
-    if (!userRole) {
-      return res.status(401).json({ message: 'User role is missing in the token' });
+    const token = req.cookies.manu;
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthorized. Token missing.' });
     }
-
-    req.userRole = userRole;
+    
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    req.userRole = decodedToken.role;
+    console.log('🔍 setUserRole: User role set to:', req.userRole);
     next();
   } catch (error) {
     console.error('Error in checkUserRole middleware:', error);

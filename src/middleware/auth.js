@@ -216,41 +216,21 @@ const checkCompany = async (req, res, next) => {
 };
 
 /**
- * Set user role based on database relationships
+ * Set user role from JWT token (simple version)
  */
 const setUserRole = async (req, res, next) => {
   try {
-    if (!req.userId) {
-      return next();
-    }
-
-    // Check if user is an employee
-    const employee = await prisma.employee.findUnique({
-      where: { userId: req.userId },
-      select: { id: true }
-    });
-
-    // Check if user is a restaurant owner
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { userId: req.userId },
-      select: { id: true }
-    });
-
-    if (employee) {
-      req.role = 'employee';
-      req.employeeId = employee.id;
-    } else if (restaurant) {
-      req.role = 'restaurant';
-      req.restaurantId = restaurant.id;
-    } else {
+    // Default role if none is set
+    if (!req.role) {
       req.role = 'user';
     }
-
+    
+    // console.log('🔍 setUserRole: User role set to:', req.role); // Commented out to reduce log noise
     next();
-
   } catch (error) {
-    console.error('Set user role error:', error);
-    next(); // Continue even if role setting fails
+    console.error('Error in setUserRole:', error);
+    req.role = 'user'; // Fallback role
+    next();
   }
 };
 
@@ -423,7 +403,7 @@ const checkJobOfferLimit = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: `Job offer limit reached for ${restaurant.currentPlan} plan`,
-        activeJobOffers: restaurant.jobOffers.length,
+        currentJobOffers: restaurant.jobOffers.length,
         limit: limit
       });
     }
@@ -439,44 +419,67 @@ const checkJobOfferLimit = async (req, res, next) => {
   }
 };
 
-// ============================================================================
-// UTILITY MIDDLEWARE
-// ============================================================================
-
 /**
- * Admin access only
+ * Require specific roles middleware - more flexible than requireAdmin
  */
-const requireAdmin = (req, res, next) => {
-  if (req.userType !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Admin access required'
-    });
-  }
-  next();
-};
-
-/**
- * Check if user type matches required type
- */
-const requireUserType = (requiredType) => {
+const requireRole = (allowedRoles) => {
+  // If a single role is passed as string, convert to array
+  const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+  
   return (req, res, next) => {
-    if (req.userType !== requiredType) {
-      return res.status(403).json({
+    console.log(`🔍 requireRole: Checking for roles: ${rolesArray.join(', ')}`);
+    console.log(`🔍 requireRole: User role from request: ${req.role}`);
+    
+    if (!req.role || !rolesArray.includes(req.role)) {
+      console.log(`❌ requireRole: Access denied. User has role '${req.role}' but requires one of: ${rolesArray.join(', ')}`);
+      return res.status(403).json({ 
         success: false,
-        message: `${requiredType} access required`
+        message: `Access forbidden. Required role: ${rolesArray.join(' or ')}` 
       });
     }
+    
+    console.log(`✅ requireRole: Access granted for role '${req.role}'`);
     next();
   };
 };
 
 /**
- * Log authentication events for audit trail
+ * Check specific permissions middleware - for fine-grained control
  */
-const logAuthEvent = (event) => {
+const requirePermission = (permission) => {
   return (req, res, next) => {
-    console.log(`🔐 Auth Event: ${event}`, {
+    console.log(`🔍 requirePermission: Checking for permission: ${permission}`);
+    console.log(`🔍 requirePermission: User role: ${req.role}`);
+    
+    // Define role-based permissions
+    const rolePermissions = {
+      admin: ['create_company', 'edit_company', 'delete_company', 'manage_users', 'view_analytics'],
+      manager: ['create_company', 'edit_company', 'manage_staff'],
+      staff: ['view_company', 'edit_profile'],
+      user: ['view_public']
+    };
+    
+    const userPermissions = rolePermissions[req.role] || [];
+    
+    if (!userPermissions.includes(permission)) {
+      console.log(`❌ requirePermission: Access denied. User role '${req.role}' lacks permission '${permission}'`);
+      return res.status(403).json({ 
+        success: false,
+        message: `Access forbidden. Missing permission: ${permission}` 
+      });
+    }
+    
+    console.log(`✅ requirePermission: Access granted for permission '${permission}'`);
+    next();
+  };
+};
+
+/**
+ * Log authentication events for security monitoring
+ */
+const logAuthEvent = (eventType) => {
+  return (req, res, next) => {
+    console.log(`🔐 Auth Event: ${eventType}`, {
       userId: req.userId,
       userType: req.userType,
       ip: req.ip,
@@ -497,7 +500,7 @@ module.exports = {
   requirePlan,
   checkLocationLimit,
   checkJobOfferLimit,
-  requireAdmin,
-  requireUserType,
+  requireRole,
+  requirePermission,
   logAuthEvent
 }; 

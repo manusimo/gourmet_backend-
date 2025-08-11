@@ -1,8 +1,9 @@
 const express = require('express');
 const csrf = require('csurf');
 const { prisma } = require('../db.js');
-const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
-const { getUserIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
+const { checkCompany } = require('../helpers/authenticateToken.js');
+const { requireRole, requirePermission, setUserRole } = require('../middleware/auth.js');
+const { getUserIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
 const { requirePlan, checkLocationLimit } = require('../middleware/checkPlan.js');
 const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
 const { deleteLocations, updateCompanyProfile, createNewLocations } = require('../helpers/company.js');
@@ -114,7 +115,7 @@ router.get('/api/company/restaurantUser/:userId', async (req, res) => {
 });
 
 // GET /company/locations - Get company locations
-router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => {
+router.get('/company/locations', getAuthFromCookie, async (req, res) => {
   try {
     const restaurantId = req.restaurantId;
 
@@ -164,7 +165,7 @@ router.get('/company/top-rated-companies', async (req, res) => {
 
     res.json({
       success: true,
-      data: companies.map(company => ({
+      data: companies.map(company => ({ // Use consistent 'data' property
         ...company,
         jobOffersCount: company._count.jobOffers,
       })),
@@ -173,6 +174,7 @@ router.get('/company/top-rated-companies', async (req, res) => {
       totalPages: Math.ceil(totalCompanies / limit),
     });
   } catch (error) {
+    console.error('Error fetching top-rated companies:', error);
     res.status(500).json({ 
       success: false,
       error: 'Internal Server Error' 
@@ -181,7 +183,7 @@ router.get('/company/top-rated-companies', async (req, res) => {
 });
 
 // GET /company/talents-application - Get talents applications
-router.get('/company/talents-application', getRestaurantIdFromCookie, async (req, res) => {
+router.get('/company/talents-application', getAuthFromCookie, async (req, res) => {
   try {
     const restaurantId = req.restaurantId;
     const talents = await getTalentsApplications(restaurantId);
@@ -202,9 +204,22 @@ router.get('/company/talents-application', getRestaurantIdFromCookie, async (req
   }
 });
 
-// POST /company - Create company
-router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, checkLocationLimit(), async (req, res) => {
+// POST /company - Create company (require admin or manager role)
+router.post('/company', (req, res, next) => {
+  console.log('🚨 POST /company route HIT - Request received!');
+  console.log('🚨 Method:', req.method);
+  console.log('🚨 URL:', req.url);
+  console.log('🚨 Headers:', req.headers);
+  next();
+}, getUserIdFromCookie, setUserRole, requirePermission('create_company'), checkLocationLimit(), async (req, res) => {
   try {
+    console.log('🏢 POST /company - Creating company profile');
+    console.log('🏢 Request cookies:', req.cookies);
+    console.log('🏢 User ID from middleware:', req.userId);
+    console.log('🏢 User type from middleware:', req.userType);
+    console.log('🏢 User role from middleware:', req.userRole);
+    console.log('🏢 Request body keys:', Object.keys(req.body));
+
     const {
       name,
       specialty,
@@ -227,7 +242,8 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, checkLoc
     const userId = req.userId;
     const role = req.userRole;
 
-    const companyProfile = await createCompanyProfile({
+    console.log('🏢 About to create company profile for userId:', userId);
+    console.log('🏢 Request body data:', {
       name,
       specialty,
       format,
@@ -243,18 +259,58 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, checkLoc
       locations,
       jobOffers,
       profileImageUrl,
-      profileCarouselUrls,
-      userId
+      profileCarouselUrls
     });
 
-    const restaurantUser = await createRestaurantUser(userId, companyProfile.id);
-    await updateUserWithRestaurant(userId, companyProfile.id);
+    // Data validation and conversion
+    const processedData = {
+      name: name || '',
+      specialty: specialty || '',
+      format: format || '',
+      description: description || 'No description to show',
+      rut: rut || 'No rut to show',
+      legalName: legalName || 'No legal name to show',
+      region: region || 'No hay',
+      comuna: comuna || 'No hay', // Handle empty string
+      numberOfRestaurants: numberOfRestaurants ? parseInt(numberOfRestaurants, 10) : 1,
+      workers: workers || '',
+      weeklyAverageClients: weeklyAverageClients || '',
+      benefits: Array.isArray(benefits) ? benefits : (benefits ? Object.keys(benefits).filter(key => benefits[key]) : []),
+      locations: locations || [],
+      jobOffers: jobOffers || [],
+      profileImageUrl: profileImageUrl || 'No photo',
+      profileCarouselUrls: Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [],
+      userId
+    };
+
+    console.log('🏢 Processed data for Prisma:', processedData);
+
+    // Check if user already has a restaurant
+    const existingRestaurant = await prisma.restaurant.findUnique({
+      where: { userId: userId }
+    });
+    console.log('🏢 Existing restaurant for user:', existingRestaurant ? 'Found' : 'None');
+
+    if (existingRestaurant) {
+      console.log('🏢 User already has restaurant ID:', existingRestaurant.id);
+      return res.status(409).json({
+        success: false,
+        message: 'User already has a restaurant profile',
+        data: { restaurantId: existingRestaurant.id }
+      });
+    }
+
+    const companyProfile = await createCompanyProfile(processedData);
+
+    // No need to create RestaurantUser for owner - owner relationship is via Restaurant.userId
+    // RestaurantUser is only for staff members invited by the owner
 
     const newToken = generateCompanyToken({
       userId,
+      userType: req.userType, // Include userType from request
+      role: req.role, // Include role from request  
       restaurantId: companyProfile.id,
-      restaurantUserId: restaurantUser.id,
-      role
+      restaurantUserId: null, // Owner doesn't have restaurantUserId
     });
 
     res.cookie('manu', newToken, {
@@ -308,7 +364,7 @@ router.get('/company/:id', async (req, res) => {
 });
 
 // GET /company - Get current company
-router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
+router.get('/company', getAuthFromCookie, async (req, res) => {
   try {
     const restaurantId = req.restaurantId;
     const company = await getCompanyByRestaurantId(restaurantId);
@@ -332,8 +388,8 @@ router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
   }
 });
 
-// PATCH /company - Update company
-router.patch('/company', checkCompany, getRestaurantIdFromCookie, checkLocationLimit(), async (req, res) => {
+// PATCH /company - Update company (require permission to edit company)
+router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), checkLocationLimit(), async (req, res) => {
   try {
     const {
       legalName,

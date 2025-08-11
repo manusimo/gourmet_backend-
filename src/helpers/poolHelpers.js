@@ -23,14 +23,18 @@ const checkTalentPoolEntry = async (employeeId, restaurantId) => {
 const createTalentPoolEntry = async (talentData) => {
   const { employeeId, restaurantId, restaurantUserId } = talentData;
   
-  return await prisma.talentPool.create({
-    data: {
-      employee: { connect: { id: parseInt(employeeId) } },
-      restaurant: { connect: { id: restaurantId } },
-      addedByUser: { connect: { id: restaurantUserId } },
-      status: 'accepted', 
-    }
-  });
+  const data = {
+    employee: { connect: { id: parseInt(employeeId) } },
+    restaurant: { connect: { id: restaurantId } },
+    status: 'accepted', 
+  };
+
+  // Only add addedByUser connection if restaurantUserId exists
+  if (restaurantUserId) {
+    data.addedByUser = { connect: { id: restaurantUserId } };
+  }
+  
+  return await prisma.talentPool.create({ data });
 };
 
 /**

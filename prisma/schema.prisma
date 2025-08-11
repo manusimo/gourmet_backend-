@@ -18,6 +18,16 @@ model User {
   role             String   @default("admin")
   payment_status   String   @default("starter")
   last_payment     DateTime?
+  
+  // Security fields
+  mfaEnabled       Boolean  @default(false)
+  mfaSecret        String?
+  mfaBackupCodes   String?
+  accountLocked    Boolean  @default(false)
+  lastLoginAt      DateTime?
+  loginAttempts    Int      @default(0)
+  securityNotifications Boolean @default(true)
+  
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   employee         Employee?
