@@ -6,6 +6,8 @@ const getTalentPool = async (restaurantId, filter) => {
   try {
     const filters = {
       restaurantId,
+      status: 'accepted', // Show accepted talents in "Mis talentos"
+      deletedAt: null, // Exclude soft-deleted records
       employee: {
         ...(filter.position && { position: filter.position }),
         ...(filter.experience && { yearsOfExperience: filter.experience }),
@@ -15,6 +17,8 @@ const getTalentPool = async (restaurantId, filter) => {
         ...(filter.comuna && { comuna: filter.comuna }),
       },
     };
+
+    console.log('🔍 [getTalentPool] Filters applied:', JSON.stringify(filters, null, 2));
 
     const talentPoolEntries = await prisma.talentPool.findMany({
       where: filters,
@@ -29,9 +33,17 @@ const getTalentPool = async (restaurantId, filter) => {
       },
     });
 
+    console.log('🔍 [getTalentPool] Found entries:', talentPoolEntries.length);
+    console.log('🔍 [getTalentPool] Entries:', talentPoolEntries.map(entry => ({
+      id: entry.id,
+      employeeId: entry.employeeId,
+      status: entry.status,
+      employeeName: entry.employee?.name
+    })));
+
     return talentPoolEntries;
   } catch (error) {
-    console.error('Error fetching talent pool:', error);
+    console.error('🔍 [getTalentPool] Error fetching talent pool:', error);
     throw error;
   }
 };

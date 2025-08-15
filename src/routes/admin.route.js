@@ -3,8 +3,290 @@ const { prisma } = require('../db.js');
 const { getMonitoringStats, resetMonitoring } = require('../middleware/ddosMonitoring.js');
 const { getPerformanceStats, getHealthStatus } = require('../middleware/performanceMonitoring.js');
 const { getErrorStats, searchErrors } = require('../middleware/errorTracking.js');
+const { checkCompany } = require('../helpers/authenticateToken.js');
+const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
+const { sendEmail } = require('../helpers/email.js');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 const router = express.Router();
+
+// ============================================================================
+// USER MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// GET /admin/users - Get all users for the company
+router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    console.log('🔍 Fetching users for restaurant:', req.restaurantId);
+    
+    // Get all users associated with this restaurant
+    const restaurantUsers = await prisma.restaurantUser.findMany({
+      where: {
+        restaurantId: req.restaurantId
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phoneNumber: true,
+            role: true
+          }
+        }
+      }
+    });
+
+    console.log('🔍 Found restaurant users:', restaurantUsers.length);
+
+    const users = restaurantUsers.map(ru => ({
+      ...ru.user,
+      restaurantUserId: ru.id,
+      role: ru.role
+    }));
+
+    res.status(200).json({ 
+      success: true,
+      data: users 
+    });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error',
+      error: error.message 
+    });
+  }
+});
+
+// POST /admin/create-user - Create a new user for the company
+router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    const { name, email, phoneNumber } = req.body;
+    const restaurantId = req.restaurantId;
+
+    console.log('🔍 Creating user:', { name, email, phoneNumber, restaurantId });
+    console.log('🔍 Prisma client available:', !!prisma);
+    console.log('🔍 RestaurantUser model available:', !!prisma.restaurantUser);
+    console.log('🔍 User model available:', !!prisma.user);
+    console.log('🔍 Available Prisma models:', Object.keys(prisma));
+
+    // Validate required fields
+    if (!name || !email || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and phone number are required'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Generate temporary password
+    const tempPassword = crypto.randomBytes(10).toString('hex');
+    const hashedPassword = await bcrypt.hash(tempPassword, 10); // Hash the temporary password
+
+    console.log('🔍 Generated temporary password for:', email);
+
+    // Create new user
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        phoneNumber,
+        password: hashedPassword, // Store hashed password
+        userType: 'employee', // Add missing userType field
+        role: 'employee', // Default role for company users
+        mfaEnabled: false,
+        accountLocked: false,
+        loginAttempts: 0,
+        securityNotifications: false
+      }
+    });
+
+    console.log('✅ User created successfully:', newUser.id);
+
+    // Associate user with restaurant
+    console.log('🔍 Creating restaurant user association...');
+    const restaurantUser = await prisma.restaurantUser.create({
+      data: {
+        userId: newUser.id,
+        restaurantId: restaurantId,
+        role: 'employee'
+      }
+    });
+
+    console.log('✅ User associated with restaurant:', restaurantUser.id);
+
+    // Send email with temporary password
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Bienvenido a GourmetJobs - Tu cuenta ha sido creada',
+        text: `Hola ${name},\n\nTu cuenta ha sido creada exitosamente en GourmetJobs.\n\nTu contraseña temporal es: ${tempPassword}\n\nPor favor, cambia tu contraseña después de iniciar sesión por primera vez.\n\nSaludos,\nEl equipo de GourmetJobs`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #fb5424;">Bienvenido a GourmetJobs</h2>
+            <p>Hola <strong>${name}</strong>,</p>
+            <p>Tu cuenta ha sido creada exitosamente en GourmetJobs.</p>
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 0;"><strong>Tu contraseña temporal es:</strong></p>
+              <p style="font-size: 18px; font-weight: bold; color: #fb5424; margin: 10px 0;">${tempPassword}</p>
+            </div>
+            <p><strong>Importante:</strong> Por favor, cambia tu contraseña después de iniciar sesión por primera vez.</p>
+            <p>Saludos,<br>El equipo de GourmetJobs</p>
+          </div>
+        `
+      });
+      console.log('✅ Email sent successfully to:', email);
+    } catch (emailError) {
+      console.error('❌ Error sending email:', emailError);
+      // Don't fail the user creation if email fails
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: {
+        ...newUser,
+        restaurantUserId: restaurantUser.id,
+        role: restaurantUser.role
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error creating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error',
+      error: error.message
+    });
+  }
+});
+
+// PATCH /admin/user/update - Update user information
+router.patch('/user/update', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    const { id, name, email, phoneNumber } = req.body;
+    
+    console.log('🔍 Updating user with data:', { id, name, email, phoneNumber });
+
+    if (!id) {
+      console.log('❌ No user ID provided in request body');
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    // Check if user belongs to this restaurant
+    const restaurantUser = await prisma.restaurantUser.findFirst({
+      where: {
+        userId: parseInt(id),
+        restaurantId: req.restaurantId
+      }
+    });
+
+    if (!restaurantUser) {
+      console.log('❌ User not found or not associated with restaurant:', { userId: id, restaurantId: req.restaurantId });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found or not associated with this restaurant'
+      });
+    }
+
+    console.log('✅ Found restaurant user association:', restaurantUser.id);
+
+    // Update user
+    const updatedUser = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: {
+        name: name || undefined,
+        email: email || undefined,
+        phoneNumber: phoneNumber || undefined
+      }
+    });
+
+    console.log('✅ User updated successfully:', updatedUser.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'User updated successfully',
+      data: updatedUser
+    });
+  } catch (error) {
+    console.error('❌ Error updating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error',
+      error: error.message
+    });
+  }
+});
+
+// GET /admin/user/:id - Get specific user by ID
+router.get('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.restaurantId;
+
+    // Check if user belongs to this restaurant
+    const restaurantUser = await prisma.restaurantUser.findFirst({
+      where: {
+        userId: parseInt(id),
+        restaurantId: restaurantId
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phoneNumber: true,
+            role: true
+          }
+        }
+      }
+    });
+
+    if (!restaurantUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found or not associated with this restaurant'
+      });
+    }
+
+    const user = {
+      ...restaurantUser.user,
+      restaurantUserId: restaurantUser.id,
+      role: restaurantUser.role
+    };
+
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error'
+    });
+  }
+});
+
+// ============================================================================
+// DASHBOARD ENDPOINTS
+// ============================================================================
 
 // GET /admin/total-counts - Get total counts for dashboard
 router.get('/total-counts', async (req, res) => {

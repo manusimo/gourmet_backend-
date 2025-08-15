@@ -460,12 +460,22 @@ const getFavoriteJobs = async (employeeId) => {
  * @returns {Object|null} Talent pool record or null if not found
  */
 const checkTalentPoolRecord = async (employeeId, restaurantId) => {
-  return await prisma.talentPool.findFirst({
+  console.log(`🔍 Checking talent pool record for employee ${employeeId} and restaurant ${restaurantId}`);
+  
+  const record = await prisma.talentPool.findFirst({
     where: {
       employeeId: parseInt(employeeId),
       restaurantId: parseInt(restaurantId),
+      deletedAt: null, // Only check for non-deleted records
     },
   });
+  
+  console.log(`🔍 Talent pool record found:`, record ? 'Yes' : 'No');
+  if (record) {
+    console.log(`🔍 Record status:`, record.status);
+  }
+  
+  return record;
 };
 
 /**

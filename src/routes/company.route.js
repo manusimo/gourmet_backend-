@@ -56,10 +56,11 @@ router.get('/companies', async (req, res) => {
       });
     }
 
-    const filters = buildFilters(req.query, ['format', 'specialty']);
+    const filters = buildFilters(req.query, ['format', 'specialty', 'region', 'comuna', 'benefits', 'workers', 'weeklyAverageClients']);
     const searchConditions = buildSearchConditions(q, 'name');
-    console.log('Filters:', filters);
-    console.log('Search Conditions:', searchConditions);
+    console.log('🔍 [Companies API] Query params:', req.query);
+    console.log('🔍 [Companies API] Filters:', filters);
+    console.log('🔍 [Companies API] Search Conditions:', searchConditions);
 
     const companies = await getCompanies(filters, searchConditions, limitInt, (pageInt - 1) * limitInt);
     const totalCompanies = await getTotalCompanies(filters, searchConditions);
@@ -76,6 +77,76 @@ router.get('/companies', async (req, res) => {
     res.status(500).json({ 
       success: false,
       error: 'Internal Server Error' 
+    });
+  }
+});
+
+// GET /api/restaurant/:restaurantUserId - Get restaurant information by restaurantUserId
+router.get('/api/restaurant/:restaurantUserId', async (req, res) => {
+  try {
+    const { restaurantUserId } = req.params;
+
+    if (!restaurantUserId || isNaN(restaurantUserId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid or missing restaurantUserId' 
+      });
+    }
+
+    // Get restaurant user information
+    const restaurantUser = await prisma.restaurantUser.findUnique({
+      where: { id: parseInt(restaurantUserId) },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            profileImageUrl: true
+          }
+        },
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            profileImageUrl: true,
+            location: true
+          }
+        }
+      }
+    });
+
+    if (!restaurantUser) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Restaurant user not found' 
+      });
+    }
+
+    // Format the response
+    const restaurantInfo = {
+      id: restaurantUser.id,
+      name: restaurantUser.user.name,
+      surname: restaurantUser.user.surname,
+      email: restaurantUser.user.email,
+      profileImageUrl: restaurantUser.user.profileImageUrl || restaurantUser.restaurant.profileImageUrl,
+      position: restaurantUser.position || 'Staff Member',
+      location: restaurantUser.restaurant.location || 'Location not specified',
+      restaurantName: restaurantUser.restaurant.name,
+      restaurantDescription: restaurantUser.restaurant.description
+    };
+
+    return res.status(200).json({ 
+      success: true,
+      data: restaurantInfo 
+    });
+  } catch (error) {
+    console.error('Error fetching restaurant information:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch restaurant information' 
     });
   }
 });
@@ -302,15 +373,15 @@ router.post('/company', (req, res, next) => {
 
     const companyProfile = await createCompanyProfile(processedData);
 
-    // No need to create RestaurantUser for owner - owner relationship is via Restaurant.userId
-    // RestaurantUser is only for staff members invited by the owner
+    // Create RestaurantUser record for the owner so they can use chat functionality
+    const restaurantUser = await createRestaurantUser(userId, companyProfile.id);
 
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
       role: req.role, // Include role from request  
       restaurantId: companyProfile.id,
-      restaurantUserId: null, // Owner doesn't have restaurantUserId
+      restaurantUserId: restaurantUser.id, // Owner now has restaurantUserId
     });
 
     res.cookie('manu', newToken, {

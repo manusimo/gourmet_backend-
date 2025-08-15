@@ -123,7 +123,8 @@ const getTalentsApplications = async (restaurantId) => {
   const result = await prisma.talentPool.findMany({
     where: { 
       restaurantId: Number(restaurantId),
-      status: 'pendent'  // Only get applications with 'pendent' status
+      status: 'pendent',  // Only get applications with 'pendent' status
+      deletedAt: null     // Exclude soft-deleted records
     },
     include: {
       employee: {

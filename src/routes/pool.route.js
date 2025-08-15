@@ -50,10 +50,12 @@ router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaura
     const restaurantId = parseInt(req.restaurantId);
     const restaurantUserId = parseInt(req.restaurantUserId);
 
+    console.log('🔍 [Talent Pool API] Saving talent:', { employeeId, restaurantId, restaurantUserId });
+
     const existingEntry = await checkTalentPoolEntry(employeeId, restaurantId);
 
     if (existingEntry) {
-      console.log('Employee already exists in the talent pool:');
+      console.log('🔍 [Talent Pool API] Employee already exists in the talent pool');
       return res.status(409).json({ 
         success: false,
         message: "Employee already exists in the talent pool." 
@@ -66,13 +68,15 @@ router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaura
       restaurantUserId
     });
 
+    console.log('🔍 [Talent Pool API] Talent saved successfully:', talentEntry);
+
     res.status(201).json({ 
       success: true,
       message: "Employee added to talent pool successfully", 
       data: talentEntry 
     });
   } catch (error) {
-    console.error(error);
+    console.error('🔍 [Talent Pool API] Error saving talent:', error);
     res.status(500).json({ 
       success: false,
       message: "Internal Server Error" 
@@ -86,6 +90,9 @@ router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurant
     const { restaurantId, restaurantUserId, userRole } = req;
     const { position, experience, region, comuna, available, schedule } = req.query;
 
+    console.log('🔍 [Talent Pool API] Fetching talents for restaurantId:', restaurantId);
+    console.log('🔍 [Talent Pool API] Query filters:', { position, experience, region, comuna, available, schedule });
+
     const filter = buildTalentPoolFilters({
       position,
       experience,
@@ -96,13 +103,15 @@ router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurant
     });
 
     const talentPool = await getTalentPool(restaurantId, filter);
+    console.log('🔍 [Talent Pool API] Found talents:', talentPool.length);
+    console.log('🔍 [Talent Pool API] Talents data:', talentPool);
 
     res.status(200).json({
       success: true,
       data: talentPool
     });
   } catch (error) {
-    console.error(error);
+    console.error('🔍 [Talent Pool API] Error:', error);
     res.status(500).json({ 
       success: false,
       message: "Internal Server Error" 
@@ -119,15 +128,15 @@ router.delete('/talent-pool/:talentId', checkCompany, getRestaurantIdFromCookie,
 
     res.status(200).json({ 
       success: true,
-      message: "Talent and associated conversations successfully removed from the pool." 
+      message: "Talent and associated conversations successfully removed from the pool (soft deleted)." 
     });
   } catch (error) {
     console.error('Error removing talent:', error);
     
-    if (error.message === 'Talent not found in the pool.') {
+    if (error.message === 'Talent not found in the pool or already deleted.') {
       return res.status(404).json({ 
         success: false,
-        message: "Talent not found in the pool." 
+        message: "Talent not found in the pool or already deleted." 
       });
     }
     

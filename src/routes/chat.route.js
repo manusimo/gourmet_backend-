@@ -8,7 +8,6 @@ const {
   getRestaurantUserIdFromCookie,
   validateTokenAndIdentifyUser
 } = require('../helpers/cookies.js');
-const { requirePlan } = require('../middleware/checkPlan.js');
 const {
   getConversationById,
   getConversationWithMessages,
@@ -26,8 +25,55 @@ const {
   deleteConversation,
   validateConversationAccess
 } = require('../helpers/chatHelpers.js');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
+
+// GET /chat-token - Generate chat socket token
+router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
+  try {
+    console.log('🔍 chat-token: Request received');
+    
+    const { userId, userType } = req;
+    
+    if (!userId) {
+      console.log('❌ chat-token: No user ID found');
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Generate a short-lived token for chat socket authentication
+    const chatToken = jwt.sign(
+      {
+        userId,
+        userType,
+        tokenType: 'socket', // Changed from 'type' to 'tokenType'
+        timestamp: Date.now()
+      },
+      process.env.JWT_SECRET,
+      { 
+        expiresIn: '15m', // Changed from '1h' to '15m' to match chat app
+        audience: 'chat' // Add audience for chat app validation
+      }
+    );
+
+    console.log('✅ chat-token: Generated token for user:', userId);
+    
+    res.json({
+      success: true,
+      token: chatToken
+    });
+    
+  } catch (error) {
+    console.error('Error generating chat token:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
 
 // GET /conversations/:conversationId - Get conversation by ID
 router.get('/conversations/:conversationId', async (req, res) => {
@@ -102,7 +148,9 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
 });
 
 // POST /send-message - Send a message
-router.post('/send-message', requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
+router.post('/send-message', async (req, res) => {
+  // TODO: Temporarily disabled plan requirement for development
+  // requirePlan(['pro', 'plus', 'premium']), 
   try {
     const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
 
@@ -187,7 +235,9 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
 });
 
 // POST /create-conversation - Create or ensure conversation exists
-router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
+router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  // TODO: Temporarily disabled plan requirement for development
+  // requirePlan(['pro', 'plus', 'premium']), 
   try {
     const { employeeId, jobPostId, talentPoolId, type } = req.body;
     const userId = req.userId;

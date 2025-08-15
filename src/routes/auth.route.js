@@ -93,19 +93,6 @@ router.post('/signup', validateSignup, async (req, res) => {
       }
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: newUser.id,
-        email: newUser.email,
-        userType: newUser.userType,
-        role: newUser.role,
-        restaurantId: restaurantId // Include restaurantId if user has one
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
     console.log(`✅ New user registered: ${newUser.email} (${newUser.userType}) with role: ${newUser.role}`);
 
     // Check if user has a restaurant (for company users)
@@ -122,6 +109,19 @@ router.post('/signup', validateSignup, async (req, res) => {
         console.log(`🏢 No restaurant found for new user ${newUser.email}`);
       }
     }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        userId: newUser.id,
+        email: newUser.email,
+        userType: newUser.userType,
+        role: newUser.role,
+        restaurantId: restaurantId // Include restaurantId if user has one
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
     // Set authentication cookie
     res.cookie('manu', token, {
@@ -786,6 +786,80 @@ router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req
     res.status(500).json({
       success: false,
       message: 'Internal Server Error'
+    });
+  }
+});
+
+// GET /user-info - Get current user info (userId, restaurantUserId, employeeId)
+router.get('/user-info', async (req, res) => {
+  try {
+    console.log('🔍 user-info: Request received');
+    
+    // Check for cookie-based authentication
+    const token = req.cookies.manu;
+    
+    if (!token) {
+      console.log('❌ user-info: No token found in cookies');
+      return res.status(401).json({
+        success: false,
+        message: 'No authentication token found'
+      });
+    }
+
+    console.log('🔍 user-info: Token found, verifying...');
+    try {
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('✅ user-info: Token verified, decoded:', decodedToken);
+      
+      const userId = decodedToken.userId;
+      let restaurantUserId = null;
+      let employeeId = null;
+
+      // Check if user has a restaurant (company user)
+      if (decodedToken.restaurantId) {
+        // Find RestaurantUser record
+        const restaurantUser = await prisma.restaurantUser.findFirst({
+          where: {
+            userId: userId,
+            restaurantId: decodedToken.restaurantId
+          }
+        });
+        
+        if (restaurantUser) {
+          restaurantUserId = restaurantUser.id;
+        }
+      }
+
+      // Check if user has an employee profile
+      const employee = await prisma.employee.findUnique({
+        where: { userId: userId }
+      });
+      
+      if (employee) {
+        employeeId = employee.id;
+      }
+
+      console.log('✅ user-info: Returning user info:', { userId, restaurantUserId, employeeId });
+      
+      return res.json({
+        success: true,
+        userId,
+        restaurantUserId,
+        employeeId
+      });
+      
+    } catch (tokenError) {
+      console.log('❌ user-info: Token verification failed:', tokenError.message);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authentication token'
+      });
+    }
+  } catch (error) {
+    console.error('Error getting user info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 });

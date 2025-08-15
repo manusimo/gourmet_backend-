@@ -11,6 +11,7 @@ const checkTalentPoolEntry = async (employeeId, restaurantId) => {
     where: {
       employeeId: parseInt(employeeId),
       restaurantId,
+      deletedAt: null, // Exclude soft-deleted records
     }
   });
 };
@@ -61,40 +62,50 @@ const buildTalentPoolFilters = (queryParams) => {
  * @returns {Object|null} Talent pool entry with conversations or null
  */
 const getTalentPoolEntryWithConversations = async (talentId) => {
-  return await prisma.talentPool.findUnique({
-    where: { id: talentId },
+  return await prisma.talentPool.findFirst({
+    where: { 
+      id: talentId,
+      deletedAt: null // Exclude soft-deleted records
+    },
     include: { conversations: true }
   });
 };
 
 /**
- * Delete talent pool entry and associated conversations
+ * Soft delete talent pool entry and associated conversations
  * @param {number} talentId - Talent pool entry ID
- * @returns {Object} Deleted talent pool entry
+ * @returns {Object} Soft deleted talent pool entry
  */
 const deleteTalentPoolEntry = async (talentId) => {
   return await prisma.$transaction(async (tx) => {
-    const existingEntry = await tx.talentPool.findUnique({
-      where: { id: talentId },
+    const existingEntry = await tx.talentPool.findFirst({
+      where: { 
+        id: talentId,
+        deletedAt: null // Only find non-deleted records
+      },
       include: { conversations: true }
     });
 
     if (!existingEntry) {
-      throw new Error('Talent not found in the pool.');
+      throw new Error('Talent not found in the pool or already deleted.');
     }
 
+    // Soft delete conversations and messages
     const conversationIds = existingEntry.conversations.map(conversation => conversation.id);
 
     await tx.message.deleteMany({
       where: { conversationId: { in: conversationIds } }
     });
 
-    await tx.conversation.deleteMany({
-      where: { id: { in: conversationIds } }
+    await tx.conversation.updateMany({
+      where: { id: { in: conversationIds } },
+      data: { deletedAt: new Date() }
     });
 
-    return await tx.talentPool.delete({
-      where: { id: talentId }
+    // Soft delete the talent pool entry
+    return await tx.talentPool.update({
+      where: { id: talentId },
+      data: { deletedAt: new Date() }
     });
   });
 };
@@ -106,12 +117,18 @@ const deleteTalentPoolEntry = async (talentId) => {
  * @returns {Object} Updated talent pool entry
  */
 const approveTalentPoolEntry = async (talentId, restaurantUserId) => {
+  const updateData = {
+    status: "approved"
+  };
+
+  // Only add addedByUser connection if restaurantUserId exists and is not undefined
+  if (restaurantUserId && restaurantUserId !== undefined) {
+    updateData.addedByUser = { connect: { id: restaurantUserId } };
+  }
+
   return await prisma.talentPool.update({
     where: { id: parseInt(talentId) },
-    data: {
-      status: "approved",
-      addedByUser: { connect: { id: restaurantUserId } }
-    }
+    data: updateData
   });
 }; 
 
