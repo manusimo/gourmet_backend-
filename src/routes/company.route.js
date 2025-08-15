@@ -1,112 +1,203 @@
-import Router from "express";
-import csrf from 'csurf';
-import { prisma } from "../db.js";
-import jwt from 'jsonwebtoken';
-import { checkCompany, setUserRole }  from '../helpers/authenticateToken.js';
-import { getUserIdFromCookie, getRestaurantIdFromCookie } from '../helpers/cookies.js';
-import { buildFilters, buildSearchConditions } from "../helpers/filterHelpers.js";
-import { deleteLocations, updateCompanyProfile, createNewLocations } from '../helpers/company.js'
-import {getOrderByCriteriaCompanies} from '../helpers/orderBy.js'
-import { verifyCSRFToken } from "../helpers/csrf.js";
+const express = require('express');
+const csrf = require('csurf');
+const { prisma } = require('../db.js');
+const { checkCompany } = require('../helpers/authenticateToken.js');
+const { requireRole, requirePermission, setUserRole } = require('../middleware/auth.js');
+const { getUserIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
+const { requirePlan, checkLocationLimit } = require('../middleware/checkPlan.js');
+const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
+const { deleteLocations, updateCompanyProfile, createNewLocations } = require('../helpers/company.js');
+const { getOrderByCriteriaCompanies } = require('../helpers/orderBy.js');
+const { verifyCSRFToken } = require('../helpers/csrf.js');
+const {
+  getCompanies,
+  getTotalCompanies,
+  getRestaurantUserByUserId,
+  getCompanyLocations,
+  formatLocations,
+  getTopRatedCompanies,
+  getTotalCompaniesCount,
+  getTalentsApplications,
+  createCompanyProfile,
+  createRestaurantUser,
+  updateUserWithRestaurant,
+  generateCompanyToken,
+  getCompanyById,
+  getCompanyByRestaurantId,
+  getCurrentLocations,
+  filterNewLocations,
+  filterExistingLocations,
+  findLocationsToDelete,
+  generatePlanInfo,
+  generateUpdatePlanInfo
+} = require('../helpers/companyHelpers.js');
 
 const csrfProtection = csrf({ cookie: true });
-const router = Router();
+const router = express.Router();
 
+// GET /companies - Get companies with filters and pagination
 router.get('/companies', async (req, res) => {
-  const {
-    q,
-    page = 1,
-    limit = 10,
-    orderBy
-  } = req.query;
-
-  const pageInt = parseInt(page, 10);
-  const limitInt = parseInt(limit, 10);
-
-  if (orderBy && !['popularity', 'scale'].includes(orderBy)) {
-    console.error(`Invalid orderBy value: ${orderBy}`);
-    return res.status(400).json({ error: "Invalid orderBy value. Must be 'popularity' or 'scale'" });
-  }
-
   try {
-    const filters = buildFilters(req.query, ['format', 'specialty']);
+    const {
+      q,
+      page = 1,
+      limit = 10,
+      orderBy
+    } = req.query;
+
+    const pageInt = parseInt(page, 10);
+    const limitInt = parseInt(limit, 10);
+
+    if (orderBy && !['popularity', 'scale'].includes(orderBy)) {
+      console.error(`Invalid orderBy value: ${orderBy}`);
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid orderBy value. Must be 'popularity' or 'scale'" 
+      });
+    }
+
+    const filters = buildFilters(req.query, ['format', 'specialty', 'region', 'comuna', 'benefits', 'workers', 'weeklyAverageClients']);
     const searchConditions = buildSearchConditions(q, 'name');
-    console.log('Filters:', filters);
-    console.log('Search Conditions:', searchConditions);
+    console.log('🔍 [Companies API] Query params:', req.query);
+    console.log('🔍 [Companies API] Filters:', filters);
+    console.log('🔍 [Companies API] Search Conditions:', searchConditions);
 
-    const companies = await prisma.restaurant.findMany({
-      where: {
-        ...filters,
-        ...searchConditions,
-      },
-      take: limitInt,
-      skip: (pageInt - 1) * limitInt,
-    });
-
-    const totalCompanies = await prisma.restaurant.count({
-      where: {
-        ...filters,
-        ...searchConditions,
-      },
-    });
+    const companies = await getCompanies(filters, searchConditions, limitInt, (pageInt - 1) * limitInt);
+    const totalCompanies = await getTotalCompanies(filters, searchConditions);
 
     res.json({
-      companies,
+      success: true,
+      data: companies,
       totalCompanies,
       currentPage: pageInt,
       totalPages: Math.ceil(totalCompanies / limitInt),
     });
   } catch (error) {
     console.error('Internal Server Error:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
-router.get('/api/company/restaurantUser/:userId', async (req, res) => {
-  const { userId } = req.params;
-
-  if (!userId || isNaN(userId)) {
-    return res.status(400).json({ error: 'Invalid or missing userId' });
-  }
-
+// GET /api/restaurant/:restaurantUserId - Get restaurant information by restaurantUserId
+router.get('/api/restaurant/:restaurantUserId', async (req, res) => {
   try {
+    const { restaurantUserId } = req.params;
+
+    if (!restaurantUserId || isNaN(restaurantUserId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid or missing restaurantUserId' 
+      });
+    }
+
+    // Get restaurant user information
     const restaurantUser = await prisma.restaurantUser.findUnique({
-      where: {
-        userId: parseInt(userId),
-      },
+      where: { id: parseInt(restaurantUserId) },
       include: {
-        user: true,
-        restaurant: true,
-      },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            profileImageUrl: true
+          }
+        },
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            profileImageUrl: true,
+            location: true
+          }
+        }
+      }
     });
 
     if (!restaurantUser) {
-      return res.status(404).json({ error: 'Restaurant user not found' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Restaurant user not found' 
+      });
     }
 
-    // Return the restaurant user data
-    return res.status(200).json({ data: restaurantUser });
+    // Format the response
+    const restaurantInfo = {
+      id: restaurantUser.id,
+      name: restaurantUser.user.name,
+      surname: restaurantUser.user.surname,
+      email: restaurantUser.user.email,
+      profileImageUrl: restaurantUser.user.profileImageUrl || restaurantUser.restaurant.profileImageUrl,
+      position: restaurantUser.position || 'Staff Member',
+      location: restaurantUser.restaurant.location || 'Location not specified',
+      restaurantName: restaurantUser.restaurant.name,
+      restaurantDescription: restaurantUser.restaurant.description
+    };
+
+    return res.status(200).json({ 
+      success: true,
+      data: restaurantInfo 
+    });
   } catch (error) {
-    console.error('Error fetching restaurant user:', error);
-    return res.status(500).json({ error: 'Failed to fetch restaurant user' });
+    console.error('Error fetching restaurant information:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch restaurant information' 
+    });
   }
 });
 
-router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => {
-  const restaurantId = req.restaurantId;
+// GET /api/company/restaurantUser/:userId - Get restaurant user by user ID
+router.get('/api/company/restaurantUser/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
 
-  if (!restaurantId) {
-    return res.status(400).json({
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid or missing userId' 
+      });
+    }
+
+    const restaurantUser = await getRestaurantUserByUserId(userId);
+
+    if (!restaurantUser) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Restaurant user not found' 
+      });
+    }
+
+    return res.status(200).json({ 
+      success: true,
+      data: restaurantUser 
+    });
+  } catch (error) {
+    console.error('Error fetching restaurant user:', error);
+    return res.status(500).json({ 
       success: false,
-      message: 'companyId is required',
+      error: 'Failed to fetch restaurant user' 
     });
   }
+});
 
+// GET /company/locations - Get company locations
+router.get('/company/locations', getAuthFromCookie, async (req, res) => {
   try {
-    const locations = await prisma.location.findMany({
-      where: { restaurantId: parseInt(restaurantId) },
-      select: { id: true, address: true },
-    });
+    const restaurantId = req.restaurantId;
+
+    if (!restaurantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'companyId is required',
+      });
+    }
+
+    const locations = await getCompanyLocations(restaurantId);
 
     if (!locations.length) {
       return res.status(404).json({
@@ -115,15 +206,14 @@ router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => 
       });
     }
 
-    const formattedLocations = locations.map(({ id, address }) => ({
-      locationId: id,
-      address
-    }));
+    const formattedLocations = formatLocations(locations);
 
-    return res.status(200).json(formattedLocations);
+    return res.status(200).json({
+      success: true,
+      data: formattedLocations
+    });
   } catch (error) {
     console.error('Error fetching company locations:', error.message);
-
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -131,34 +221,22 @@ router.get('/company/locations', getRestaurantIdFromCookie, async (req, res) => 
   }
 });
 
+// GET /company/top-rated-companies - Get top rated companies
 router.get('/company/top-rated-companies', async (req, res) => {
-  const {
-    page = 1,
-    limit = 4,
-  } = req.query;
-
-  const skip = (page - 1) * limit;
-
   try {
-    const companies = await prisma.restaurant.findMany({
-      orderBy: {
-        jobOffers: {
-          _count: 'desc',
-        },
-      },
-      take: parseInt(limit, 10),
-      skip: skip,
-      include: {
-        _count: {
-          select: { jobOffers: { where: { deletedAt: null } } },
-        },
-      },
-    });
+    const {
+      page = 1,
+      limit = 4,
+    } = req.query;
 
-    const totalCompanies = await prisma.restaurant.count();
+    const skip = (page - 1) * limit;
+
+    const companies = await getTopRatedCompanies(limit, skip);
+    const totalCompanies = await getTotalCompaniesCount();
 
     res.json({
-      companies: companies.map(company => ({
+      success: true,
+      data: companies.map(company => ({ // Use consistent 'data' property
         ...company,
         jobOffersCount: company._count.jobOffers,
       })),
@@ -167,35 +245,52 @@ router.get('/company/top-rated-companies', async (req, res) => {
       totalPages: Math.ceil(totalCompanies / limit),
     });
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error('Error fetching top-rated companies:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
-router.get('/company/talents-application', getRestaurantIdFromCookie, async (req, res) => {
+// GET /company/talents-application - Get talents applications
+router.get('/company/talents-application', getAuthFromCookie, async (req, res) => {
   try {
     const restaurantId = req.restaurantId;
+    const talents = await getTalentsApplications(restaurantId);
 
-    const talents = await prisma.talentPool.findMany({
-      where: {
-        status: "pendent",
-        restaurantId: parseInt(restaurantId, 10),
-      },
-      include: {
-        employee: true,
-      }
+    console.log('here you have some talents', talents);
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Some talents want to be part of this company', 
+      data: talents 
     });
-
-    console.log('here you have some talents', talents)
-
-    res.status(200).json({ message: 'Some talents want to be part of this company', talents });
   } catch (error) {
     console.error('Error fetching talents:', error);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error" 
+    });
   }
 });
 
-router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (req, res) => {
+// POST /company - Create company (require admin or manager role)
+router.post('/company', (req, res, next) => {
+  console.log('🚨 POST /company route HIT - Request received!');
+  console.log('🚨 Method:', req.method);
+  console.log('🚨 URL:', req.url);
+  console.log('🚨 Headers:', req.headers);
+  next();
+}, getUserIdFromCookie, setUserRole, requirePermission('create_company'), checkLocationLimit(), async (req, res) => {
   try {
+    console.log('🏢 POST /company - Creating company profile');
+    console.log('🏢 Request cookies:', req.cookies);
+    console.log('🏢 User ID from middleware:', req.userId);
+    console.log('🏢 User type from middleware:', req.userType);
+    console.log('🏢 User role from middleware:', req.userRole);
+    console.log('🏢 Request body keys:', Object.keys(req.body));
+
     const {
       name,
       specialty,
@@ -215,60 +310,79 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       profileCarouselUrls
     } = req.body;
 
-    const benefitsArray = Object.keys(benefits).filter(benefit => benefits[benefit]);
     const userId = req.userId;
     const role = req.userRole;
 
-    const formattedLocations = locations.map(location => ({
-      address: location.address,
-      longitude: parseFloat(location.longitude),
-      latitude: parseFloat(location.latitude),
-    }));
-
-    const companyProfile = await prisma.restaurant.create({
-      data: {
-        name,
-        specialty,
-        format,
-        description,
-        rut,
-        legalName,
-        region,
-        comuna,
-        numberOfRestaurants: parseInt(numberOfRestaurants, 10),
-        workers,
-        weeklyAverageClients,
-        profileImageUrl,
-        profileCarouselUrls,
-        benefits: benefitsArray,
-        locations: { create: formattedLocations },
-        jobOffers: { create: jobOffers },
-        userId,
-      },
+    console.log('🏢 About to create company profile for userId:', userId);
+    console.log('🏢 Request body data:', {
+      name,
+      specialty,
+      format,
+      description,
+      rut,
+      legalName,
+      region,
+      comuna,
+      numberOfRestaurants,
+      workers,
+      weeklyAverageClients,
+      benefits,
+      locations,
+      jobOffers,
+      profileImageUrl,
+      profileCarouselUrls
     });
 
-    const restaurantUser = await prisma.restaurantUser.create({
-      data: {
-        userId,
-        restaurantId: companyProfile.id,
-        role: 'admin'
-      }
-    });
+    // Data validation and conversion
+    const processedData = {
+      name: name || '',
+      specialty: specialty || '',
+      format: format || '',
+      description: description || 'No description to show',
+      rut: rut || 'No rut to show',
+      legalName: legalName || 'No legal name to show',
+      region: region || 'No hay',
+      comuna: comuna || 'No hay', // Handle empty string
+      numberOfRestaurants: numberOfRestaurants ? parseInt(numberOfRestaurants, 10) : 1,
+      workers: workers || '',
+      weeklyAverageClients: weeklyAverageClients || '',
+      benefits: Array.isArray(benefits) ? benefits : (benefits ? Object.keys(benefits).filter(key => benefits[key]) : []),
+      locations: locations || [],
+      jobOffers: jobOffers || [],
+      profileImageUrl: profileImageUrl || 'No photo',
+      profileCarouselUrls: Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [],
+      userId
+    };
 
-    const updateUser = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        restaurant: { connect: { id: companyProfile.id } }
-      }
-    });
+    console.log('🏢 Processed data for Prisma:', processedData);
 
-    const newToken = jwt.sign({
-      userId: userId,
-      userType: 'empresas',
+    // Check if user already has a restaurant
+    const existingRestaurant = await prisma.restaurant.findUnique({
+      where: { userId: userId }
+    });
+    console.log('🏢 Existing restaurant for user:', existingRestaurant ? 'Found' : 'None');
+
+    if (existingRestaurant) {
+      console.log('🏢 User already has restaurant ID:', existingRestaurant.id);
+      return res.status(409).json({
+        success: false,
+        message: 'User already has a restaurant profile',
+        data: { restaurantId: existingRestaurant.id }
+      });
+    }
+
+    const companyProfile = await createCompanyProfile(processedData);
+
+    // Create RestaurantUser record for the owner so they can use chat functionality
+    const restaurantUser = await createRestaurantUser(userId, companyProfile.id);
+
+    const newToken = generateCompanyToken({
+      userId,
+      userType: req.userType, // Include userType from request
+      role: req.role, // Include role from request  
       restaurantId: companyProfile.id,
-      restaurantUserId: restaurantUser.id,
-      role: role,
-    }, process.env.JWT_SECRET);
+      restaurantUserId: restaurantUser.id, // Owner now has restaurantUserId
+    });
 
     res.cookie('manu', newToken, {
       httpOnly: true,
@@ -276,66 +390,77 @@ router.post('/company', checkCompany, getUserIdFromCookie, setUserRole, async (r
       secure: true,
     });
 
-    res.status(201).json({ message: 'Company created successfully', companyProfile });
+    const planInfo = generatePlanInfo(req.user.payment_status, req.requestedLocations, req.locationLimit);
+
+    res.status(201).json({ 
+      success: true,
+      message: 'Company created successfully', 
+      data: companyProfile,
+      planInfo
+    });
   } catch (error) {
     console.error('Error creating company:', error.message, error.stack);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /company/:id - Get company by ID
 router.get('/company/:id', async (req, res) => {
   try {
     const { id } = req.params;
-
-    const restaurant = await prisma.restaurant.findUnique({
-      where: {
-        id: parseInt(id),
-      },
-      include: {
-        locations: true,
-        jobOffers: { where: { deletedAt: null } },
-      },
-    });
-
-    console.log('this is the restaurant', restaurant.benefits)
+    const restaurant = await getCompanyById(id);
 
     if (restaurant) {
-      res.status(200).json({ company: restaurant });
+      console.log('this is the restaurant', restaurant.benefits);
+      res.status(200).json({ 
+        success: true,
+        data: restaurant 
+      });
     } else {
-      res.status(404).send('Restaurant not found');
+      res.status(404).json({ 
+        success: false,
+        error: 'Restaurant not found' 
+      });
     }
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
-router.get('/company', getRestaurantIdFromCookie, async (req, res) => {
+// GET /company - Get current company
+router.get('/company', getAuthFromCookie, async (req, res) => {
   try {
-    const restaurantId = req.restaurantId
-
-    const company = await prisma.restaurant.findUnique({
-      where: {
-        id: parseInt(restaurantId),
-      },
-      include: {
-        locations: true,
-        jobOffers: { where: { deletedAt: null } },
-      },
-    });
+    const restaurantId = req.restaurantId;
+    const company = await getCompanyByRestaurantId(restaurantId);
 
     if (company) {
-      res.status(200).json(company);
+      res.status(200).json({
+        success: true,
+        data: company
+      });
     } else {
-      res.status(404).send('Company not found');
+      res.status(404).json({ 
+        success: false,
+        error: 'Company not found' 
+      });
     }
   } catch (error) {
-    res.status(401).json({ message: 'Invalid token' });
+    res.status(401).json({ 
+      success: false,
+      message: 'Invalid token' 
+    });
   }
 });
 
-router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+// PATCH /company - Update company (require permission to edit company)
+router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), checkLocationLimit(), async (req, res) => {
   try {
     const {
       legalName,
@@ -357,21 +482,10 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
 
     const restaurantId = req.restaurantId;
 
-    const newLocations = locations.filter(location => !location.id).map(location => ({
-      ...location,
-      longitude: parseFloat(location.longitude),
-      latitude: parseFloat(location.latitude),
-    }));
-
-    const existingLocations = locations.filter(location => location.id);
-
-    const currentLocations = await prisma.location.findMany({
-      where: { restaurantId },
-    });
-
-    const locationsToDelete = currentLocations.filter(currentLocation =>
-      !locations.some(location => location.id === currentLocation.id)
-    );
+    const newLocations = filterNewLocations(locations);
+    const existingLocations = filterExistingLocations(locations);
+    const currentLocations = await getCurrentLocations(restaurantId);
+    const locationsToDelete = findLocationsToDelete(currentLocations, locations);
 
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete);
@@ -395,11 +509,20 @@ router.patch('/company', checkCompany, getRestaurantIdFromCookie, async (req, re
       await createNewLocations(newLocations, restaurantId);
     });
 
-    res.status(200).json({ message: 'Company profile updated successfully' });
+    const planInfo = generateUpdatePlanInfo(req.user.payment_status, req.requestedLocations, req.locationLimit);
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Company profile updated successfully',
+      planInfo
+    });
   } catch (error) {
     console.error('Error updating company profile:', error.message, error.stack);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
-export default router
+module.exports = router;

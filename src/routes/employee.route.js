@@ -1,43 +1,74 @@
-import Router from "express";
-import { prisma } from "../db.js";
-import  { checkEmployee, checkCompany }  from '../helpers/authenticateToken.js';
-import { findApplicationDetails } from '../helpers/employee/findApplication.js';
-import { getUserIdFromCookie, getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } from '../helpers/cookies.js';
-import jwt from 'jsonwebtoken';
+const express = require('express');
+const { prisma } = require('../db.js');
+const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
+const { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } = require('../helpers/cookies.js');
+const { requirePlan } = require('../middleware/checkPlan.js');
+const { findApplicationDetails } = require('../helpers/employee/findApplication.js');
+const {
+  getEmployeeById,
+  getEmployeeByUserId,
+  createEmployeeProfile,
+  generateEmployeeToken,
+  getEmployeeProfile,
+  updateEmployeeProfile,
+  createExperience,
+  createEducation,
+  getEmployeeWithDetails,
+  searchEmployees,
+  getJobOfferById,
+  getEmployeeByEmployeeId,
+  checkFavoriteJobExists,
+  createFavoriteJob,
+  getFavoriteJobById,
+  deleteFavoriteJob,
+  getFavoriteJobs,
+  checkTalentPoolRecord,
+  createTalentPoolRecord
+} = require('../helpers/employeeHelpers.js');
 
-const router = Router();
+const router = express.Router();
 
-
+// GET /employee/:id - Get employee by ID
 router.get('/employee/:id', async (req, res) => {
-  const employeeId = parseInt(req.params.id, 10);
-
-  if (isNaN(employeeId)) {
-    return res.status(400).json({ error: 'Invalid employee ID' });
-  }
-
   try {
-    const employeeProfile = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: {
-        experiences: true,
-        educations: true,
-        user: true,
-      },
-    });
+    const employeeId = parseInt(req.params.id, 10);
+    console.log('🔍 GET /employee/:id - Requested employee ID:', employeeId);
 
-    if (!employeeProfile) {
-      return res.status(404).json({ error: 'Employee profile not found' });
-    } else {
-      res.status(200).json({ profile: employeeProfile });
+    if (isNaN(employeeId)) {
+      console.log('❌ Invalid employee ID:', req.params.id);
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid employee ID' 
+      });
     }
 
+    console.log('🔍 Fetching employee profile for ID:', employeeId);
+    const employeeProfile = await getEmployeeById(employeeId);
+    console.log('🔍 Employee profile found:', employeeProfile ? 'Yes' : 'No');
 
+    if (!employeeProfile) {
+      console.log('❌ Employee profile not found for ID:', employeeId);
+      return res.status(404).json({ 
+        success: false,
+        error: 'Employee profile not found' 
+      });
+    }
+
+    console.log('✅ Employee profile found, returning data');
+    res.status(200).json({ 
+      success: true,
+      data: employeeProfile 
+    });
   } catch (error) {
-    console.error('Error fetching employee profile:', error.message);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error('❌ Error fetching employee profile:', error.message);
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /employee - Create employee profile
 router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) => {
   try {
     const {
@@ -62,45 +93,40 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
 
     const userId = req.userId;
 
-    const skillsArray = Object.keys(skills).filter(skill => skills[skill]);
-
-    const existingEmployee = await prisma.employee.findUnique({
-      where: { userId },
-    });
+    const existingEmployee = await getEmployeeByUserId(userId);
 
     if (existingEmployee) {
-      return res.status(400).json({ message: 'Employee profile already exists' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Employee profile already exists' 
+      });
     }
 
-    const employeeProfile = await prisma.employee.create({
-      data: {
-        name,
-        country,
-        surname,
-        birthDate,
-        phoneNumber,
-        position,
-        aboutMe,
-        region,
-        comuna,
-        schedule,
-        available,
-        experiences: { create: experiences },
-        educations: { create: educations },
-        skills: skillsArray,
-        userId,
-        profileImageUrl
-      },
+    const employeeProfile = await createEmployeeProfile({
+      name,
+      position,
+      experiences,
+      surname,
+      skills,
+      educations,
+      aboutMe,
+      birthDate,
+      country,
+      phoneNumber,
+      comuna,
+      region,
+      genre,
+      civilState,
+      available,
+      schedule,
+      profileImageUrl,
+      userId
     });
 
-    const newToken = jwt.sign(
-      {
-        userId: req.userId,
-        userType: 'profesionales',
-        employeeId: employeeProfile.id,
-      },
-      process.env.JWT_SECRET
-    );
+    const newToken = generateEmployeeToken({
+      userId: req.userId,
+      employeeId: employeeProfile.id,
+    });
 
     res.cookie('manu', newToken, {
       httpOnly: true,
@@ -108,40 +134,53 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       secure: true,
     });
 
-    res.status(201).json({ message: 'Employee created successfully', employeeProfile });
+    res.status(201).json({ 
+      success: true,
+      message: 'Employee created successfully', 
+      data: employeeProfile 
+    });
   } catch (error) {
     console.error('Error in employee route:', error);
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Invalid token' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid token' 
+      });
     }
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /employee - Get current employee profile
 router.get('/employee', getEmployeeIdFromCookie, async (req, res) => {
   try {
     const employeeId = req.employeeId;
-
-    const employeeProfile = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: {
-        experiences: true,
-        educations: true,
-        user:true,
-      },
-    });
+    const employeeProfile = await getEmployeeProfile(employeeId);
 
     if (!employeeProfile) {
-      return res.status(404).json({ error: 'Employee profile not found' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Employee profile not found' 
+      });
     }
 
-    res.status(200).json({ profile: employeeProfile });
+    res.status(200).json({ 
+      success: true,
+      data: employeeProfile 
+    });
   } catch (error) {
     console.error('Error fetching employee profile:', error.message);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
+// PATCH /employee - Update employee profile
 router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
     const {
@@ -166,107 +205,68 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
       profileImageUrl
     } = req.body;
 
-
     const employeeId = req.employeeId;
 
+    const updatedEmployee = await updateEmployeeProfile(employeeId, {
+      name,
+      position,
+      experiences,
+      surname,
+      period,
+      yearsOfExperience,
+      educations,
+      skills,
+      aboutMe,
+      birthDate,
+      region,
+      comuna,
+      country,
+      phoneNumber,
+      genre,
+      civilState,
+      available,
+      schedule,
+      profileImageUrl
+    });
+
+    // Create new experiences
     const newExperiences = experiences.filter(experience => !experience.id);
-    const existingExperiences = experiences.filter(experience => experience.id);
-
-    const newEducations = educations.filter(education => !education.id);
-    const existingEducations = educations.filter(education => education.id);
-
-    const updatedEmployee = await prisma.employee.update({
-      where: { id: employeeId },
-      data: {
-        name,
-        surname,
-        country,
-        birthDate: new Date(birthDate),
-        phoneNumber,
-        position,
-        aboutMe,
-        period,
-        yearsOfExperience,
-        region,
-        comuna,
-        schedule,
-        available,
-        genre,
-        civilState,
-        profileImageUrl,
-        experiences: {
-          updateMany: existingExperiences.map(exp => ({
-            where: { id: exp.id },
-            data: {
-              companyName: exp.companyName,
-              description: exp.description,
-              startDate: new Date(exp.startDate),
-              endDate: new Date(exp.endDate),
-              role: exp.role,
-            },
-          })),
-        },
-        educations: {
-          updateMany: existingEducations.map(edu => ({
-            where: { id: edu.id },
-            data: {
-              institution: edu.institution,
-              startDate: new Date(edu.startDate),
-              study: edu.study,
-              endDate: new Date(edu.endDate),
-              description: edu.description,
-            },
-          })),
-        },
-        skills: Object.keys(skills).filter(skill => skills[skill]),
-      },
-    });
-
     for (const experience of newExperiences) {
-      const createExperience = await prisma.experience.create({
-        data: {
-          companyName: experience.companyName,
-          description: experience.description,
-          startDate: new Date(experience.startDate),
-          endDate: new Date(experience.endDate),
-          role: experience.role,
-          employeeId,
-        },
+      await createExperience({
+        ...experience,
+        employeeId
       });
     }
 
+    // Create new educations
+    const newEducations = educations.filter(education => !education.id);
     for (const education of newEducations) {
-      const createEducation = await prisma.education.create({
-        data: {
-          study: education.study,
-          institution: education.institution,
-          startDate: new Date(education.startDate),
-          endDate: new Date(education.endDate),
-          description: education.description,
-          employeeId,
-        },
+      await createEducation({
+        ...education,
+        employeeId
       });
     }
 
-    const thisNewEmployee = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: {
-        experiences: true,
-        educations: true,
-      },
+    const thisNewEmployee = await getEmployeeWithDetails(employeeId);
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Employee profile updated successfully.', 
+      data: thisNewEmployee 
     });
-
-
-    res.status(200).json({ message: 'Employee profile updated successfully.', updatedEmployee: thisNewEmployee });
   } catch (error) {
     console.error('Error in employee patch route:', error);
-    res.status(500).json({ message: 'Internal Server Error.' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error.' 
+    });
   }
 });
 
+// GET /employees/:employeeId/applications - Get employee applications
 router.get('/employees/:employeeId/applications', async (req, res) => {
-  const { employeeId } = req.params;
   try {
+    const { employeeId } = req.params;
     const employee = await prisma.jobOffer.findMany({
       where: {
         id: parseInt(employeeId),
@@ -282,40 +282,62 @@ router.get('/employees/:employeeId/applications', async (req, res) => {
     });
 
     if (employee) {
-      res.json(employee);
+      res.json({ 
+        success: true,
+        data: employee 
+      });
     } else {
-      res.status(404).send('Employee not found');
+      res.status(404).json({ 
+        success: false,
+        error: 'Employee not found' 
+      });
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
   }
 });
 
-
+// GET /employees/:employeeId/job-posts/:jobPostId/application - Get specific application
 router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req, res) => {
-  const { employeeId, jobPostId } = req.params;
-
   try {
+    const { employeeId, jobPostId } = req.params;
+
     const employeeIdInt = parseInt(employeeId, 10);
     const jobPostIdInt = parseInt(jobPostId, 10);
 
     if (isNaN(employeeIdInt) || isNaN(jobPostIdInt)) {
-      return res.status(400).json({ message: 'Invalid employee or job post ID.' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid employee or job post ID.' 
+      });
     }
 
     const application = await findApplicationDetails(employeeIdInt, jobPostIdInt);
 
     if (!application) {
-      return res.status(404).json({ message: 'Application not found.' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Application not found.' 
+      });
     }
 
-    res.json(application);
+    res.json({ 
+      success: true,
+      data: application 
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /employees/search - Search employees
 router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     console.log('Here we start the search');
@@ -323,164 +345,157 @@ router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurant
 
     const userId = req.userId;
     const restaurantUserId = req.restaurantUserId;
-    console.log('this is the query ', req.query)
+    console.log('this is the query ', req.query);
 
-    const employees = await prisma.employee.findMany({
-      where: {
-        position: {
-          contains: position,
-          mode: 'insensitive',
-        },
-        region: {
-          contains: region,
-          mode: 'insensitive',
-        },
-        comuna: {
-          contains: comuna,
-          mode: 'insensitive',
-        },
-        available: {
-          contains: available,
-          mode: 'insensitive',
-        },
-        schedule: {
-          contains: schedule,
-          mode: 'insensitive',
-        },
-      },
-      include: {
-        user: true,
-        experiences: true,
-        educations: true,
-      },
+    const employees = await searchEmployees({
+      position,
+      experience,
+      region,
+      comuna,
+      available,
+      schedule
     });
 
     console.log('These are the results', employees);
-    res.status(200).json({ employees });
+    res.status(200).json({ 
+      success: true,
+      data: employees 
+    });
   } catch (error) {
     console.error('Error in employee search:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /employees/favorite-jobs/:jobPostId - Add favorite job
 router.post('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
-  console.log('adding favourite job')
+  try {
+    console.log('adding favourite job');
+    const { jobPostId } = req.params;
+    const employeeId = req.employeeId;
+
+    const jobPost = await getJobOfferById(jobPostId);
+
+    if (!jobPost) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Job post not found' 
+      });
+    }
+
+    const employee = await getEmployeeByEmployeeId(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Employee not found' 
+      });
+    }
+
+    const existingFavorite = await checkFavoriteJobExists(employeeId, jobPostId);
+
+    if (existingFavorite) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Job post is already a favorite' 
+      });
+    }
+
+    const newFavorite = await createFavoriteJob(employeeId, jobPostId);
+
+    console.log('this is the new favourite', newFavorite);
+    res.status(201).json({ 
+      success: true,
+      message: 'Job post added to favorites', 
+      data: newFavorite 
+    });
+  } catch (error) {
+    console.error('Error in saving favorite job post:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
+  }
+});
+
+// DELETE /employees/favorite-jobs/:jobPostId - Remove favorite job
+router.delete('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
     const { jobPostId } = req.params;
     const employeeId = req.employeeId;
 
-    const jobPost = await prisma.jobOffer.findFirst({
-      where: { id: parseInt(jobPostId), deletedAt: null },
-    });
-
-    if (!jobPost) {
-      return res.status(404).json({ message: 'Job post not found' });
+    if (!employeeId) {
+      return res.status(403).json({ 
+        success: false,
+        error: 'Unauthorized access.' 
+      });
     }
 
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
-    });
-
-    if (!employee) {
-      return res.status(404).json({ message: 'Employee not found' });
-    }
-
-    const existingFavorite = await prisma.favouriteJob.findFirst({
-      where: {
-        employeeId: employeeId,
-        jobOfferId: parseInt(jobPostId),
-        jobOffer: { deletedAt: null },
-      },
-    });
-
-    if (existingFavorite) {
-      return res.status(400).json({ message: 'Job post is already a favorite' });
-    }
-
-    const newFavorite = await prisma.favouriteJob.create({
-      data: {
-        employeeId: employeeId,
-        jobOfferId: parseInt(jobPostId),
-      },
-    });
-
-    console.log('this is the new favourite', newFavorite)
-    res.status(201).json({ message: 'Job post added to favorites', favoriteJob: newFavorite });
-  } catch (error) {
-    console.error('Error in saving favorite job post:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-router.delete('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
-  const { jobPostId } = req.params;
-  const employeeId = req.employeeId;
-
-  if (!employeeId) {
-    return res.status(403).json({ error: 'Unauthorized access.' });
-  }
-
-  try {
-    const favoriteJob = await prisma.favouriteJob.findFirst({
-      where: {
-        jobOfferId: parseInt(jobPostId),
-        employeeId: employeeId,
-        jobOffer: { deletedAt: null },
-      },
-    });
+    const favoriteJob = await getFavoriteJobById(employeeId, jobPostId);
 
     if (!favoriteJob) {
-      return res.status(404).json({ error: 'Favorite job not found.' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Favorite job not found.' 
+      });
     }
 
-    await prisma.favouriteJob.delete({
-      where: { id: favoriteJob.id },
-    });
+    await deleteFavoriteJob(favoriteJob.id);
 
     console.log('Favourite job deleted', favoriteJob);
 
-    res.status(200).json({ message: 'Favourite Job deleted successfully' });
+    res.status(200).json({ 
+      success: true,
+      message: 'Favourite Job deleted successfully' 
+    });
   } catch (error) {
     console.error('Error deleting favorite job:', error);
-    res.status(500).json({ error: 'Failed to delete favorite job.' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to delete favorite job.' 
+    });
   }
 });
 
+// GET /employees/favorite-jobs - Get all favorite jobs
 router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
-    console.log('fetching the jobs saved as favouritess')
+    console.log('fetching the jobs saved as favouritess');
     const employeeId = req.employeeId;
 
-    if(!employeeId) {
-      res.status(404).send('Emloyee not found');
+    if (!employeeId) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Employee not found' 
+      });
     }
 
-    const favoriteJobs = await prisma.favouriteJob.findMany({
-      where: {
-        employeeId: employeeId,
-        jobOffer: { deletedAt: null },
-      },
-      include: {
-        jobOffer: {
-          include: {
-            restaurant: true,
-            location: true,
-          },
-        },
-      },
-    });
+    const favoriteJobs = await getFavoriteJobs(employeeId);
 
     if (favoriteJobs) {
-      return res.status(200).json({ jobs: favoriteJobs });
+      return res.status(200).json({ 
+        success: true,
+        data: favoriteJobs 
+      });
     }
 
-    return res.status(404).json({ message: 'jobs where not found' });
+    return res.status(404).json({ 
+      success: false,
+      message: 'jobs where not found' 
+    });
   } catch (error) {
     console.error('Error fetching favorite jobs:', error.message);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /employees/favorite-jobs/:jobPostId - Check if job is favorite
 router.get('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
     console.log('Fetching the jobs saved as favorites');
@@ -488,88 +503,110 @@ router.get('/employees/favorite-jobs/:jobPostId', checkEmployee, getEmployeeIdFr
     const jobPostId = parseInt(req.params.jobPostId, 10);
 
     if (!employeeId) {
-      return res.status(404).send('Employee not found');
+      return res.status(404).json({ 
+        success: false,
+        error: 'Employee not found' 
+      });
     }
 
-    const favoriteJob = await prisma.favouriteJob.findFirst({
-      where: {
-        employeeId: employeeId,
-        jobOfferId: jobPostId,
-        jobOffer: { deletedAt: null },
-      },
-    });
+    const favoriteJob = await checkFavoriteJobExists(employeeId, jobPostId);
 
     if (favoriteJob) {
-      return res.status(200).json({ message: "You have already saved this job", isSaved: true });
+      return res.status(200).json({ 
+        success: true,
+        message: "You have already saved this job", 
+        isSaved: true 
+      });
     }
 
-    return res.status(404).json({ message: 'Job not found', isSaved: false });
+    return res.status(404).json({ 
+      success: false,
+      message: 'Job not found', 
+      isSaved: false 
+    });
   } catch (error) {
     console.error('Error fetching favorite jobs:', error.message);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal Server Error' 
+    });
   }
 });
 
+// POST /employee/talent-pool - Add to talent pool
 router.post('/employee/talent-pool', getEmployeeIdFromCookie, async (req, res) => {
-  const { restaurantId } = req.body;
-  const employeeId = req.employeeId;
-
   try {
-    const existingRecord = await prisma.talentPool.findFirst({
-      where: {
-        employeeId: parseInt(employeeId),
-        restaurantId: parseInt(restaurantId),
-      },
-    });
+    const { restaurantId } = req.body;
+    const employeeId = req.employeeId;
+
+    const existingRecord = await checkTalentPoolRecord(employeeId, restaurantId);
 
     if (existingRecord) {
-      return res.status(409).json({ message: 'You have already applied to this company.' });
+      return res.status(409).json({ 
+        success: false,
+        message: 'You have already applied to this company.' 
+      });
     }
 
-    const newTalentPoolRecord = await prisma.talentPool.create({
-      data: {
-        employeeId: parseInt(employeeId),
-        restaurantId:parseInt(restaurantId),
-        status: 'pendent',
-      },
+    const newTalentPoolRecord = await createTalentPoolRecord(employeeId, restaurantId);
+
+    if (!newTalentPoolRecord) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'We were not able to send the cv to this company', 
+        data: newTalentPoolRecord 
+      });
+    }
+
+    res.status(201).json({ 
+      success: true,
+      message: 'Talent pool record created successfully', 
+      data: newTalentPoolRecord 
     });
-
-    if(!newTalentPoolRecord) {
-      res.status(404).json({ message: 'We were not able to send the cv to this company', newTalentPoolRecord });
-    }
-
-    res.status(201).json({ message: 'Talent pool record created successfully', newTalentPoolRecord });
   } catch (error) {
     console.error('Error creating talent pool record:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
+// GET /employee/talent-pool/check - Check talent pool status
 router.get('/employee/talent-pool/check', getEmployeeIdFromCookie, async (req, res) => {
-  const { restaurantId } = req.query;
-  const employeeId = req.employeeId;
-
   try {
+    const { restaurantId } = req.query;
+    const employeeId = req.employeeId;
+
     if (!restaurantId || isNaN(parseInt(restaurantId))) {
-      return res.status(400).json({ message: 'Invalid restaurant ID' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid restaurant ID' 
+      });
     }
 
-    const existingRecord = await prisma.talentPool.findFirst({
-      where: {
-        employeeId: parseInt(employeeId),
-        restaurantId: parseInt(restaurantId),
-      },
-    });
+    const existingRecord = await checkTalentPoolRecord(employeeId, restaurantId);
 
     if (existingRecord) {
-      return res.status(200).json({ isCvSent: true, message: 'Application already exists for this company.' });
+      return res.status(200).json({ 
+        success: true,
+        isCvSent: true, 
+        message: 'Application already exists for this company.' 
+      });
     } else {
-      return res.status(200).json({ isCvSent: false, message: 'No application found for this company.' });
+      return res.status(200).json({ 
+        success: true,
+        isCvSent: false, 
+        message: 'No application found for this company.' 
+      });
     }
   } catch (error) {
     console.error('Error checking talent pool record:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
-export default router
+module.exports = router;

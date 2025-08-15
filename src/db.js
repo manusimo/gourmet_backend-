@@ -1,6 +1,6 @@
 // backend/src/db.js
-import { PrismaClient } from "@prisma/client";
+const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-export { prisma };
+module.exports = { prisma };

@@ -1,7 +1,7 @@
-import jwt from 'jsonwebtoken';
-import { prisma } from '../db.js';
+const jwt = require('jsonwebtoken');
+const { prisma } = require('../db.js');
 
-const getRestaurantIdFromCookie = (req, res, next) => {
+const getAuthFromCookie = (req, res, next) => {
   const token = req.cookies.manu;  
 
   if (!token) {
@@ -11,12 +11,17 @@ const getRestaurantIdFromCookie = (req, res, next) => {
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);  
     
-    const restaurantId = decodedToken.restaurantId;  
+    // Extract everything from JWT token
+    req.userId = decodedToken.userId;
+    req.userType = decodedToken.userType;
+    req.role = decodedToken.role;
+    req.restaurantId = decodedToken.restaurantId;
+    req.restaurantUserId = decodedToken.restaurantUserId;
+    req.employeeId = decodedToken.employeeId;
    
-    req.restaurantId = restaurantId;
     next();  
   } catch (error) {
-    console.error('Error in getRestaurantIdFromCookie middleware:', error);
+    console.error('Error in getAuthFromCookie middleware:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
@@ -24,7 +29,7 @@ const getRestaurantIdFromCookie = (req, res, next) => {
   }
 };
 
-const getEmployeeIdFromCookie = (req, res, next) => {
+const getEmployeeIdFromCookie = async (req, res, next) => {
   const token = req.cookies.manu; 
  
   if (!token) {
@@ -34,11 +39,34 @@ const getEmployeeIdFromCookie = (req, res, next) => {
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
   
-    const employeeId = decodedToken.employeeId; 
+    let employeeId = decodedToken.employeeId;
+    
+    // If employeeId is not in token, try to find it using userId
+    if (!employeeId && decodedToken.userId) {
+      console.log('🔍 employeeId not in token, looking up using userId:', decodedToken.userId);
+      
+      // Find employee record by userId
+      const employee = await prisma.employee.findUnique({
+        where: { userId: decodedToken.userId },
+        select: { id: true }
+      });
+      
+      if (employee) {
+        employeeId = employee.id;
+        console.log('✅ Found employeeId:', employeeId);
+      } else {
+        console.log('❌ No employee record found for userId:', decodedToken.userId);
+        return res.status(404).json({ 
+          success: false,
+          message: 'Employee profile not found. Please create your profile first.' 
+        });
+      }
+    }
   
     req.employeeId = employeeId; 
     next();
   } catch (error) {
+    console.error('Error in getEmployeeIdFromCookie:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
@@ -47,23 +75,35 @@ const getEmployeeIdFromCookie = (req, res, next) => {
 };
 
 const getUserIdFromCookie = (req, res, next) => {
+    console.log('🍪 getUserIdFromCookie - Checking authentication');
+    console.log('🍪 Request cookies:', req.cookies);
+    console.log('🍪 Manu cookie exists:', !!req.cookies.manu);
+    
     const token = req.cookies.manu; 
 
     if (!token) {
+      console.log('🍪 No token found in cookies');
       return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
     }
 
+    console.log('🍪 Token found, verifying...');
+
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('🍪 Token decoded successfully:', { userId: decodedToken.userId, userType: decodedToken.userType });
    
       const userId = decodedToken.userId; 
       const userType = decodedToken.userType;    
+      const role = decodedToken.role; // Extract role from JWT token
 
       req.userId = userId; 
-      req.userType = userType
+      req.userType = userType;
+      req.role = role; // Set role from JWT token
+      
+      console.log('🍪 Authentication successful, proceeding to next middleware');
       next();
     } catch (error) {
-      console.error('Error in getEmployeeIdFromCookie middleware:', error);
+      console.error('🍪 Error in getUserIdFromCookie middleware:', error);
       if (error.name === 'JsonWebTokenError') {
         return res.status(401).json({ message: 'Invalid token' });
       }
@@ -71,7 +111,7 @@ const getUserIdFromCookie = (req, res, next) => {
     }
 }
 
-const getRestaurantUserIdFromCookie = (req, res, next) => {
+const getRestaurantUserIdFromCookie = async (req, res, next) => {
   const token = req.cookies.manu; 
 
   if (!token) {
@@ -80,8 +120,29 @@ const getRestaurantUserIdFromCookie = (req, res, next) => {
 
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const restaurantUserId = decodedToken.restaurantUserId; 
-    req.restaurantUserId = restaurantUserId; 
+    
+    // For company users, check if they have a RestaurantUser record
+    if (decodedToken.userType === 'empresas') {
+      // Check if this user has a RestaurantUser record (staff member)
+      const restaurantUser = await prisma.restaurantUser.findFirst({
+        where: { userId: decodedToken.userId },
+        select: { id: true }
+      });
+      
+      if (restaurantUser) {
+        // This is a staff member - they have a RestaurantUser record
+        req.restaurantUserId = restaurantUser.id;
+        console.log(`👥 Staff member detected, restaurantUserId: ${restaurantUser.id}`);
+      } else {
+        // This is the restaurant owner - no RestaurantUser record
+        req.restaurantUserId = undefined;
+        console.log(`👑 Restaurant owner detected, no restaurantUserId needed`);
+      }
+    } else {
+      // For other user types, use the restaurantUserId from token if it exists
+      req.restaurantUserId = decodedToken.restaurantUserId;
+    }
+    
     next();
   } catch (error) {
     console.error('Error in getRestaurantUserIdFromCookie middleware:', error);
@@ -125,17 +186,51 @@ const optionalAuth = (req, res, next) => {
   }
 };
 
-const validateTokenAndIdentifyUser = (req, res, next) => {
+const validateTokenAndIdentifyUser = async (req, res, next) => {
   try {
-    const token = req.cookies.manu 
+    const token = req.cookies.manu;
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });
     }
 
-    const decodedToken = validateToken(token); 
+    const decodedToken = validateToken(token);
     identifyUser(decodedToken, req);
 
-    next(); 
+    // For restaurant users, we need to look up the restaurantUserId if not in token
+    if (decodedToken.userType === 'empresas' && !req.restaurantUserId) {
+      console.log('🔍 Looking up restaurantUserId for user:', decodedToken.userId);
+      
+      const restaurantUser = await prisma.restaurantUser.findFirst({
+        where: { userId: decodedToken.userId },
+        select: { id: true }
+      });
+      
+      if (restaurantUser) {
+        req.restaurantUserId = restaurantUser.id;
+        console.log('✅ Found restaurantUserId:', restaurantUser.id);
+      } else {
+        console.log('❌ No restaurantUser found for userId:', decodedToken.userId);
+      }
+    }
+
+    // For professional users, we need to look up the employeeId if not in token
+    if (decodedToken.userType === 'profesionales' && !req.employeeId) {
+      console.log('🔍 Looking up employeeId for user:', decodedToken.userId);
+      
+      const employee = await prisma.employee.findFirst({
+        where: { userId: decodedToken.userId },
+        select: { id: true }
+      });
+      
+      if (employee) {
+        req.employeeId = employee.id;
+        console.log('✅ Found employeeId:', employee.id);
+      } else {
+        console.log('❌ No employee found for userId:', decodedToken.userId);
+      }
+    }
+
+    next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
@@ -153,8 +248,9 @@ const validateToken = (token) => {
   }
 };
 
-export { 
-  getRestaurantIdFromCookie, 
+module.exports = {
+  getAuthFromCookie, 
+  getRestaurantIdFromCookie: getAuthFromCookie, // Alias for backward compatibility
   validateTokenAndIdentifyUser,
   getEmployeeIdFromCookie, 
   getUserIdFromCookie, 

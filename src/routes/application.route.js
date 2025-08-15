@@ -1,150 +1,171 @@
-import { Router } from "express";
-import { prisma } from "../db.js";
-import jwt from 'jsonwebtoken';
-import { getEmployeeIdFromCookie, getRestaurantIdFromCookie } from "../helpers/cookies.js";
-import { checkEmployee, checkCompany } from "../helpers/authenticateToken.js";
+const express = require('express');
+const { getEmployeeIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
+const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
+const {
+  validateApplicationInput,
+  getJobPost,
+  getExistingApplication,
+  createApplication,
+  getApplicationById,
+  getJobOfferForRestaurant,
+  getApplicationsForJobOffer
+} = require('../helpers/applicationHelpers.js');
 
-const router = Router();
+const router = express.Router();
 
+// POST /application - Create a new application
 router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
     const { jobPostId, answers } = req.body;
     const employeeId = req.employeeId;
 
+    // Validate employee authentication
     if (!employeeId) {
-      return res.status(401).json({ message: 'Debes hacer log in para postular' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Debes hacer log in para postular' 
+      });
     }
 
-    const jobPost = await prisma.jobOffer.findFirst({
-      where: { id: jobPostId, deletedAt: null },
-    });
+    // Validate input data
+    const validation = validateApplicationInput({ jobPostId, answers });
+    if (!validation.isValid) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Datos inválidos',
+        errors: validation.errors 
+      });
+    }
 
+    // Check if job post exists
+    const jobPost = await getJobPost(jobPostId);
     if (!jobPost) {
-      return res.status(404).json({ message: 'Job post not found.' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Job post not found.' 
+      });
     }
 
-    const existingApplication = await prisma.application.findFirst({
-      where: {
-        jobPostId: jobPostId,
-        employeeId: employeeId,
-        deletedAt: null,
-      },
-    });
-
+    // Check if employee has already applied
+    const existingApplication = await getExistingApplication(jobPostId, employeeId);
     if (existingApplication) {
-      return res.status(409).json({ message: 'Ya postulaste a este trabajo.' });
+      return res.status(409).json({ 
+        success: false,
+        message: 'Ya postulaste a este trabajo.' 
+      });
     }
 
-    const application = await prisma.application.create({
-      data: {
-        jobPost: {
-          connect: { id: jobPostId },
-        },
-        employee: {
-          connect: { id: employeeId },
-        },
-        answers: {
-          create: answers.map(({ questionId, answer }) => ({
-            question: { connect: { id: parseInt(questionId) } },
-            answer: answer.toString(),
-          })),
-        },
-      },
-      include: {
-        answers: true,
-      },
-    });
+    // Create application
+    const application = await createApplication(jobPostId, employeeId, answers);
 
-    res.status(201).json({ message: 'Postulaste exitosamente.', application });
+    res.status(201).json({ 
+      success: true,
+      message: 'Postulaste exitosamente.', 
+      data: application
+    });
   } catch (error) {
     console.error('Error creating application:', error);
 
     if (error.code === 'P2025') {
-      return res.status(400).json({ message: 'Este trabajo ya no está disponible.' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Este trabajo ya no está disponible.' 
+      });
     }
 
-    res.status(500).json({ message: 'Hemos tenido un error, intenta más tarde.' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Hemos tenido un error, intenta más tarde.' 
+    });
   }
 });
 
-
+// GET /applications/:applicationId - Get application by ID
 router.get('/applications/:applicationId', async (req, res) => {
-  const { applicationId } = req.params;
-
   try {
-      const application = await prisma.application.findFirst({
-          where: {
-              id: parseInt(applicationId),
-              deletedAt: null,
-          },
-          include: {
-              jobPost: {
-                  include: {
-                      questions: {
-                          include: {
-                              answers: {
-                                  where: {
-                                      applicationId: parseInt(applicationId),
-                                  },
-                              },
-                          },
-                      },
-                  },
-              },
-          },
+    const { applicationId } = req.params;
+
+    // Validate application ID
+    const parsedId = parseInt(applicationId);
+    if (!applicationId || isNaN(parsedId) || parsedId <= 0 || parsedId > Number.MAX_SAFE_INTEGER) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid application ID' 
       });
-
-      if (!application) {
-          return res.status(404).send('Application not found');
-      }
-
-      res.status(200).json(application);
-  } catch (error) {
-      console.error('🚨 Error in GET /applications/:applicationId:', {
-          error: error.message,
-          stack: error.stack
-      });
-      res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
-  const { jobOfferId } = req.params;
-  const { restaurantId } = req;
-
-  try {
-    const jobOffer = await prisma.jobOffer.findFirst({
-      where: {
-        id: parseInt(jobOfferId),
-        restaurantId: parseInt(restaurantId),
-        deletedAt: null,
-      },
-    });
-
-    if (!jobOffer) {
-      return res.status(404).json({ message: 'Job offer not found or you do not have permission to view the applicants.' });
     }
 
-    const applications = await prisma.application.findMany({
-      where: {
-        jobPostId: parseInt(jobOfferId),
-        deletedAt: null,
-      },
-      include: {
-        employee: {
-          include: {
-            user: true,
-          },
-        },
-        jobPost: true, // Include job post details if needed
-      },
-    });
+    const application = await getApplicationById(parsedId);
 
-    res.json(applications);
+    if (!application) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Application not found' 
+      });
+    }
+
+    res.status(200).json({ 
+      success: true,
+      data: application 
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('🚨 Error in GET /applications/:applicationId:', {
+      error: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
   }
 });
 
-export default router
+// GET /job-offers/:jobOfferId/applicants - Get applicants for a job offer
+router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
+  try {
+    const { jobOfferId } = req.params;
+    const { restaurantId } = req;
+
+    // Validate job offer ID
+    const parsedJobOfferId = parseInt(jobOfferId);
+    if (!jobOfferId || isNaN(parsedJobOfferId) || parsedJobOfferId <= 0 || parsedJobOfferId > Number.MAX_SAFE_INTEGER) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid job offer ID' 
+      });
+    }
+
+    // Validate restaurant ID
+    if (!restaurantId) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Restaurant ID is required' 
+      });
+    }
+
+    // Check if job offer exists and belongs to restaurant
+    const jobOffer = await getJobOfferForRestaurant(parsedJobOfferId, restaurantId);
+    if (!jobOffer) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Job offer not found or you do not have permission to view the applicants.' 
+      });
+    }
+
+    // Get applications for this job offer
+    const applications = await getApplicationsForJobOffer(parsedJobOfferId);
+
+    res.json({ 
+      success: true,
+      data: applications,
+      count: applications.length
+    });
+  } catch (error) {
+    console.error('Error getting applicants:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal Server Error' 
+    });
+  }
+});
+
+module.exports = router;

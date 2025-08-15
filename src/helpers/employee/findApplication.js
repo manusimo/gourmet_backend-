@@ -18,4 +18,4 @@ async function findApplicationDetails(employeeIdInt, jobPostIdInt) {
     });
 }
 
-export { findApplicationDetails };
+module.exports = { findApplicationDetails };

@@ -30,8 +30,8 @@ const buildSearchConditions = (searchTerm, searchField) => {
       : undefined;
 };
 
-export {buildFilters, buildSearchConditions}  
-  
+module.exports = { buildFilters, buildSearchConditions };
+
 
 // const buildFilters = (query, filterFields) => {
 //   return filterFields.reduce((filters, field) => {
