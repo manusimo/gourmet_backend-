@@ -144,7 +144,7 @@ app.use(cors(corsOptions));
 // ENHANCED RATE LIMITING
 // ============================================================================
 
-// General rate limiting with enhanced security
+// General rate limiting for all routes
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // Increased from 100 to 1000 requests per window for development
@@ -157,13 +157,6 @@ const generalLimiter = rateLimit({
   skip: (req) => {
     // Skip rate limiting for health checks and development
     return req.path === '/health' || req.path === '/api/health' || process.env.NODE_ENV === 'development';
-  },
-  onLimitReached: (req, res) => {
-    Logger.warn('Rate limit exceeded', {
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
-      path: req.originalUrl
-    });
   }
 });
 
@@ -176,14 +169,7 @@ const authLimiter = rateLimit({
     error: 'Too many login attempts, please try again later' 
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  onLimitReached: (req, res) => {
-    Logger.error('Auth rate limit exceeded', {
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
-      path: req.originalUrl
-    });
-  }
+  legacyHeaders: false
 });
 
 // Contact form rate limiting
@@ -218,6 +204,7 @@ app.use('/api/signin', authLimiter);
 app.use('/api/signup', authLimiter);
 app.use('/api/password-reset-request', authLimiter);
 app.use('/api/password-reset-confirm', authLimiter);
+app.use('/api/set-password', authLimiter);
 app.use('/api/contact', contactLimiter);
 app.use('/api/mfa', mfaLimiter);
 

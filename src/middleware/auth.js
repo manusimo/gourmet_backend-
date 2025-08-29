@@ -216,19 +216,60 @@ const checkCompany = async (req, res, next) => {
 };
 
 /**
- * Set user role from JWT token (simple version)
+ * Set user role from database based on restaurant association
  */
 const setUserRole = async (req, res, next) => {
   try {
-    // Default role if none is set
-    if (!req.role) {
-      req.role = 'user';
+    if (!req.userId) {
+      console.log('❌ setUserRole: Missing userId');
+      req.role = 'user'; // Fallback role
+      return next();
     }
-    
-    // console.log('🔍 setUserRole: User role set to:', req.role); // Commented out to reduce log noise
+
+    // If no restaurantId, use the role from the token (for users creating their first restaurant)
+    if (!req.restaurantId) {
+      console.log('🔍 setUserRole: No restaurantId, using role from token');
+      // The role should already be set from the token in getUserIdFromCookie
+      if (!req.role) {
+        req.role = 'user'; // Fallback role
+      }
+      console.log(`✅ setUserRole: Using role from token: '${req.role}'`);
+      return next();
+    }
+
+    // Get the user's role from their restaurant association
+    const restaurantUser = await prisma.restaurantUser.findFirst({
+      where: {
+        userId: req.userId,
+        restaurantId: req.restaurantId
+      },
+      select: {
+        role: true
+      }
+    });
+
+    if (restaurantUser) {
+      req.role = restaurantUser.role;
+      console.log(`✅ setUserRole: User role set to '${restaurantUser.role}' from restaurant association`);
+    } else {
+      // If no restaurant association found, check if this is the restaurant owner
+      const user = await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: { role: true }
+      });
+      
+      if (user && user.role === 'admin') {
+        req.role = 'admin';
+        console.log('✅ setUserRole: User role set to admin (restaurant owner)');
+      } else {
+        req.role = 'user'; // Fallback role
+        console.log('⚠️ setUserRole: No role found, defaulting to user');
+      }
+    }
+
     next();
   } catch (error) {
-    console.error('Error in setUserRole:', error);
+    console.error('❌ Error in setUserRole:', error);
     req.role = 'user'; // Fallback role
     next();
   }
@@ -427,18 +468,23 @@ const requireRole = (allowedRoles) => {
   const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
   
   return (req, res, next) => {
-    console.log(`🔍 requireRole: Checking for roles: ${rolesArray.join(', ')}`);
-    console.log(`🔍 requireRole: User role from request: ${req.role}`);
+    console.log('🔐 SECURITY CHECK - requireRole middleware:');
+    console.log(`   Required roles: ${rolesArray.join(', ')}`);
+    console.log(`   User role: ${req.role}`);
+    console.log(`   User ID: ${req.userId}`);
+    console.log(`   User Type: ${req.userType}`);
     
     if (!req.role || !rolesArray.includes(req.role)) {
-      console.log(`❌ requireRole: Access denied. User has role '${req.role}' but requires one of: ${rolesArray.join(', ')}`);
+      console.log(`❌ ACCESS DENIED - User has role '${req.role}' but requires one of: ${rolesArray.join(', ')}`);
       return res.status(403).json({ 
         success: false,
-        message: `Access forbidden. Required role: ${rolesArray.join(' or ')}` 
+        message: `Access forbidden. Required role: ${rolesArray.join(' or ')}`,
+        userRole: req.role,
+        requiredRoles: rolesArray
       });
     }
     
-    console.log(`✅ requireRole: Access granted for role '${req.role}'`);
+    console.log(`✅ ACCESS GRANTED - User role '${req.role}' matches required roles`);
     next();
   };
 };

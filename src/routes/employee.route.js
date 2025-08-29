@@ -1,6 +1,6 @@
 const express = require('express');
 const { prisma } = require('../db.js');
-const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
+const { checkEmployee, checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } = require('../helpers/cookies.js');
 const { requirePlan } = require('../middleware/checkPlan.js');
 const { findApplicationDetails } = require('../helpers/employee/findApplication.js');
@@ -338,7 +338,7 @@ router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req
 });
 
 // GET /employees/search - Search employees
-router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, async (req, res) => {
   try {
     console.log('Here we start the search');
     const { position, experience, region, comuna, available, schedule } = req.query;

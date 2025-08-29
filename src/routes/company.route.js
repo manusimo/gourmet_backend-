@@ -338,7 +338,7 @@ router.post('/company', (req, res, next) => {
       name: name || '',
       specialty: specialty || '',
       format: format || '',
-      description: description || 'No description to show',
+      description: description || 'No hay descripción',
       rut: rut || 'No rut to show',
       legalName: legalName || 'No legal name to show',
       region: region || 'No hay',
@@ -373,15 +373,20 @@ router.post('/company', (req, res, next) => {
 
     const companyProfile = await createCompanyProfile(processedData);
 
-    // Create RestaurantUser record for the owner so they can use chat functionality
-    const restaurantUser = await createRestaurantUser(userId, companyProfile.id);
+    // For admin users, don't create RestaurantUser record - they remain as admin users
+    // For staff users, create RestaurantUser record for chat functionality
+    let restaurantUserId = null;
+    if (req.role === 'staff') {
+      const restaurantUser = await createRestaurantUser(userId, companyProfile.id);
+      restaurantUserId = restaurantUser.id;
+    }
 
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
       role: req.role, // Include role from request  
       restaurantId: companyProfile.id,
-      restaurantUserId: restaurantUser.id, // Owner now has restaurantUserId
+      restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
 
     res.cookie('manu', newToken, {

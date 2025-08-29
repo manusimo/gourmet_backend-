@@ -134,9 +134,34 @@ const getRestaurantUserIdFromCookie = async (req, res, next) => {
         req.restaurantUserId = restaurantUser.id;
         console.log(`👥 Staff member detected, restaurantUserId: ${restaurantUser.id}`);
       } else {
-        // This is the restaurant owner - no RestaurantUser record
-        req.restaurantUserId = undefined;
-        console.log(`👑 Restaurant owner detected, no restaurantUserId needed`);
+        // This is the restaurant owner - create or find a RestaurantUser record for them
+        const restaurant = await prisma.restaurant.findFirst({
+          where: { userId: decodedToken.userId }
+        });
+        
+        if (restaurant) {
+          // Create a RestaurantUser record for the admin if it doesn't exist
+          const adminRestaurantUser = await prisma.restaurantUser.upsert({
+            where: {
+              userId_restaurantId: {
+                userId: decodedToken.userId,
+                restaurantId: restaurant.id
+              }
+            },
+            update: {},
+            create: {
+              userId: decodedToken.userId,
+              restaurantId: restaurant.id,
+              role: 'admin'
+            }
+          });
+          
+          req.restaurantUserId = adminRestaurantUser.id;
+          console.log(`👑 Restaurant owner/admin detected, created restaurantUserId: ${adminRestaurantUser.id}`);
+        } else {
+          req.restaurantUserId = undefined;
+          console.log(`❌ Restaurant owner detected but no restaurant found`);
+        }
       }
     } else {
       // For other user types, use the restaurantUserId from token if it exists

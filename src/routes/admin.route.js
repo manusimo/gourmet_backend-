@@ -4,10 +4,13 @@ const { getMonitoringStats, resetMonitoring } = require('../middleware/ddosMonit
 const { getPerformanceStats, getHealthStatus } = require('../middleware/performanceMonitoring.js');
 const { getErrorStats, searchErrors } = require('../middleware/errorTracking.js');
 const { checkCompany } = require('../helpers/authenticateToken.js');
+const { requireRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
 const { sendEmail } = require('../helpers/email.js');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const { setUserRole } = require('../middleware/auth.js');
 
 const router = express.Router();
 
@@ -16,8 +19,13 @@ const router = express.Router();
 // ============================================================================
 
 // GET /admin/users - Get all users for the company
-router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
+    console.log('🔐 SECURITY CHECK - User attempting to access admin/users:');
+    console.log(`   User ID: ${req.userId}`);
+    console.log(`   User Role: ${req.role}`);
+    console.log(`   Restaurant ID: ${req.restaurantId}`);
+    console.log(`   Restaurant User ID: ${req.restaurantUserId}`);
     console.log('🔍 Fetching users for restaurant:', req.restaurantId);
     
     // Get all users associated with this restaurant
@@ -39,12 +47,15 @@ router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromC
     });
 
     console.log('🔍 Found restaurant users:', restaurantUsers.length);
+    console.log('🔍 Restaurant users data:', JSON.stringify(restaurantUsers, null, 2));
 
     const users = restaurantUsers.map(ru => ({
       ...ru.user,
       restaurantUserId: ru.id,
       role: ru.role
     }));
+
+    console.log('🔍 Processed users data:', JSON.stringify(users, null, 2));
 
     res.status(200).json({ 
       success: true,
@@ -61,16 +72,12 @@ router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromC
 });
 
 // POST /admin/create-user - Create a new user for the company
-router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     const { name, email, phoneNumber } = req.body;
     const restaurantId = req.restaurantId;
 
     console.log('🔍 Creating user:', { name, email, phoneNumber, restaurantId });
-    console.log('🔍 Prisma client available:', !!prisma);
-    console.log('🔍 RestaurantUser model available:', !!prisma.restaurantUser);
-    console.log('🔍 User model available:', !!prisma.user);
-    console.log('🔍 Available Prisma models:', Object.keys(prisma));
 
     // Validate required fields
     if (!name || !email || !phoneNumber) {
@@ -94,9 +101,10 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
 
     // Generate temporary password
     const tempPassword = crypto.randomBytes(10).toString('hex');
-    const hashedPassword = await bcrypt.hash(tempPassword, 10); // Hash the temporary password
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     console.log('🔍 Generated temporary password for:', email);
+    console.log('🔑 Temporary password:', tempPassword); // Log for development
 
     // Create new user
     const newUser = await prisma.user.create({
@@ -104,9 +112,9 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
         name,
         email,
         phoneNumber,
-        password: hashedPassword, // Store hashed password
-        userType: 'employee', // Add missing userType field
-        role: 'employee', // Default role for company users
+        password: hashedPassword,
+        userType: 'empresas', // Restaurant staff, not job applicants
+        role: 'staff', // Restaurant staff role
         mfaEnabled: false,
         accountLocked: false,
         loginAttempts: 0,
@@ -117,23 +125,35 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
     console.log('✅ User created successfully:', newUser.id);
 
     // Associate user with restaurant
-    console.log('🔍 Creating restaurant user association...');
     const restaurantUser = await prisma.restaurantUser.create({
       data: {
         userId: newUser.id,
         restaurantId: restaurantId,
-        role: 'employee'
+        role: 'staff' // Restaurant staff role
       }
     });
 
     console.log('✅ User associated with restaurant:', restaurantUser.id);
 
-    // Send email with temporary password
+    // Generate JWT token for password setup
+    const token = jwt.sign({ 
+      userId: newUser.id, 
+      userType: 'empresas',
+      role: 'staff',
+      restaurantId: restaurantId,
+      restaurantUserId: restaurantUser.id
+    }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://www.gourmetjobs.cl' 
+      : 'http://localhost:3001';
+    const setupUrl = `${baseUrl}/set-password?token=${token}`;
+
+    // Send email with temporary password and setup link
     try {
       await sendEmail({
         to: email,
         subject: 'Bienvenido a GourmetJobs - Tu cuenta ha sido creada',
-        text: `Hola ${name},\n\nTu cuenta ha sido creada exitosamente en GourmetJobs.\n\nTu contraseña temporal es: ${tempPassword}\n\nPor favor, cambia tu contraseña después de iniciar sesión por primera vez.\n\nSaludos,\nEl equipo de GourmetJobs`,
+        text: `Hola ${name},\n\nTu cuenta ha sido creada exitosamente en GourmetJobs.\n\nTu contraseña temporal es: ${tempPassword}\n\nConfigura tu contraseña aquí: ${setupUrl}\n\nPor favor, cambia tu contraseña después de iniciar sesión por primera vez.\n\nSaludos,\nEl equipo de GourmetJobs`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #fb5424;">Bienvenido a GourmetJobs</h2>
@@ -142,6 +162,9 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 0;"><strong>Tu contraseña temporal es:</strong></p>
               <p style="font-size: 18px; font-weight: bold; color: #fb5424; margin: 10px 0;">${tempPassword}</p>
+            </div>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${setupUrl}" style="background-color: #fb5424; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Configurar Contraseña</a>
             </div>
             <p><strong>Importante:</strong> Por favor, cambia tu contraseña después de iniciar sesión por primera vez.</p>
             <p>Saludos,<br>El equipo de GourmetJobs</p>
@@ -174,7 +197,8 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
 });
 
 // PATCH /admin/user/update - Update user information
-router.patch('/user/update', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.patch(
+  '/user/update', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     const { id, name, email, phoneNumber } = req.body;
     
@@ -233,8 +257,87 @@ router.patch('/user/update', checkCompany, getUserIdFromCookie, getRestaurantUse
   }
 });
 
+// DELETE /admin/user/:id - Delete user from restaurant
+router.delete('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.restaurantId;
+
+    console.log('🗑️ Deleting user:', { userId: id, restaurantId });
+
+    // Check if user belongs to this restaurant
+    const restaurantUser = await prisma.restaurantUser.findFirst({
+      where: {
+        userId: parseInt(id),
+        restaurantId: restaurantId
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    });
+
+    if (!restaurantUser) {
+      console.log('❌ User not found or not associated with restaurant:', { userId: id, restaurantId });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found or not associated with this restaurant'
+      });
+    }
+
+    // Prevent deleting the admin user (restaurant owner)
+    if (restaurantUser.user.role === 'admin') {
+      console.log('❌ Cannot delete admin user:', restaurantUser.user.email);
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot delete the restaurant owner (admin user)'
+      });
+    }
+
+    console.log('✅ Found restaurant user association:', restaurantUser.id);
+
+    // Delete the restaurant user association first
+    await prisma.restaurantUser.delete({
+      where: { id: restaurantUser.id }
+    });
+
+    console.log('✅ Restaurant user association deleted');
+
+    // Delete the user
+    await prisma.user.delete({
+      where: { id: parseInt(id) }
+    });
+
+    console.log('✅ User deleted successfully:', restaurantUser.user.email);
+
+    res.status(200).json({
+      success: true,
+      message: 'User deleted successfully',
+      data: {
+        deletedUser: {
+          id: restaurantUser.user.id,
+          email: restaurantUser.user.email,
+          role: restaurantUser.user.role
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error deleting user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error',
+      error: error.message
+    });
+  }
+});
+
 // GET /admin/user/:id - Get specific user by ID
-router.get('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.get('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const restaurantId = req.restaurantId;

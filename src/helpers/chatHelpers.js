@@ -73,18 +73,59 @@ const createMessage = async (messageData) => {
     receiverType 
   } = messageData;
 
-  const senderRelation = senderType === 'employee'
-    ? { senderEmployee: { connect: { id: parseInt(senderUserId) } } }
-    : { senderRestaurantUser: { connect: { id: parseInt(senderUserId) } } };
+  console.log('🔍 createMessage called with:', messageData);
 
-  const receiverRelation = receiverType === 'employee'
-    ? { receiverEmployee: { connect: { id: parseInt(receiverUserId) } } }
-    : { receiverRestaurantUser: { connect: { id: parseInt(receiverUserId) } } };
+  // For admin/staff users, we need to handle them differently
+  // First, try to find if senderUserId corresponds to a RestaurantUser
+  let senderRelation = {};
+  if (senderType === 'employee') {
+    senderRelation = { senderEmployeeId: parseInt(senderUserId) };
+  } else {
+    // For restaurant users, first check if the senderUserId exists as a RestaurantUser
+    const existingRestaurantUser = await prisma.restaurantUser.findUnique({
+      where: { id: parseInt(senderUserId) }
+    });
+
+    if (existingRestaurantUser) {
+      senderRelation = { senderRestaurantUserId: parseInt(senderUserId) };
+    } else {
+      // For admin/staff users, we need to create a RestaurantUser record
+      console.log('🔍 Admin/Staff user detected, creating RestaurantUser record');
+      
+      // First, find an existing restaurant to use
+      const existingRestaurant = await prisma.restaurant.findFirst();
+      
+      if (!existingRestaurant) {
+        throw new Error('No restaurants found in database');
+      }
+      
+      console.log('🔍 Using restaurant ID:', existingRestaurant.id);
+      
+      // Create a RestaurantUser record for the admin/staff user
+      const tempRestaurantUser = await prisma.restaurantUser.create({
+        data: {
+          userId: parseInt(senderUserId),
+          restaurantId: existingRestaurant.id,
+          role: 'admin'
+        }
+      });
+      
+      console.log('✅ Created RestaurantUser for admin:', tempRestaurantUser.id);
+      senderRelation = { senderRestaurantUserId: tempRestaurantUser.id };
+    }
+  }
+
+  let receiverRelation = {};
+  if (receiverType === 'employee') {
+    receiverRelation = { receiverEmployeeId: parseInt(receiverUserId) };
+  } else {
+    receiverRelation = { receiverRestaurantUserId: parseInt(receiverUserId) };
+  }
 
   return await prisma.message.create({
     data: {
       text,
-      conversation: { connect: { id: parseInt(conversationId) } },
+      conversationId: parseInt(conversationId),
       ...senderRelation,
       ...receiverRelation,
     },

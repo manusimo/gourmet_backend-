@@ -254,16 +254,30 @@ router.post('/signin', validateSignin, async (req, res) => {
 
     // Check if user has a restaurant (for company users)
     let restaurantId = null;
+    let restaurantUserId = null;
     if (user.userType === 'empresas') {
-      const restaurant = await prisma.restaurant.findUnique({
+      // For staff users, we need to get restaurantId and restaurantUserId from RestaurantUser table
+      const restaurantUser = await prisma.restaurantUser.findFirst({
         where: { userId: user.id },
-        select: { id: true }
+        select: { id: true, restaurantId: true }
       });
-      if (restaurant) {
-        restaurantId = restaurant.id;
-        console.log(`🏢 Found restaurant for user ${user.email}:`, restaurantId);
+      
+      if (restaurantUser) {
+        restaurantId = restaurantUser.restaurantId;
+        restaurantUserId = restaurantUser.id;
+        console.log(`🏢 Found restaurant for user ${user.email}:`, { restaurantId, restaurantUserId });
       } else {
-        console.log(`🏢 No restaurant found for user ${user.email}`);
+        // Fallback: try to find restaurant directly (for admin users)
+        const restaurant = await prisma.restaurant.findUnique({
+          where: { userId: user.id },
+          select: { id: true }
+        });
+        if (restaurant) {
+          restaurantId = restaurant.id;
+          console.log(`🏢 Found restaurant for admin user ${user.email}:`, restaurantId);
+        } else {
+          console.log(`🏢 No restaurant found for user ${user.email}`);
+        }
       }
     }
 
@@ -274,7 +288,8 @@ router.post('/signin', validateSignin, async (req, res) => {
         email: user.email,
         userType: user.userType,
         role: user.role,
-        restaurantId: restaurantId // Include restaurantId if user has one
+        restaurantId: restaurantId,
+        restaurantUserId: restaurantUserId
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -741,6 +756,127 @@ router.post('/password-reset-confirm', validatePasswordResetConfirm, async (req,
   }
 });
 
+// POST /set-password - Set initial password for new users
+router.post('/set-password', async (req, res) => {
+  try {
+    const { token, password, name, phoneNumber } = req.body;
+
+    if (!token || !password) {
+      console.log('⚠️ Set-password: Missing required fields', { 
+        hasToken: !!token, 
+        hasPassword: !!password,
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Token and password are required'
+      });
+    }
+
+    // Verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      console.log('⚠️ Set-password: Invalid token', { 
+        error: error.message,
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired token'
+      });
+    }
+
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
+
+    if (!user) {
+      console.log('⚠️ Set-password: User not found', { 
+        userId: decoded.userId,
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Update user with new password and additional info
+    const updateData = {
+      password: hashedPassword,
+    };
+
+    // Add name and phone number if provided (for initial setup)
+    if (name) updateData.name = name;
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updateData
+    });
+
+    console.log(`✅ Set-password: Password set successfully for user: ${user.email}`, {
+      userId: user.id,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    // Generate a new JWT token for the user
+    const newToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        userType: user.userType,
+        role: user.role,
+        restaurantId: decoded.restaurantId,
+        restaurantUserId: decoded.restaurantUserId
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // Set authentication cookie
+    res.cookie('manu', newToken, {
+      httpOnly: false, // Allow JavaScript access for development
+      secure: false, // Allow over HTTP for development
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password set successfully',
+      data: {
+        token: newToken,
+        userType: user.userType,
+        restaurantId: decoded.restaurantId
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Set-password: Error setting password:', error, {
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// POST /confirm-email - Confirm email and create user
+
 // GET /user/:id - Get user information
 router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req, res) => {
   try {
@@ -816,7 +952,9 @@ router.get('/user-info', async (req, res) => {
       let employeeId = null;
 
       // Check if user has a restaurant (company user)
+      console.log('🔍 user-info: Checking for restaurantId in token:', decodedToken.restaurantId);
       if (decodedToken.restaurantId) {
+        console.log('🔍 user-info: restaurantId found, looking for RestaurantUser record...');
         // Find RestaurantUser record
         const restaurantUser = await prisma.restaurantUser.findFirst({
           where: {
@@ -825,8 +963,25 @@ router.get('/user-info', async (req, res) => {
           }
         });
         
+        console.log('🔍 user-info: RestaurantUser record found:', restaurantUser);
         if (restaurantUser) {
           restaurantUserId = restaurantUser.id;
+          console.log('✅ user-info: restaurantUserId set to:', restaurantUserId);
+        }
+      } else {
+        console.log('🔍 user-info: No restaurantId in token, checking if user has any restaurants...');
+        // Fallback: check if user has any restaurants
+        const restaurantUser = await prisma.restaurantUser.findFirst({
+          where: { userId: userId }
+        });
+        
+        if (restaurantUser) {
+          restaurantUserId = restaurantUser.id;
+          console.log('✅ user-info: Found restaurantUserId from fallback:', restaurantUserId);
+        } else {
+          console.log('🔍 user-info: No RestaurantUser found - likely admin/staff user');
+          // For admin/staff users, we don't set restaurantUserId (it remains null)
+          // The frontend will use userId as fallback
         }
       }
 
