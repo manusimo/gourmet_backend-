@@ -574,7 +574,7 @@ describe('Job Routes', () => {
         locations: [{ id: 1, name: 'Location 1' }]
       };
       const mockPlanInfo = {
-        currentPlan: 'PRO',
+          currentPlan: 'PRO',
         remainingJobOffers: 4,
         totalLimit: 10
       };

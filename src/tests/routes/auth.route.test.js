@@ -126,9 +126,9 @@ describe('Auth Routes', () => {
       });
       expect(mockPrisma.user.create).toHaveBeenCalledWith({
         data: {
-          email: 'test@example.com',
+        email: 'test@example.com',
           password: 'hashedPassword',
-          userType: 'empresas',
+        userType: 'empresas',
           mfaEnabled: false,
           mfaSecret: null,
           accountLocked: false,
@@ -284,8 +284,8 @@ describe('Auth Routes', () => {
         message: 'Validation failed',
         errors: ['Email is required']
       });
+      });
     });
-  });
 
   describe('POST /api/logout', () => {
     it('should logout user successfully', async () => {
@@ -359,8 +359,8 @@ describe('Auth Routes', () => {
           backupCodes: ['code1', 'code2']
         }
       });
+      });
     });
-  });
 
   describe('POST /api/password-reset-request', () => {
     it('should send password reset email successfully', async () => {
@@ -379,8 +379,8 @@ describe('Auth Routes', () => {
         message: 'If the email exists, a reset link has been sent',
         data: {}
       });
+      });
     });
-  });
 
   describe('GET /api/user/:id', () => {
     it('should return user by ID successfully', async () => {

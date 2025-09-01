@@ -140,21 +140,24 @@ const getRestaurantUserIdFromCookie = async (req, res, next) => {
         });
         
         if (restaurant) {
-          // Create a RestaurantUser record for the admin if it doesn't exist
-          const adminRestaurantUser = await prisma.restaurantUser.upsert({
+          // Check if RestaurantUser record already exists for this admin
+          let adminRestaurantUser = await prisma.restaurantUser.findFirst({
             where: {
-              userId_restaurantId: {
-                userId: decodedToken.userId,
-                restaurantId: restaurant.id
-              }
-            },
-            update: {},
-            create: {
               userId: decodedToken.userId,
-              restaurantId: restaurant.id,
-              role: 'admin'
+              restaurantId: restaurant.id
             }
           });
+          
+          if (!adminRestaurantUser) {
+            // Create a RestaurantUser record for the admin if it doesn't exist
+            adminRestaurantUser = await prisma.restaurantUser.create({
+              data: {
+                userId: decodedToken.userId,
+                restaurantId: restaurant.id,
+                role: 'admin'
+              }
+            });
+          }
           
           req.restaurantUserId = adminRestaurantUser.id;
           console.log(`👑 Restaurant owner/admin detected, created restaurantUserId: ${adminRestaurantUser.id}`);

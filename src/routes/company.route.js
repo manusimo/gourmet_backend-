@@ -283,6 +283,7 @@ router.post('/company', (req, res, next) => {
   console.log('🚨 Headers:', req.headers);
   next();
 }, getUserIdFromCookie, setUserRole, requirePermission('create_company'), checkLocationLimit(), async (req, res) => {
+  
   try {
     console.log('🏢 POST /company - Creating company profile');
     console.log('🏢 Request cookies:', req.cookies);
@@ -373,18 +374,13 @@ router.post('/company', (req, res, next) => {
 
     const companyProfile = await createCompanyProfile(processedData);
 
-    // For admin users, don't create RestaurantUser record - they remain as admin users
-    // For staff users, create RestaurantUser record for chat functionality
-    let restaurantUserId = null;
-    if (req.role === 'staff') {
-      const restaurantUser = await createRestaurantUser(userId, companyProfile.id);
-      restaurantUserId = restaurantUser.id;
-    }
+    // Admin users don't need RestaurantUser record - they remain as admin users
+    const restaurantUserId = null;
 
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
-      role: req.role, // Include role from request  
+      role: req.userRole, // Include role from request  
       restaurantId: companyProfile.id,
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
