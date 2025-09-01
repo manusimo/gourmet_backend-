@@ -4,7 +4,7 @@ const { prisma } = require('../db.js');
 const { checkCompany } = require('../helpers/authenticateToken.js');
 const { requireRole, requirePermission, setUserRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
-const { requirePlan, checkLocationLimit } = require('../middleware/checkPlan.js');
+// const { requirePlan, checkLocationLimit } = require('../middleware/checkPlan.js'); // Temporarily disabled
 const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
 const { deleteLocations, updateCompanyProfile, createNewLocations } = require('../helpers/company.js');
 const { getOrderByCriteriaCompanies } = require('../helpers/orderBy.js');
@@ -391,13 +391,10 @@ router.post('/company', (req, res, next) => {
       secure: true,
     });
 
-    const planInfo = generatePlanInfo(req.user.payment_status, req.requestedLocations, req.locationLimit);
-
     res.status(201).json({ 
       success: true,
       message: 'Company created successfully', 
-      data: companyProfile,
-      planInfo
+      data: companyProfile
     });
   } catch (error) {
     console.error('Error creating company:', error.message, error.stack);
@@ -461,7 +458,7 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
 });
 
 // PATCH /company - Update company (require permission to edit company)
-router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), checkLocationLimit(), async (req, res) => {
+router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), async (req, res) => {
   try {
     const {
       legalName,
@@ -510,12 +507,9 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), c
       await createNewLocations(newLocations, restaurantId);
     });
 
-    const planInfo = generateUpdatePlanInfo(req.user.payment_status, req.requestedLocations, req.locationLimit);
-
     res.status(200).json({ 
       success: true,
-      message: 'Company profile updated successfully',
-      planInfo
+      message: 'Company profile updated successfully'
     });
   } catch (error) {
     console.error('Error updating company profile:', error.message, error.stack);

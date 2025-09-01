@@ -304,6 +304,11 @@ const setUserType = (req, res, next) => {
 const requirePlan = (requiredPlan) => {
   return async (req, res, next) => {
     try {
+      // TODO: Plan logic temporarily disabled for easier development
+      console.log('⚠️ requirePlan check disabled - allowing all plan operations');
+      return next();
+      
+      /* DISABLED PLAN LOGIC:
       if (!req.userId || !req.restaurantId) {
         return res.status(403).json({
           success: false,
@@ -335,6 +340,7 @@ const requirePlan = (requiredPlan) => {
           requiredPlan: requiredPlan
         });
       }
+      */
 
       next();
 
@@ -353,6 +359,11 @@ const requirePlan = (requiredPlan) => {
  */
 const checkLocationLimit = async (req, res, next) => {
   try {
+    // TODO: Plan logic temporarily disabled for easier development
+    console.log('⚠️ Location limit check disabled - allowing all location operations');
+    return next();
+    
+    /* DISABLED PLAN LOGIC:
     if (!req.restaurantId) {
       return next();
     }
@@ -390,6 +401,7 @@ const checkLocationLimit = async (req, res, next) => {
         limit: limit
       });
     }
+    */
 
     next();
 
@@ -407,6 +419,11 @@ const checkLocationLimit = async (req, res, next) => {
  */
 const checkJobOfferLimit = async (req, res, next) => {
   try {
+    // TODO: Plan logic temporarily disabled for easier development
+    console.log('⚠️ Job offer limit check disabled - allowing all job offer operations');
+    return next();
+    
+    /* DISABLED PLAN LOGIC:
     if (!req.restaurantId) {
       return next();
     }
@@ -448,6 +465,7 @@ const checkJobOfferLimit = async (req, res, next) => {
         limit: limit
       });
     }
+    */
 
     next();
 

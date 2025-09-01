@@ -4,6 +4,12 @@ const { prisma } = require('../db.js');
 function requirePlan(plans = []) {
   return async (req, res, next) => {
     try {
+      // TODO: Plan logic temporarily disabled for easier development
+      // Just pass through without any checks for now
+      console.log('⚠️ requirePlan check disabled - allowing all plan operations');
+      return next();
+      
+      /* DISABLED PLAN LOGIC:
       // Solo verificar planes para usuarios de restaurantes
       const restaurantUserId = req.restaurantUserId;
       
@@ -55,6 +61,8 @@ function requirePlan(plans = []) {
 
       // Agregar el usuario al request para uso posterior
       req.user = user;
+      */
+      
       next();
     } catch (error) {
       console.error('Error en middleware requirePlan:', error);
@@ -145,8 +153,14 @@ function checkJobOfferLimit() {
 function checkLocationLimit() {
   return async (req, res, next) => {
     try {
-      console.log('🔒 checkLocationLimit - Checking location limits');
+      console.log('🔒 checkLocationLimit - Plan logic temporarily disabled for development');
       
+      // TODO: Plan logic temporarily disabled for easier development
+      // Just pass through without any checks for now
+      console.log('⚠️ Location limit check disabled - allowing all location operations');
+      return next();
+      
+      /* DISABLED PLAN LOGIC:
       // Obtener el userId del request (para creación de restaurantes)
       const userId = req.userId;
       console.log('🔒 User ID:', userId);
@@ -218,6 +232,7 @@ function checkLocationLimit() {
       req.user = user;
       req.requestedLocations = requestedLocations;
       req.locationLimit = limit;
+      */
 
       next();
     } catch (error) {
