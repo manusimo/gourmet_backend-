@@ -35,7 +35,13 @@ const router = express.Router();
 // GET /chat-token - Generate chat socket token
 router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
   try {
-    console.log('🔍 chat-token: Request received');
+    console.log('🔍 chat-token: Request received', {
+      userId: req.userId,
+      userType: req.userType,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip,
+      timestamp: new Date().toISOString()
+    });
     
     const { userId, userType } = req;
     
@@ -62,7 +68,12 @@ router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
       }
     );
 
-    console.log('✅ chat-token: Generated token for user:', userId);
+    console.log('✅ chat-token: Generated token for user:', {
+      userId,
+      userType,
+      tokenLength: chatToken.length,
+      timestamp: new Date().toISOString()
+    });
     
     res.json({
       success: true,
@@ -110,7 +121,14 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
     const { conversationId } = req.params;
     const { userId } = req;
 
-    console.log('🔍 Messages endpoint called with:', { conversationId, userId });
+    console.log('🔍 Messages endpoint called with:', { 
+      conversationId, 
+      userId,
+      userType: req.userType,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip,
+      timestamp: new Date().toISOString()
+    });
 
     if (!userId) {
       console.log('Unauthorized access: No valid user ID found');

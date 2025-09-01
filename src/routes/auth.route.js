@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
+const { sendEmail } = require('../helpers/email.js');
 const {
   checkEmployee,
   checkCompany,
@@ -661,14 +662,41 @@ router.post('/password-reset-request', validatePasswordReset, async (req, res) =
       { expiresIn: '1h' }
     );
 
-    // Store reset token
-    await prisma.passwordReset.create({
-      data: {
-        userId: user.id,
-        token: resetToken,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
-      },
-    });
+    // Store reset token in TokenDenyList (we'll use this to track used tokens)
+    // For now, we'll just generate the token and send the email
+    // The token validation will be done by JWT verification
+
+    // Generate reset URL
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://www.gourmetjobs.cl' 
+      : 'http://localhost:3001';
+    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+
+    // Send email with reset link
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Recupera tu contraseña - GourmetJobs',
+        text: `Hola,\n\nHas solicitado recuperar tu contraseña en GourmetJobs.\n\nHaz clic en el siguiente enlace para restablecer tu contraseña:\n${resetUrl}\n\nEste enlace expirará en 1 hora.\n\nSi no solicitaste este cambio, puedes ignorar este correo.\n\nSaludos,\nEl equipo de GourmetJobs`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #fb5424;">Recupera tu contraseña</h2>
+            <p>Hola,</p>
+            <p>Has solicitado recuperar tu contraseña en GourmetJobs.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background-color: #fb5424; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Restablecer Contraseña</a>
+            </div>
+            <p><strong>Importante:</strong> Este enlace expirará en 1 hora.</p>
+            <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
+            <p>Saludos,<br>El equipo de GourmetJobs</p>
+          </div>
+        `
+      });
+      console.log(`✅ Password reset email sent to: ${email}`);
+    } catch (emailError) {
+      console.error('❌ Error sending password reset email:', emailError);
+      // Don't fail the request if email fails
+    }
 
     console.log(`🔄 Password reset requested for: ${email}`);
 
@@ -705,37 +733,39 @@ router.post('/password-reset-confirm', validatePasswordResetConfirm, async (req,
       });
     }
 
-    // Find reset request
-    const resetRequest = await prisma.passwordReset.findFirst({
-      where: {
-        token,
-        userId: decoded.userId,
-        used: false,
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (!resetRequest) {
+    // Check if token is for password reset
+    if (decoded.type !== 'password-reset') {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired reset token'
+        message: 'Invalid reset token'
+      });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    // Update password and mark token as used
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: decoded.userId },
-        data: { password: hashedPassword }
-      }),
-      prisma.passwordReset.update({
-        where: { id: resetRequest.id },
-        data: { used: true }
-      })
-    ]);
+    // Update password
+    await prisma.user.update({
+      where: { id: decoded.userId },
+      data: { password: hashedPassword }
+    });
+
+    // Add token to deny list to prevent reuse
+    await prisma.tokenDenyList.create({
+      data: { token }
+    });
 
     // Reset any account lockout
     resetAccountLockout(decoded.userId);

@@ -188,18 +188,31 @@ router.get('/api/company/restaurantUser/:userId', async (req, res) => {
 // GET /company/locations - Get company locations
 router.get('/company/locations', getAuthFromCookie, async (req, res) => {
   try {
+    console.log('🔍 /company/locations endpoint called');
+    console.log('🔍 Request user info:', { 
+      userId: req.userId, 
+      userType: req.userType, 
+      role: req.role,
+      restaurantId: req.restaurantId,
+      restaurantUserId: req.restaurantUserId 
+    });
+
     const restaurantId = req.restaurantId;
 
     if (!restaurantId) {
+      console.log('❌ No restaurantId found in request');
       return res.status(400).json({
         success: false,
         message: 'companyId is required',
       });
     }
 
+    console.log('🔍 Fetching locations for restaurantId:', restaurantId);
     const locations = await getCompanyLocations(restaurantId);
+    console.log('🔍 Found locations:', locations.length);
 
     if (!locations.length) {
+      console.log('❌ No locations found for restaurantId:', restaurantId);
       return res.status(404).json({
         success: false,
         message: 'No locations found for this company.',
@@ -207,13 +220,14 @@ router.get('/company/locations', getAuthFromCookie, async (req, res) => {
     }
 
     const formattedLocations = formatLocations(locations);
+    console.log('🔍 Formatted locations:', formattedLocations.length);
 
     return res.status(200).json({
       success: true,
       data: formattedLocations
     });
   } catch (error) {
-    console.error('Error fetching company locations:', error.message);
+    console.error('❌ Error fetching company locations:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Internal server error',

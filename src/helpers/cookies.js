@@ -2,14 +2,28 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
 
 const getAuthFromCookie = (req, res, next) => {
+  console.log('🔍 getAuthFromCookie called');
+  console.log('🔍 Request cookies:', req.cookies);
+  
   const token = req.cookies.manu;  
+  console.log('🔍 Manu cookie exists:', !!token);
 
   if (!token) {
+    console.log('❌ No manu cookie found');
     return res.status(401).json({ message: 'Entra a tu cuenta para usar la plataforma' });
   }
 
   try {
+    console.log('🔍 Verifying JWT token...');
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);  
+    console.log('🔍 Token decoded successfully:', {
+      userId: decodedToken.userId,
+      userType: decodedToken.userType,
+      role: decodedToken.role,
+      restaurantId: decodedToken.restaurantId,
+      restaurantUserId: decodedToken.restaurantUserId,
+      employeeId: decodedToken.employeeId
+    });
     
     // Extract everything from JWT token
     req.userId = decodedToken.userId;
@@ -19,9 +33,10 @@ const getAuthFromCookie = (req, res, next) => {
     req.restaurantUserId = decodedToken.restaurantUserId;
     req.employeeId = decodedToken.employeeId;
    
+    console.log('🔍 Request object updated with user info');
     next();  
   } catch (error) {
-    console.error('Error in getAuthFromCookie middleware:', error);
+    console.error('❌ Error in getAuthFromCookie middleware:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
