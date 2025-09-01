@@ -64,7 +64,8 @@ router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
       process.env.JWT_SECRET,
       { 
         expiresIn: '15m', // Changed from '1h' to '15m' to match chat app
-        audience: 'chat' // Add audience for chat app validation
+        audience: 'chat', // Add audience for chat app validation
+        issuer: process.env.NODE_ENV === 'production' ? process.env.JWT_ISSUER : 'localhost'
       }
     );
 
@@ -251,7 +252,14 @@ router.post('/send-message', async (req, res) => {
   // TODO: Temporarily disabled plan requirement for development
   // requirePlan(['pro', 'plus', 'premium']), 
   try {
-    const { text, senderUserId, receiverUserId, conversationId, senderType, receiverType } = req.body;
+    const { 
+      text, 
+      senderUserId, 
+      receiverUserId, 
+      conversationId, 
+      senderType, 
+      receiverType 
+    } = req.body;
 
     const conversation = await getConversationById(conversationId);
 
