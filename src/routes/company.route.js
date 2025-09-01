@@ -28,8 +28,8 @@ const {
   filterNewLocations,
   filterExistingLocations,
   findLocationsToDelete,
-  generatePlanInfo,
-  generateUpdatePlanInfo
+  // generatePlanInfo, // Temporarily disabled
+  // generateUpdatePlanInfo // Temporarily disabled
 } = require('../helpers/companyHelpers.js');
 
 const csrfProtection = csrf({ cookie: true });
@@ -282,7 +282,7 @@ router.post('/company', (req, res, next) => {
   console.log('🚨 URL:', req.url);
   console.log('🚨 Headers:', req.headers);
   next();
-}, getUserIdFromCookie, setUserRole, requirePermission('create_company'), checkLocationLimit(), async (req, res) => {
+}, getUserIdFromCookie, setUserRole, requirePermission('create_company'), async (req, res) => {
   
   try {
     console.log('🏢 POST /company - Creating company profile');
