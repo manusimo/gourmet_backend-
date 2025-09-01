@@ -120,14 +120,18 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
 // GET /jobs/top-rated-jobs-carousel - Get top rated jobs
 router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
   try {
-    const { limit = 4 } = req.query;
+    const { limit = 4 } = req.query; // Default limit of 4 jobs
     const userId = req.userId;
     const userType = req.userType;
-    const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 30));
+    const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 60)); // Extended to 60 days
+
+    console.log('🔍 /jobs/top-rated-jobs-carousel called with:', { limit, userId, userType, finishedDateParsed });
 
     let formattedJobs;
 
     formattedJobs = await fetchTopRatedJobs(limit, finishedDateParsed);
+    
+    console.log('🔍 Returning formatted jobs:', formattedJobs.length);
 
     res.json({
       success: true,

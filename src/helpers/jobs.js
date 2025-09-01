@@ -4,6 +4,8 @@ const prisma = new PrismaClient();
 
 const fetchTopRatedJobs = async (limit, finishedDateParsed) => {
   try {
+    console.log('🔍 fetchTopRatedJobs called with:', { limit, finishedDateParsed });
+    
     const jobs = await prisma.jobOffer.findMany({
       where: { deletedAt: null, createdAt: { gt: finishedDateParsed } },
       orderBy: {
@@ -20,8 +22,11 @@ const fetchTopRatedJobs = async (limit, finishedDateParsed) => {
         restaurant: true,
         location: true,
       },
-      take: parseInt(limit, 10),
+      ...(limit && { take: parseInt(limit, 10) }), // Only apply limit if provided
     });
+
+    console.log('🔍 fetchTopRatedJobs found jobs:', jobs.length);
+    console.log('🔍 Jobs details:', jobs.map(job => ({ id: job.id, position: job.position, applicationsCount: job.applications.length })));
 
     return jobs.map((job) => ({
       ...job,
