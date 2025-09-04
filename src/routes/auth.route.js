@@ -189,7 +189,7 @@ router.post('/signin', validateSignin, async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Credenciales invalidos'
       });
     }
 
@@ -980,39 +980,49 @@ router.get('/user-info', async (req, res) => {
       const userId = decodedToken.userId;
       let restaurantUserId = null;
       let employeeId = null;
+      let userRestaurants = [];
 
-      // Check if user has a restaurant (company user)
-      console.log('🔍 user-info: Checking for restaurantId in token:', decodedToken.restaurantId);
-      if (decodedToken.restaurantId) {
-        console.log('🔍 user-info: restaurantId found, looking for RestaurantUser record...');
-        // Find RestaurantUser record
-        const restaurantUser = await prisma.restaurantUser.findFirst({
-          where: {
-            userId: userId,
-            restaurantId: decodedToken.restaurantId
+      // Get all restaurants this user has access to
+      const restaurantUsers = await prisma.restaurantUser.findMany({
+        where: { userId: userId },
+        include: {
+          restaurant: {
+            select: {
+              id: true,
+              name: true,
+              profileImageUrl: true,
+              description: true
+            }
           }
-        });
-        
-        console.log('🔍 user-info: RestaurantUser record found:', restaurantUser);
-        if (restaurantUser) {
-          restaurantUserId = restaurantUser.id;
-          console.log('✅ user-info: restaurantUserId set to:', restaurantUserId);
-        }
-      } else {
-        console.log('🔍 user-info: No restaurantId in token, checking if user has any restaurants...');
-        // Fallback: check if user has any restaurants
-        const restaurantUser = await prisma.restaurantUser.findFirst({
-          where: { userId: userId }
-        });
-        
-        if (restaurantUser) {
-          restaurantUserId = restaurantUser.id;
-          console.log('✅ user-info: Found restaurantUserId from fallback:', restaurantUserId);
+        },
+        orderBy: { id: 'asc' }
+      });
+
+      console.log('🔍 user-info: Found restaurant users:', restaurantUsers.length);
+      
+      if (restaurantUsers.length > 0) {
+        userRestaurants = restaurantUsers.map(ru => ({
+          restaurantUserId: ru.id,
+          restaurantId: ru.restaurant.id,
+          restaurantName: ru.restaurant.name,
+          restaurantImage: ru.restaurant.profileImageUrl,
+          restaurantDescription: ru.restaurant.description,
+          role: ru.role
+        }));
+
+        // Set the current restaurantUserId (use the first one or the one from token)
+        if (decodedToken.restaurantId) {
+          const currentRestaurant = userRestaurants.find(r => r.restaurantId === decodedToken.restaurantId);
+          if (currentRestaurant) {
+            restaurantUserId = currentRestaurant.restaurantUserId;
+          } else {
+            restaurantUserId = userRestaurants[0].restaurantUserId;
+          }
         } else {
-          console.log('🔍 user-info: No RestaurantUser found - likely admin/staff user');
-          // For admin/staff users, we don't set restaurantUserId (it remains null)
-          // The frontend will use userId as fallback
+          restaurantUserId = userRestaurants[0].restaurantUserId;
         }
+
+        console.log('✅ user-info: restaurantUserId set to:', restaurantUserId);
       }
 
       // Check if user has an employee profile
@@ -1024,13 +1034,19 @@ router.get('/user-info', async (req, res) => {
         employeeId = employee.id;
       }
 
-      console.log('✅ user-info: Returning user info:', { userId, restaurantUserId, employeeId });
+      console.log('✅ user-info: Returning user info:', { 
+        userId, 
+        restaurantUserId, 
+        employeeId, 
+        restaurantCount: userRestaurants.length 
+      });
       
       return res.json({
         success: true,
         userId,
         restaurantUserId,
-        employeeId
+        employeeId,
+        restaurants: userRestaurants
       });
       
     } catch (tokenError) {
@@ -1042,6 +1058,89 @@ router.get('/user-info', async (req, res) => {
     }
   } catch (error) {
     console.error('Error getting user info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// POST /switch-restaurant - Switch to a different restaurant
+router.post('/switch-restaurant', async (req, res) => {
+  try {
+    console.log('🔍 switch-restaurant: Request received');
+    
+    const token = req.cookies.manu;
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'No authentication token found'
+      });
+    }
+
+    const { restaurantId } = req.body;
+    
+    if (!restaurantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Restaurant ID is required'
+      });
+    }
+
+    try {
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decodedToken.userId;
+
+      // Verify that the user has access to this restaurant
+      const restaurantUser = await prisma.restaurantUser.findFirst({
+        where: {
+          userId: userId,
+          restaurantId: parseInt(restaurantId)
+        }
+      });
+
+      if (!restaurantUser) {
+        return res.status(403).json({
+          success: false,
+          message: 'You do not have access to this restaurant'
+        });
+      }
+
+      // Create a new token with the selected restaurant
+      const newToken = jwt.sign({
+        userId: decodedToken.userId,
+        userType: decodedToken.userType,
+        role: decodedToken.role,
+        restaurantId: parseInt(restaurantId),
+        restaurantUserId: restaurantUser.id,
+        employeeId: decodedToken.employeeId
+      }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+      // Set the new token in a cookie
+      res.cookie('manu', newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      console.log('✅ switch-restaurant: Successfully switched to restaurant:', restaurantId);
+
+      return res.json({
+        success: true,
+        message: 'Restaurant switched successfully',
+        restaurantUserId: restaurantUser.id
+      });
+
+    } catch (tokenError) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid authentication token'
+      });
+    }
+  } catch (error) {
+    console.error('Error switching restaurant:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -1073,7 +1172,7 @@ router.get('/check-login-status', async (req, res) => {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
       console.log('✅ check-login-status: Token verified, decoded:', decodedToken);
       
-      // Fetch user data
+      // Fetch user data with profile image
       const user = await prisma.user.findUnique({
         where: { id: decodedToken.userId },
         select: {
@@ -1082,20 +1181,44 @@ router.get('/check-login-status', async (req, res) => {
           userType: true,
           role: true,
           name: true,
-          surname: true
+          surname: true,
+          employee: {
+            select: {
+              profileImageUrl: true
+            }
+          },
+          restaurantUsers: {
+            select: {
+              restaurant: {
+                select: {
+                  profileImageUrl: true
+                }
+              }
+            }
+          }
         }
       });
 
       console.log('🔍 check-login-status: User found:', user);
 
       if (user) {
-        console.log('✅ check-login-status: User authenticated successfully');
+        // Get profile image URL based on user type
+        let profileImageUrl = null;
+        
+        if (user.userType === 'profesionales' && user.employee?.profileImageUrl) {
+          profileImageUrl = user.employee.profileImageUrl;
+        } else if (user.userType === 'empresas' && user.restaurantUsers?.[0]?.restaurant?.profileImageUrl) {
+          profileImageUrl = user.restaurantUsers[0].restaurant.profileImageUrl;
+        }
+        
+        console.log('✅ check-login-status: User authenticated successfully, profileImageUrl:', profileImageUrl);
         return res.json({
           success: true,
           isLoggedIn: true,
           user: {
             ...user,
-            userId: user.id
+            userId: user.id,
+            profileImageUrl: profileImageUrl
           }
         });
       } else {

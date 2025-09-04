@@ -35,6 +35,19 @@ const {
 const csrfProtection = csrf({ cookie: true });
 const router = express.Router();
 
+// Test endpoint to check database connection
+router.get('/test-db', async (req, res) => {
+  try {
+    console.log('🔍 Testing database connection...');
+    const result = await prisma.$queryRaw`SELECT 1 as test`;
+    console.log('✅ Database connection successful:', result);
+    res.json({ success: true, message: 'Database connection working', result });
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // GET /companies - Get companies with filters and pagination
 router.get('/companies', async (req, res) => {
   try {
@@ -81,44 +94,36 @@ router.get('/companies', async (req, res) => {
   }
 });
 
-// GET /api/restaurant/:restaurantUserId - Get restaurant information by restaurantUserId
-router.get('/api/restaurant/:restaurantUserId', async (req, res) => {
+// GET /restaurant/:restaurantUserId - Get restaurant information by restaurantUserId
+router.get('/restaurant/:restaurantUserId', async (req, res) => {
   try {
     const { restaurantUserId } = req.params;
+    
+    console.log('🔍 Restaurant route called with restaurantUserId:', restaurantUserId);
 
     if (!restaurantUserId || isNaN(restaurantUserId)) {
+      console.log('❌ Invalid restaurantUserId:', restaurantUserId);
       return res.status(400).json({ 
         success: false,
         error: 'Invalid or missing restaurantUserId' 
       });
     }
 
+    console.log('🔍 Looking up restaurant user with ID:', parseInt(restaurantUserId));
+
     // Get restaurant user information
     const restaurantUser = await prisma.restaurantUser.findUnique({
       where: { id: parseInt(restaurantUserId) },
       include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            surname: true,
-            profileImageUrl: true
-          }
-        },
-        restaurant: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            profileImageUrl: true,
-            location: true
-          }
-        }
+        user: true,
+        restaurant: true
       }
     });
 
+    console.log('🔍 Restaurant user found:', restaurantUser);
+
     if (!restaurantUser) {
+      console.log('❌ Restaurant user not found for ID:', restaurantUserId);
       return res.status(404).json({ 
         success: false,
         error: 'Restaurant user not found' 
@@ -131,19 +136,21 @@ router.get('/api/restaurant/:restaurantUserId', async (req, res) => {
       name: restaurantUser.user.name,
       surname: restaurantUser.user.surname,
       email: restaurantUser.user.email,
-      profileImageUrl: restaurantUser.user.profileImageUrl || restaurantUser.restaurant.profileImageUrl,
+      profileImageUrl: restaurantUser.restaurant.profileImageUrl,
       position: restaurantUser.position || 'Staff Member',
       location: restaurantUser.restaurant.location || 'Location not specified',
       restaurantName: restaurantUser.restaurant.name,
       restaurantDescription: restaurantUser.restaurant.description
     };
 
+    console.log('✅ Returning restaurant info:', restaurantInfo);
+
     return res.status(200).json({ 
       success: true,
       data: restaurantInfo 
     });
   } catch (error) {
-    console.error('Error fetching restaurant information:', error);
+    console.error('❌ Error fetching restaurant information:', error);
     return res.status(500).json({ 
       success: false,
       error: 'Failed to fetch restaurant information' 
