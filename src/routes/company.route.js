@@ -1,6 +1,8 @@
 const express = require('express');
 const csrf = require('csurf');
 const { prisma } = require('../db.js');
+
+console.log('🔍 Company route - Prisma imported:', typeof prisma, prisma ? 'defined' : 'undefined');
 const { checkCompany } = require('../helpers/authenticateToken.js');
 const { requireRole, requirePermission, setUserRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
@@ -277,10 +279,17 @@ router.get('/company/top-rated-companies', async (req, res) => {
 // GET /company/talents-application - Get talents applications
 router.get('/company/talents-application', getAuthFromCookie, async (req, res) => {
   try {
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    
+    // Use restaurantId from query parameter if provided, otherwise use from JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : req.restaurantId;
+    
+    console.log('🔍 [Talents Application API] Fetching applications for restaurantId:', restaurantId);
+    console.log('🔍 [Talents Application API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
+    
     const talents = await getTalentsApplications(restaurantId);
 
-    console.log('here you have some talents', talents);
+    console.log('🔍 [Talents Application API] Found applications:', talents.length);
 
     res.status(200).json({ 
       success: true,
@@ -288,7 +297,7 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
       data: talents 
     });
   } catch (error) {
-    console.error('Error fetching talents:', error);
+    console.error('🔍 [Talents Application API] Error:', error);
     res.status(500).json({ 
       success: false,
       message: "Internal Server Error" 
@@ -333,7 +342,7 @@ router.post('/company', (req, res, next) => {
     } = req.body;
 
     const userId = req.userId;
-    const role = req.userRole;
+    const role = req.role;
 
     console.log('🏢 About to create company profile for userId:', userId);
     console.log('🏢 Request body data:', {
@@ -378,20 +387,8 @@ router.post('/company', (req, res, next) => {
 
     console.log('🏢 Processed data for Prisma:', processedData);
 
-    // Check if user already has a restaurant
-    const existingRestaurant = await prisma.restaurant.findUnique({
-      where: { userId: userId }
-    });
-    console.log('🏢 Existing restaurant for user:', existingRestaurant ? 'Found' : 'None');
-
-    if (existingRestaurant) {
-      console.log('🏢 User already has restaurant ID:', existingRestaurant.id);
-      return res.status(409).json({
-        success: false,
-        message: 'User already has a restaurant profile',
-        data: { restaurantId: existingRestaurant.id }
-      });
-    }
+    // Allow multiple restaurants per user - no need to check for existing company
+    console.log('🏢 Creating restaurant for user (multiple restaurants allowed)');
 
     const companyProfile = await createCompanyProfile(processedData);
 
@@ -401,7 +398,7 @@ router.post('/company', (req, res, next) => {
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
-      role: req.userRole, // Include role from request  
+      role: req.role, // Include role from request  
       restaurantId: companyProfile.id,
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });

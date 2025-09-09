@@ -87,11 +87,15 @@ router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaura
 // GET /talent-pool - Get talent pool with filters
 router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
-    const { restaurantId, restaurantUserId, userRole } = req;
-    const { position, experience, region, comuna, available, schedule } = req.query;
+    const { restaurantUserId, userRole } = req;
+    const { position, experience, region, comuna, available, schedule, restaurantId: queryRestaurantId } = req.query;
+    
+    // Use restaurantId from query parameter if provided, otherwise use from JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : req.restaurantId;
 
     console.log('🔍 [Talent Pool API] Fetching talents for restaurantId:', restaurantId);
     console.log('🔍 [Talent Pool API] Query filters:', { position, experience, region, comuna, available, schedule });
+    console.log('🔍 [Talent Pool API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
 
     const filter = buildTalentPoolFilters({
       position,

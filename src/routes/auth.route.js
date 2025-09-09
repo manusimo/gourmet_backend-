@@ -550,15 +550,15 @@ router.post('/logout', async (req, res) => {
     
     // Get token from cookie instead of Authorization header
     const token = req.cookies.manu;
-    
+
     if (token) {
       try {
         // Verify and decode token to get userId
         const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
         console.log(`✅ User logout: ${decodedToken.userId}`);
         
-        // Add token to blacklist
-        invalidateToken(token);
+      // Add token to blacklist
+      invalidateToken(token);
       } catch (tokenError) {
         console.log('⚠️ Invalid token during logout, but continuing logout process');
       }
@@ -758,8 +758,8 @@ router.post('/password-reset-confirm', validatePasswordResetConfirm, async (req,
 
     // Update password
     await prisma.user.update({
-      where: { id: decoded.userId },
-      data: { password: hashedPassword }
+        where: { id: decoded.userId },
+        data: { password: hashedPassword }
     });
 
     // Add token to deny list to prevent reuse
@@ -982,7 +982,7 @@ router.get('/user-info', async (req, res) => {
       let employeeId = null;
       let userRestaurants = [];
 
-      // Get all restaurants this user has access to
+      // Get all restaurants this user has access to (both as owner and as staff)
       const restaurantUsers = await prisma.restaurantUser.findMany({
         where: { userId: userId },
         include: {
@@ -991,25 +991,78 @@ router.get('/user-info', async (req, res) => {
               id: true,
               name: true,
               profileImageUrl: true,
-              description: true
+              description: true,
+              specialty: true,
+              format: true,
+              region: true,
+              comuna: true
             }
           }
         },
         orderBy: { id: 'asc' }
       });
 
+      // Also get restaurants where the user is the direct owner
+      const ownedRestaurants = await prisma.restaurant.findMany({
+        where: { userId: userId },
+        select: {
+          id: true,
+          name: true,
+          profileImageUrl: true,
+          description: true,
+          specialty: true,
+          format: true,
+          region: true,
+          comuna: true
+        },
+        orderBy: { id: 'asc' }
+      });
+
       console.log('🔍 user-info: Found restaurant users:', restaurantUsers.length);
+      console.log('🔍 user-info: Found owned restaurants:', ownedRestaurants.length);
       
-      if (restaurantUsers.length > 0) {
-        userRestaurants = restaurantUsers.map(ru => ({
+      // Combine restaurant users and owned restaurants
+      const allRestaurants = [];
+      
+      // Add restaurants from RestaurantUser table (staff access)
+      restaurantUsers.forEach(ru => {
+        allRestaurants.push({
           restaurantUserId: ru.id,
           restaurantId: ru.restaurant.id,
           restaurantName: ru.restaurant.name,
           restaurantImage: ru.restaurant.profileImageUrl,
           restaurantDescription: ru.restaurant.description,
+          specialty: ru.restaurant.specialty,
+          format: ru.restaurant.format,
+          region: ru.restaurant.region,
+          comuna: ru.restaurant.comuna,
           role: ru.role
-        }));
+        });
+      });
+      
+      // Add owned restaurants (direct ownership)
+      ownedRestaurants.forEach(restaurant => {
+        // Check if this restaurant is already in the list (avoid duplicates)
+        const exists = allRestaurants.some(r => r.restaurantId === restaurant.id);
+        if (!exists) {
+          allRestaurants.push({
+            restaurantUserId: null, // No RestaurantUser record for direct ownership
+            restaurantId: restaurant.id,
+            restaurantName: restaurant.name,
+            restaurantImage: restaurant.profileImageUrl,
+            restaurantDescription: restaurant.description,
+            specialty: restaurant.specialty,
+            format: restaurant.format,
+            region: restaurant.region,
+            comuna: restaurant.comuna,
+            role: 'admin' // Owner has admin role
+          });
+        }
+      });
 
+      userRestaurants = allRestaurants;
+
+      if (userRestaurants.length > 0) {
         // Set the current restaurantUserId (use the first one or the one from token)
         if (decodedToken.restaurantId) {
           const currentRestaurant = userRestaurants.find(r => r.restaurantId === decodedToken.restaurantId);

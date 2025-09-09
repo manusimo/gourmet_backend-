@@ -1,0 +1,160 @@
+// AI Agent System Schema Extensions
+// This file shows the AI agent models that will be added to your main schema.prisma
+// Study this first to understand the structure before integration
+
+// ========================================
+// NEW MODELS TO ADD TO YOUR SCHEMA
+// ========================================
+
+model AiAgent {
+  id                Int      @id @default(autoincrement())
+  name              String
+  description       String?
+  avatar            String?  // URL to agent avatar image
+  personality       String?  // JSON string with personality traits
+  capabilities      String[] // Array of capabilities: ["schedule_calls", "answer_questions", "collect_info"]
+  isActive          Boolean  @default(true)
+  restaurantId      Int?     // If null, agent is global
+  createdByUserId   Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  restaurant        Restaurant? @relation(fields: [restaurantId], references: [id])
+  createdBy         User        @relation(fields: [createdByUserId], references: [id])
+  conversations     AgentConversation[]
+  scheduledCalls    ScheduledCall[]
+  agentConfigs      AgentConfig[]
+}
+
+model AgentConversation {
+  id                Int      @id @default(autoincrement())
+  agentId           Int
+  userId            Int      // User talking to the agent
+  conversationId    Int      // Links to existing Conversation model
+  context           String?  // JSON string with conversation context
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent      @relation(fields: [agentId], references: [id])
+  user              User         @relation(fields: [userId], references: [id])
+  conversation      Conversation @relation(fields: [conversationId], references: [id])
+  messages          AgentMessage[]
+  
+  @@unique([agentId, conversationId])
+}
+
+model AgentMessage {
+  id                    Int      @id @default(autoincrement())
+  agentConversationId   Int
+  messageId             Int      // Links to existing Message model
+  agentResponse         String?  // AI agent's response
+  intent                String?  // Detected intent: "schedule_call", "question", "greeting"
+  entities              String?  // JSON string with extracted entities
+  confidence            Float?   // Confidence score of the response
+  createdAt             DateTime @default(now())
+  
+  // Relations
+  agentConversation     AgentConversation @relation(fields: [agentConversationId], references: [id])
+  message               Message           @relation(fields: [messageId], references: [id])
+}
+
+model ScheduledCall {
+  id                Int      @id @default(autoincrement())
+  agentId           Int
+  restaurantId      Int
+  employeeId        Int?     // If scheduling with an employee
+  restaurantUserId  Int?     // If scheduling with restaurant staff
+  title             String
+  description       String?
+  scheduledDate     DateTime
+  duration          Int      @default(30) // Duration in minutes
+  status            String   @default("scheduled") // scheduled, completed, cancelled, rescheduled
+  meetingLink       String?  // Zoom, Google Meet, etc.
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent        @relation(fields: [agentId], references: [id])
+  restaurant        Restaurant     @relation(fields: [restaurantId], references: [id])
+  employee          Employee?      @relation(fields: [employeeId], references: [id])
+  restaurantUser    RestaurantUser? @relation(fields: [restaurantUserId], references: [id])
+}
+
+model AgentConfig {
+  id                Int      @id @default(autoincrement())
+  agentId           Int
+  configKey         String   // e.g., "openai_model", "max_tokens", "temperature"
+  configValue       String   // JSON string for complex values
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent  @relation(fields: [agentId], references: [id])
+  
+  @@unique([agentId, configKey])
+}
+
+// ========================================
+// RELATIONS TO ADD TO EXISTING MODELS
+// ========================================
+
+// Add to User model:
+// agentConversations  AgentConversation[]
+// createdAgents       AiAgent[]
+
+// Add to Employee model:
+// scheduledCalls      ScheduledCall[]
+
+// Add to Restaurant model:
+// aiAgents            AiAgent[]
+// scheduledCalls      ScheduledCall[]
+
+// Add to RestaurantUser model:
+// scheduledCalls      ScheduledCall[]
+
+// Add to Conversation model:
+// agentConversations  AgentConversation[]
+
+// Add to Message model:
+// agentMessages       AgentMessage[]
+
+// ========================================
+// HOW THE AI AGENT SYSTEM WORKS
+// ========================================
+
+/*
+1. AiAgent: The main AI agent entity
+   - Can be global (restaurantId = null) or restaurant-specific
+   - Has capabilities like scheduling calls, answering questions
+   - Has personality traits and configuration
+
+2. AgentConversation: Links an AI agent to an existing conversation
+   - When a user starts chatting with an AI agent
+   - Tracks the context and state of the agent conversation
+
+3. AgentMessage: Stores AI agent responses and analysis
+   - Links to existing Message model
+   - Stores the AI's response, detected intent, and confidence
+   - Tracks what the AI understood from the user's message
+
+4. ScheduledCall: Call scheduling functionality
+   - Created when AI agent detects scheduling intent
+   - Can schedule calls between employees and restaurant staff
+   - Includes meeting links, duration, status tracking
+
+5. AgentConfig: Configuration for each AI agent
+   - OpenAI model settings, temperature, max tokens
+   - Language, timezone, custom prompts
+   - Allows fine-tuning per agent
+
+INTEGRATION WITH EXISTING CHAT SYSTEM:
+- Uses your existing Conversation and Message models
+- AI agents can be "activated" in any conversation
+- Seamlessly integrates with your current chat flow
+- Leverages your existing user roles and permissions
+*/

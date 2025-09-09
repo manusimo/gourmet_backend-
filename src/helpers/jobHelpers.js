@@ -37,7 +37,7 @@ const createJobOffer = async (jobData) => {
     schedule,
     contract,
     description,
-    restaurant: { connect: { id: restaurantId } },
+    restaurant: { connect: { id: parseInt(restaurantId, 10) } },
     requirements,
     functions,
     tips,

@@ -1,4 +1,5 @@
 const express = require('express');
+const { PrismaClient } = require('@prisma/client');
 const { getEmployeeIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
 const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
 const {
@@ -10,6 +11,9 @@ const {
   getJobOfferForRestaurant,
   getApplicationsForJobOffer
 } = require('../helpers/applicationHelpers.js');
+const { sendJobApplicationNotification } = require('../services/emailService.js');
+
+const prisma = new PrismaClient();
 
 const router = express.Router();
 
@@ -57,6 +61,35 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
     // Create application
     const application = await createApplication(jobPostId, employeeId, answers);
+
+    // Send email notification to restaurant
+    try {
+      // Get restaurant and employee details for notification
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id: jobPost.restaurantId },
+        select: { name: true, user: { select: { email: true } } }
+      });
+
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { user: { select: { name: true, email: true } } }
+      });
+
+      if (restaurant && employee) {
+        await sendJobApplicationNotification({
+          applicantName: employee.user.name,
+          applicantEmail: employee.user.email,
+          jobTitle: jobPost.title,
+          restaurantName: restaurant.name,
+          restaurantEmail: restaurant.user.email,
+          applicationId: application.id
+        });
+        console.log('📧 Job application notification sent');
+      }
+    } catch (emailError) {
+      console.error('❌ Failed to send job application notification:', emailError);
+      // Don't fail the application creation if email fails
+    }
 
     res.status(201).json({ 
       success: true,

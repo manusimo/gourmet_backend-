@@ -31,8 +31,12 @@ model User {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   employee         Employee?
-  restaurant       Restaurant?
+  restaurants      Restaurant[]  // Changed from restaurant to restaurants (one-to-many)
   restaurantUsers  RestaurantUser[]
+  
+  // AI Agent relations
+  agentConversations  AgentConversation[]
+  createdAgents       AiAgent[]
 }
 
 model TokenDenyList {
@@ -72,6 +76,9 @@ model Employee {
   educations   Education[]
   messagesSent  Message[] @relation("SenderEmployee")
   messagesReceived Message[] @relation("ReceiverEmployee")
+  
+  // AI Agent relations
+  scheduledCalls      ScheduledCall[]
 }
 
 model Experience {
@@ -114,10 +121,14 @@ model Restaurant {
   benefits             String[]
   locations            Location[]
   jobOffers            JobOffer[]
-  userId               Int       @unique
+  userId               Int       // Removed @unique constraint to allow multiple restaurants per user
   user                 User      @relation(fields: [userId], references: [id])
   restaurantUsers      RestaurantUser[]
   talentPools     TalentPool[]
+  
+  // AI Agent relations
+  aiAgents            AiAgent[]
+  scheduledCalls      ScheduledCall[]
 }
 
 model Location {
@@ -199,6 +210,9 @@ model Conversation {
   employee         Employee       @relation(fields: [employeeId], references: [id])
   restaurantUser   RestaurantUser @relation(fields: [restaurantUserId], references: [id])
   deletedAt        DateTime?
+  
+  // AI Agent relations
+  agentConversations  AgentConversation[]
 }
 
 model Message {
@@ -220,6 +234,9 @@ model Message {
   receiverRestaurantUser    RestaurantUser?  @relation("ReceiverRestaurantUser", fields: [receiverRestaurantUserId], references: [id])
 
   createdAt                 DateTime         @default(now())
+  
+  // AI Agent relations
+  agentMessages       AgentMessage[]
 }
 
 model RestaurantUser {
@@ -234,6 +251,9 @@ model RestaurantUser {
   jobOffers     JobOffer[]
   messagesSent     Message[] @relation("SenderRestaurantUser")
   messagesReceived Message[] @relation("ReceiverRestaurantUser")
+  
+  // AI Agent relations
+  scheduledCalls      ScheduledCall[]
 }
 
 model TalentPool {
@@ -267,6 +287,100 @@ model ContactSubmission {
   subject    String?
   message    String?
   createdAt  DateTime @default(now())
+}
+
+// AI Agent System Models
+model AiAgent {
+  id                Int      @id @default(autoincrement())
+  name              String
+  description       String?
+  avatar            String?  // URL to agent avatar image
+  personality       String?  // JSON string with personality traits
+  capabilities      String[] // Array of capabilities: ["schedule_calls", "answer_questions", "collect_info"]
+  isActive          Boolean  @default(true)
+  restaurantId      Int?     // If null, agent is global
+  createdByUserId   Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  restaurant        Restaurant? @relation(fields: [restaurantId], references: [id])
+  createdBy         User        @relation(fields: [createdByUserId], references: [id])
+  conversations     AgentConversation[]
+  scheduledCalls    ScheduledCall[]
+  agentConfigs      AgentConfig[]
+}
+
+model AgentConversation {
+  id                Int      @id @default(autoincrement())
+  agentId           Int
+  userId            Int      // User talking to the agent
+  conversationId    Int      // Links to existing Conversation model
+  context           String?  // JSON string with conversation context
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent      @relation(fields: [agentId], references: [id])
+  user              User         @relation(fields: [userId], references: [id])
+  conversation      Conversation @relation(fields: [conversationId], references: [id])
+  messages          AgentMessage[]
+  
+  @@unique([agentId, conversationId])
+}
+
+model AgentMessage {
+  id                    Int      @id @default(autoincrement())
+  agentConversationId   Int
+  messageId             Int      // Links to existing Message model
+  agentResponse         String?  // AI agent's response
+  intent                String?  // Detected intent: "schedule_call", "question", "greeting"
+  entities              String?  // JSON string with extracted entities
+  confidence            Float?   // Confidence score of the response
+  createdAt             DateTime @default(now())
+  
+  // Relations
+  agentConversation     AgentConversation @relation(fields: [agentConversationId], references: [id])
+  message               Message           @relation(fields: [messageId], references: [id])
+}
+
+model ScheduledCall {
+  id                Int      @id @default(autoincrement())
+  agentId           Int
+  restaurantId      Int
+  employeeId        Int?     // If scheduling with an employee
+  restaurantUserId  Int?     // If scheduling with restaurant staff
+  title             String
+  description       String?
+  scheduledDate     DateTime
+  duration          Int      @default(30) // Duration in minutes
+  status            String   @default("scheduled") // scheduled, completed, cancelled, rescheduled
+  meetingLink       String?  // Zoom, Google Meet, etc.
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent        @relation(fields: [agentId], references: [id])
+  restaurant        Restaurant     @relation(fields: [restaurantId], references: [id])
+  employee          Employee?      @relation(fields: [employeeId], references: [id])
+  restaurantUser    RestaurantUser? @relation(fields: [restaurantUserId], references: [id])
+}
+
+model AgentConfig {
+  id                Int      @id @default(autoincrement())
+  agentId           Int
+  configKey         String   // e.g., "openai_model", "max_tokens", "temperature"
+  configValue       String   // JSON string for complex values
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent  @relation(fields: [agentId], references: [id])
+  
+  @@unique([agentId, configKey])
 }
 
 
