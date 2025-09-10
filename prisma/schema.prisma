@@ -125,6 +125,7 @@ model Restaurant {
   user                 User      @relation(fields: [userId], references: [id])
   restaurantUsers      RestaurantUser[]
   talentPools     TalentPool[]
+  conversations        Conversation[]
   
   // AI Agent relations
   aiAgents            AiAgent[]
@@ -200,6 +201,7 @@ model Conversation {
   messages         Message[]
   employeeId       Int
   restaurantUserId Int
+  restaurantId     Int            // Direct reference to restaurant for cleaner filtering
   type             String         @default("none")
   jobOfferId       Int?
   jobOffer         JobOffer?      @relation(fields: [jobOfferId], references: [id])
@@ -209,6 +211,7 @@ model Conversation {
 
   employee         Employee       @relation(fields: [employeeId], references: [id])
   restaurantUser   RestaurantUser @relation(fields: [restaurantUserId], references: [id])
+  restaurant       Restaurant     @relation(fields: [restaurantId], references: [id])
   deletedAt        DateTime?
   
   // AI Agent relations

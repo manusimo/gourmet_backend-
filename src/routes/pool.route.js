@@ -1,7 +1,10 @@
 const express = require('express');
+const { PrismaClient } = require('@prisma/client');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { getUserIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
 const { getTalentPool } = require('../helpers/pool.js');
+
+const prisma = new PrismaClient();
 const {
   checkTalentPoolEntry,
   createTalentPoolEntry,
@@ -44,11 +47,68 @@ router.get('/talent-pool/check', checkCompany, getRestaurantIdFromCookie, async 
 });
 
 // POST /talent-pool - Add employee to talent pool
-router.post('/talent-pool', checkCompany, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.post('/talent-pool', checkCompany, getUserIdFromCookie, async (req, res) => {
   try {
-    const { employeeId } = req.body;
-    const restaurantId = parseInt(req.restaurantId);
-    const restaurantUserId = parseInt(req.restaurantUserId);
+    const { employeeId, restaurantId: bodyRestaurantId } = req.body;
+    const userId = req.userId;
+    
+    // Use restaurantId from request body if provided, otherwise fallback to JWT
+    let restaurantId, restaurantUserId;
+    
+    if (bodyRestaurantId) {
+      console.log('🔍 [Talent Pool API] Using restaurantId from request body:', bodyRestaurantId);
+      restaurantId = parseInt(bodyRestaurantId);
+      
+      // Find or create RestaurantUser record for the specified restaurant
+      const restaurantUser = await prisma.restaurantUser.findFirst({
+        where: {
+          userId: userId,
+          restaurantId: restaurantId
+        }
+      });
+      
+      if (restaurantUser) {
+        restaurantUserId = restaurantUser.id;
+        console.log('✅ Found existing restaurantUserId:', restaurantUserId);
+      } else {
+        // Create RestaurantUser record for this restaurant
+        const newRestaurantUser = await prisma.restaurantUser.create({
+          data: {
+            userId: userId,
+            restaurantId: restaurantId,
+            role: 'admin'
+          }
+        });
+        restaurantUserId = newRestaurantUser.id;
+        console.log('✅ Created new restaurantUserId:', restaurantUserId);
+      }
+    } else {
+      // Fallback to JWT-based behavior (legacy)
+      console.log('🔍 [Talent Pool API] No restaurantId in body, using JWT fallback...');
+      const restaurant = await prisma.restaurant.findFirst({
+        where: { userId: userId }
+      });
+      
+      if (restaurant) {
+        const adminRestaurantUser = await prisma.restaurantUser.upsert({
+          where: {
+            userId_restaurantId: {
+              userId: userId,
+              restaurantId: restaurant.id
+            }
+          },
+          update: {},
+          create: {
+            userId: userId,
+            restaurantId: restaurant.id,
+            role: 'admin'
+          }
+        });
+        
+        restaurantId = restaurant.id;
+        restaurantUserId = adminRestaurantUser.id;
+      }
+    }
 
     console.log('🔍 [Talent Pool API] Saving talent:', { employeeId, restaurantId, restaurantUserId });
 

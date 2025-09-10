@@ -156,7 +156,11 @@ router.get('/applications/:applicationId', async (req, res) => {
 router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const { jobOfferId } = req.params;
-    const { restaurantId } = req;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+
+    // Use restaurantId from query parameter if provided, otherwise use from JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
 
     // Validate job offer ID
     const parsedJobOfferId = parseInt(jobOfferId);
@@ -175,9 +179,13 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
       });
     }
 
+    console.log('🔍 [Job Applicants API] Fetching applicants for jobOfferId:', parsedJobOfferId, 'restaurantId:', restaurantId);
+    console.log('🔍 [Job Applicants API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
+
     // Check if job offer exists and belongs to restaurant
     const jobOffer = await getJobOfferForRestaurant(parsedJobOfferId, restaurantId);
     if (!jobOffer) {
+      console.log('🔍 [Job Applicants API] Job offer not found or does not belong to restaurant');
       return res.status(404).json({ 
         success: false,
         message: 'Job offer not found or you do not have permission to view the applicants.' 
@@ -186,6 +194,8 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
 
     // Get applications for this job offer
     const applications = await getApplicationsForJobOffer(parsedJobOfferId);
+
+    console.log('🔍 [Job Applicants API] Found applications:', applications.length);
 
     res.json({ 
       success: true,
