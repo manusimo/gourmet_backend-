@@ -1091,7 +1091,8 @@ router.get('/user-info', async (req, res) => {
         userId, 
         restaurantUserId, 
         employeeId, 
-        restaurantCount: userRestaurants.length 
+        restaurantCount: userRestaurants.length,
+        userType: decodedToken.userType
       });
       
       return res.json({
@@ -1099,6 +1100,7 @@ router.get('/user-info', async (req, res) => {
         userId,
         restaurantUserId,
         employeeId,
+        userType: decodedToken.userType,
         restaurants: userRestaurants
       });
       

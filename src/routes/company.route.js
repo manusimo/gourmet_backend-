@@ -206,7 +206,16 @@ router.get('/company/locations', getAuthFromCookie, async (req, res) => {
       restaurantUserId: req.restaurantUserId 
     });
 
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+    
+    // Use query parameter if provided, otherwise fall back to JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
+    
+    console.log('🔍 [Company Locations API] Fetching locations:');
+    console.log('  - Query restaurantId:', queryRestaurantId);
+    console.log('  - JWT restaurantId:', jwtRestaurantId);
+    console.log('  - Using restaurantId:', restaurantId);
 
     if (!restaurantId) {
       console.log('❌ No restaurantId found in request');
@@ -453,21 +462,34 @@ router.get('/company/:id', async (req, res) => {
 // GET /company - Get current company
 router.get('/company', getAuthFromCookie, async (req, res) => {
   try {
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+    
+    // Use query parameter if provided, otherwise fall back to JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
+    
+    console.log('🔍 [Company Profile API] Fetching company profile:');
+    console.log('  - Query restaurantId:', queryRestaurantId);
+    console.log('  - JWT restaurantId:', jwtRestaurantId);
+    console.log('  - Using restaurantId:', restaurantId);
+    
     const company = await getCompanyByRestaurantId(restaurantId);
 
     if (company) {
+      console.log('🔍 [Company Profile API] Found company:', company.name);
       res.status(200).json({
         success: true,
         data: company
       });
     } else {
+      console.log('🔍 [Company Profile API] Company not found for restaurantId:', restaurantId);
       res.status(404).json({ 
         success: false,
         error: 'Company not found' 
       });
     }
   } catch (error) {
+    console.error('🔍 [Company Profile API] Error:', error);
     res.status(401).json({ 
       success: false,
       message: 'Invalid token' 
@@ -496,7 +518,16 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       profileCarouselUrls,
     } = req.body;
 
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+    
+    // Use query parameter if provided, otherwise fall back to JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
+    
+    console.log('🔍 [Company Update API] Updating company profile:');
+    console.log('  - Query restaurantId:', queryRestaurantId);
+    console.log('  - JWT restaurantId:', jwtRestaurantId);
+    console.log('  - Using restaurantId:', restaurantId);
 
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
