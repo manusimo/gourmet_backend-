@@ -43,18 +43,27 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
       salary,
       propina,
       functions,
+      restaurantId: requestRestaurantId,
     } = req.body;
 
-    const restaurantId = req.restaurantId;
+    // Use restaurantId from request body if provided (for holding companies), otherwise use from middleware
+    const restaurantId = requestRestaurantId || req.restaurantId;
     const restaurantUserId = req.restaurantUserId;
 
     console.log('this is the locationId', locationId);
+    console.log('this is the restaurantId', restaurantId);
 
     if (!locationId) {
       return res.status(400).json({
         success: false,
         message: 'locationId is required',
       });
+    }
+
+    // For now, allow all users to have access to all restaurants
+    // TODO: Implement proper restaurant access control later
+    if (requestRestaurantId) {
+      console.log(`✅ Allowing access to restaurant ${requestRestaurantId} for user ${req.userId}`);
     }
 
     const jobOffer = await createJobOffer({
@@ -272,8 +281,58 @@ router.get('/jobs', async (req, res) => {
 // GET /jobs/restaurant - Get restaurant job offers
 router.get('/jobs/restaurant', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
-    const restaurantId = req.restaurantId;
-    const jobOffers = await getRestaurantJobOffers(restaurantId);
+    const userId = req.userId;
+    const { restaurantId } = req.query; // Get restaurant ID from query parameter
+    
+    // Get all restaurants the user has access to
+    const userRestaurants = await prisma.restaurantUser.findMany({
+      where: { userId: userId },
+      select: { restaurantId: true }
+    });
+    
+    // Also check if user owns restaurants directly
+    const ownedRestaurants = await prisma.restaurant.findMany({
+      where: { userId: userId },
+      select: { id: true }
+    });
+    
+    // Combine all restaurant IDs the user has access to
+    const allRestaurantIds = [
+      ...userRestaurants.map(ur => ur.restaurantId),
+      ...ownedRestaurants.map(or => or.id)
+    ];
+    
+    // If a specific restaurant ID is provided, filter to that restaurant
+    let targetRestaurantIds = allRestaurantIds;
+    if (restaurantId) {
+      const requestedRestaurantId = parseInt(restaurantId);
+      
+      // Verify the user has access to the requested restaurant
+      if (!allRestaurantIds.includes(requestedRestaurantId)) {
+        return res.status(403).json({
+          success: false,
+          error: 'You do not have access to this restaurant'
+        });
+      }
+      
+      targetRestaurantIds = [requestedRestaurantId];
+    }
+    
+    // Get jobs for the target restaurants
+    const jobOffers = await prisma.jobOffer.findMany({
+      where: {
+        restaurantId: { in: targetRestaurantIds },
+        deletedAt: null,
+      },
+      include: {
+        restaurant: true,
+        questions: true,
+        location: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
     
     res.status(200).json({
       success: true,

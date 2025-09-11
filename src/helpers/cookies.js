@@ -89,7 +89,7 @@ const getEmployeeIdFromCookie = async (req, res, next) => {
   }
 };
 
-const getUserIdFromCookie = (req, res, next) => {
+const getUserIdFromCookie = async (req, res, next) => {
     console.log('🍪 getUserIdFromCookie - Checking authentication');
     console.log('🍪 Request cookies:', req.cookies);
     console.log('🍪 Manu cookie exists:', !!req.cookies.manu);
@@ -105,15 +105,26 @@ const getUserIdFromCookie = (req, res, next) => {
 
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-      console.log('🍪 Token decoded successfully:', { userId: decodedToken.userId, userType: decodedToken.userType });
+      console.log('🍪 Token decoded successfully:', { userId: decodedToken.userId, userType: decodedToken.userType, role: decodedToken.role });
    
       const userId = decodedToken.userId; 
       const userType = decodedToken.userType;    
-      const role = decodedToken.role; // Extract role from JWT token
+      let role = decodedToken.role; // Extract role from JWT token
+
+      // If role is not in token, get it from the database
+      if (!role) {
+        console.log('🍪 Role not in token, fetching from database...');
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true }
+        });
+        role = user ? user.role : 'user';
+        console.log('🍪 Role from database:', role);
+      }
 
       req.userId = userId; 
       req.userType = userType;
-      req.role = role; // Set role from JWT token
+      req.role = role; // Set role from JWT token or database
       
       console.log('🍪 Authentication successful, proceeding to next middleware');
       next();

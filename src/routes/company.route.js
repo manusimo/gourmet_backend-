@@ -1,6 +1,8 @@
 const express = require('express');
 const csrf = require('csurf');
 const { prisma } = require('../db.js');
+
+console.log('🔍 Company route - Prisma imported:', typeof prisma, prisma ? 'defined' : 'undefined');
 const { checkCompany } = require('../helpers/authenticateToken.js');
 const { requireRole, requirePermission, setUserRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
@@ -34,6 +36,19 @@ const {
 
 const csrfProtection = csrf({ cookie: true });
 const router = express.Router();
+
+// Test endpoint to check database connection
+router.get('/test-db', async (req, res) => {
+  try {
+    console.log('🔍 Testing database connection...');
+    const result = await prisma.$queryRaw`SELECT 1 as test`;
+    console.log('✅ Database connection successful:', result);
+    res.json({ success: true, message: 'Database connection working', result });
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // GET /companies - Get companies with filters and pagination
 router.get('/companies', async (req, res) => {
@@ -81,44 +96,36 @@ router.get('/companies', async (req, res) => {
   }
 });
 
-// GET /api/restaurant/:restaurantUserId - Get restaurant information by restaurantUserId
-router.get('/api/restaurant/:restaurantUserId', async (req, res) => {
+// GET /restaurant/:restaurantUserId - Get restaurant information by restaurantUserId
+router.get('/restaurant/:restaurantUserId', async (req, res) => {
   try {
     const { restaurantUserId } = req.params;
+    
+    console.log('🔍 Restaurant route called with restaurantUserId:', restaurantUserId);
 
     if (!restaurantUserId || isNaN(restaurantUserId)) {
+      console.log('❌ Invalid restaurantUserId:', restaurantUserId);
       return res.status(400).json({ 
         success: false,
         error: 'Invalid or missing restaurantUserId' 
       });
     }
 
+    console.log('🔍 Looking up restaurant user with ID:', parseInt(restaurantUserId));
+
     // Get restaurant user information
     const restaurantUser = await prisma.restaurantUser.findUnique({
       where: { id: parseInt(restaurantUserId) },
       include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            surname: true,
-            profileImageUrl: true
-          }
-        },
-        restaurant: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            profileImageUrl: true,
-            location: true
-          }
-        }
+        user: true,
+        restaurant: true
       }
     });
 
+    console.log('🔍 Restaurant user found:', restaurantUser);
+
     if (!restaurantUser) {
+      console.log('❌ Restaurant user not found for ID:', restaurantUserId);
       return res.status(404).json({ 
         success: false,
         error: 'Restaurant user not found' 
@@ -131,19 +138,21 @@ router.get('/api/restaurant/:restaurantUserId', async (req, res) => {
       name: restaurantUser.user.name,
       surname: restaurantUser.user.surname,
       email: restaurantUser.user.email,
-      profileImageUrl: restaurantUser.user.profileImageUrl || restaurantUser.restaurant.profileImageUrl,
+      profileImageUrl: restaurantUser.restaurant.profileImageUrl,
       position: restaurantUser.position || 'Staff Member',
       location: restaurantUser.restaurant.location || 'Location not specified',
       restaurantName: restaurantUser.restaurant.name,
       restaurantDescription: restaurantUser.restaurant.description
     };
 
+    console.log('✅ Returning restaurant info:', restaurantInfo);
+
     return res.status(200).json({ 
       success: true,
       data: restaurantInfo 
     });
   } catch (error) {
-    console.error('Error fetching restaurant information:', error);
+    console.error('❌ Error fetching restaurant information:', error);
     return res.status(500).json({ 
       success: false,
       error: 'Failed to fetch restaurant information' 
@@ -197,7 +206,16 @@ router.get('/company/locations', getAuthFromCookie, async (req, res) => {
       restaurantUserId: req.restaurantUserId 
     });
 
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+    
+    // Use query parameter if provided, otherwise fall back to JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
+    
+    console.log('🔍 [Company Locations API] Fetching locations:');
+    console.log('  - Query restaurantId:', queryRestaurantId);
+    console.log('  - JWT restaurantId:', jwtRestaurantId);
+    console.log('  - Using restaurantId:', restaurantId);
 
     if (!restaurantId) {
       console.log('❌ No restaurantId found in request');
@@ -270,10 +288,17 @@ router.get('/company/top-rated-companies', async (req, res) => {
 // GET /company/talents-application - Get talents applications
 router.get('/company/talents-application', getAuthFromCookie, async (req, res) => {
   try {
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    
+    // Use restaurantId from query parameter if provided, otherwise use from JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : req.restaurantId;
+    
+    console.log('🔍 [Talents Application API] Fetching applications for restaurantId:', restaurantId);
+    console.log('🔍 [Talents Application API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
+    
     const talents = await getTalentsApplications(restaurantId);
 
-    console.log('here you have some talents', talents);
+    console.log('🔍 [Talents Application API] Found applications:', talents.length);
 
     res.status(200).json({ 
       success: true,
@@ -281,7 +306,7 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
       data: talents 
     });
   } catch (error) {
-    console.error('Error fetching talents:', error);
+    console.error('🔍 [Talents Application API] Error:', error);
     res.status(500).json({ 
       success: false,
       message: "Internal Server Error" 
@@ -326,7 +351,7 @@ router.post('/company', (req, res, next) => {
     } = req.body;
 
     const userId = req.userId;
-    const role = req.userRole;
+    const role = req.role;
 
     console.log('🏢 About to create company profile for userId:', userId);
     console.log('🏢 Request body data:', {
@@ -371,20 +396,8 @@ router.post('/company', (req, res, next) => {
 
     console.log('🏢 Processed data for Prisma:', processedData);
 
-    // Check if user already has a restaurant
-    const existingRestaurant = await prisma.restaurant.findUnique({
-      where: { userId: userId }
-    });
-    console.log('🏢 Existing restaurant for user:', existingRestaurant ? 'Found' : 'None');
-
-    if (existingRestaurant) {
-      console.log('🏢 User already has restaurant ID:', existingRestaurant.id);
-      return res.status(409).json({
-        success: false,
-        message: 'User already has a restaurant profile',
-        data: { restaurantId: existingRestaurant.id }
-      });
-    }
+    // Allow multiple restaurants per user - no need to check for existing company
+    console.log('🏢 Creating restaurant for user (multiple restaurants allowed)');
 
     const companyProfile = await createCompanyProfile(processedData);
 
@@ -394,7 +407,7 @@ router.post('/company', (req, res, next) => {
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
-      role: req.userRole, // Include role from request  
+      role: req.role, // Include role from request  
       restaurantId: companyProfile.id,
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
@@ -449,21 +462,34 @@ router.get('/company/:id', async (req, res) => {
 // GET /company - Get current company
 router.get('/company', getAuthFromCookie, async (req, res) => {
   try {
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+    
+    // Use query parameter if provided, otherwise fall back to JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
+    
+    console.log('🔍 [Company Profile API] Fetching company profile:');
+    console.log('  - Query restaurantId:', queryRestaurantId);
+    console.log('  - JWT restaurantId:', jwtRestaurantId);
+    console.log('  - Using restaurantId:', restaurantId);
+    
     const company = await getCompanyByRestaurantId(restaurantId);
 
     if (company) {
+      console.log('🔍 [Company Profile API] Found company:', company.name);
       res.status(200).json({
         success: true,
         data: company
       });
     } else {
+      console.log('🔍 [Company Profile API] Company not found for restaurantId:', restaurantId);
       res.status(404).json({ 
         success: false,
         error: 'Company not found' 
       });
     }
   } catch (error) {
+    console.error('🔍 [Company Profile API] Error:', error);
     res.status(401).json({ 
       success: false,
       message: 'Invalid token' 
@@ -492,7 +518,16 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       profileCarouselUrls,
     } = req.body;
 
-    const restaurantId = req.restaurantId;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+    
+    // Use query parameter if provided, otherwise fall back to JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
+    
+    console.log('🔍 [Company Update API] Updating company profile:');
+    console.log('  - Query restaurantId:', queryRestaurantId);
+    console.log('  - JWT restaurantId:', jwtRestaurantId);
+    console.log('  - Using restaurantId:', restaurantId);
 
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);

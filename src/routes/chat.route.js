@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
+const { sendMessageNotification } = require('../services/emailService.js');
 
 const prisma = new PrismaClient();
 const {
@@ -279,6 +280,46 @@ router.post('/send-message', async (req, res) => {
       receiverType
     });
 
+    // Send email notification to receiver
+    try {
+      // Get sender and receiver details for notification
+      const sender = await prisma.user.findUnique({
+        where: { id: parseInt(senderUserId) },
+        select: { name: true, email: true }
+      });
+
+      const receiver = await prisma.user.findUnique({
+        where: { id: parseInt(receiverUserId) },
+        select: { name: true, email: true }
+      });
+
+      // Get restaurant name from conversation
+      const conversationWithRestaurant = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { 
+          restaurant: { 
+            select: { name: true } 
+          } 
+        }
+      });
+
+      if (sender && receiver && conversationWithRestaurant) {
+        await sendMessageNotification({
+          senderName: sender.name,
+          senderEmail: sender.email,
+          recipientName: receiver.name,
+          recipientEmail: receiver.email,
+          messagePreview: text.length > 100 ? text.substring(0, 100) + '...' : text,
+          restaurantName: conversationWithRestaurant.restaurant?.name || 'Restaurante',
+          conversationId: conversationId
+        });
+        console.log('📧 Message notification sent');
+      }
+    } catch (emailError) {
+      console.error('❌ Failed to send message notification:', emailError);
+      // Don't fail the message sending if email fails
+    }
+
     res.status(200).json({ 
       success: true,
       message: 'Message sent successfully.', 
@@ -342,13 +383,13 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
 });
 
 // POST /create-conversation - Create or ensure conversation exists
-router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (req, res) => {
   // TODO: Temporarily disabled plan requirement for development
   // requirePlan(['pro', 'plus', 'premium']), 
   try {
-    const { employeeId, jobPostId, talentPoolId, type } = req.body;
+    const { employeeId, jobPostId, talentPoolId, type, restaurantId } = req.body;
     const userId = req.userId;
-    let restaurantUserId = req.restaurantUserId;
+    let restaurantUserId;
 
     console.log('🔍 create-conversation - Request data:', {
       employeeId,
@@ -356,38 +397,44 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
       talentPoolId,
       type,
       userId,
-      restaurantUserId
+      restaurantId,
+      requestBody: req.body
     });
 
-    // Handle admin users who might not have restaurantUserId set
-    if (!restaurantUserId && userId) {
-      console.log('🔍 Admin user detected, looking up restaurantUserId...');
+    // Determine the correct restaurantUserId based on restaurantId parameter or fallback to JWT
+    if (restaurantId) {
+      console.log('🔍 Using restaurantId from request:', restaurantId);
       
-      // Find the restaurant for this admin user
-      const restaurant = await prisma.restaurant.findFirst({
-        where: { userId: userId }
+      // Find or create RestaurantUser record for the specified restaurant
+      const restaurantUser = await prisma.restaurantUser.findFirst({
+        where: {
+          userId: userId,
+          restaurantId: parseInt(restaurantId)
+        }
       });
       
-      if (restaurant) {
-        // Find or create RestaurantUser record for admin
-        const adminRestaurantUser = await prisma.restaurantUser.upsert({
-          where: {
-            userId_restaurantId: {
-              userId: userId,
-              restaurantId: restaurant.id
-            }
-          },
-          update: {},
-          create: {
+      if (restaurantUser) {
+        restaurantUserId = restaurantUser.id;
+        console.log('✅ Found existing restaurantUserId:', restaurantUserId);
+      } else {
+        // Create RestaurantUser record for this restaurant
+        const newRestaurantUser = await prisma.restaurantUser.create({
+          data: {
             userId: userId,
-            restaurantId: restaurant.id,
+            restaurantId: parseInt(restaurantId),
             role: 'admin'
           }
         });
-        
-        restaurantUserId = adminRestaurantUser.id;
-        console.log('✅ Created/found restaurantUserId for admin:', restaurantUserId);
+        restaurantUserId = newRestaurantUser.id;
+        console.log('✅ Created new restaurantUserId:', restaurantUserId);
       }
+    } else {
+      // No restaurantId provided - this should not happen in the new multi-restaurant system
+      console.error('❌ No restaurantId provided in request body. This is required for multi-restaurant support.');
+      return res.status(400).json({ 
+        success: false,
+        error: 'Restaurant ID is required. Please ensure you are selecting a restaurant before creating conversations.' 
+      });
     }
 
     if (!restaurantUserId) {
@@ -425,6 +472,7 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, getRestau
         jobPostId,
         talentPoolId,
         restaurantUserId,
+        restaurantId: restaurantId,
         type
       });
       
@@ -471,8 +519,12 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
 // GET /conversations - Get all conversations for current user
 router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
+    const { type, restaurantId } = req.query;
+    
+    console.log('🔍 [Conversations API] Fetching conversations with params:', { type, restaurantId });
+
     if (req.employeeId) {
-      const employeeConversations = await getEmployeeConversations(req.employeeId, req.query.type);
+      const employeeConversations = await getEmployeeConversations(req.employeeId, type);
       return res.status(200).json({ 
         success: true,
         data: employeeConversations 
@@ -480,7 +532,8 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
     }
 
     if (req.restaurantUserId) {
-      const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, req.query.type);
+      const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, type, restaurantId);
+      console.log('🔍 [Conversations API] Found conversations:', restaurantConversations.length);
       return res.status(200).json({ 
         success: true,
         data: restaurantConversations 
@@ -494,7 +547,7 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching conversations:', error);
+    console.error('🔍 [Conversations API] Error:', error);
     return res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 

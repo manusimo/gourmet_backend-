@@ -1,4 +1,5 @@
 const express = require('express');
+const { PrismaClient } = require('@prisma/client');
 const { getEmployeeIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
 const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
 const {
@@ -10,6 +11,9 @@ const {
   getJobOfferForRestaurant,
   getApplicationsForJobOffer
 } = require('../helpers/applicationHelpers.js');
+const { sendJobApplicationNotification } = require('../services/emailService.js');
+
+const prisma = new PrismaClient();
 
 const router = express.Router();
 
@@ -57,6 +61,35 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
     // Create application
     const application = await createApplication(jobPostId, employeeId, answers);
+
+    // Send email notification to restaurant
+    try {
+      // Get restaurant and employee details for notification
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id: jobPost.restaurantId },
+        select: { name: true, user: { select: { email: true } } }
+      });
+
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { user: { select: { name: true, email: true } } }
+      });
+
+      if (restaurant && employee) {
+        await sendJobApplicationNotification({
+          applicantName: employee.user.name,
+          applicantEmail: employee.user.email,
+          jobTitle: jobPost.title,
+          restaurantName: restaurant.name,
+          restaurantEmail: restaurant.user.email,
+          applicationId: application.id
+        });
+        console.log('📧 Job application notification sent');
+      }
+    } catch (emailError) {
+      console.error('❌ Failed to send job application notification:', emailError);
+      // Don't fail the application creation if email fails
+    }
 
     res.status(201).json({ 
       success: true,
@@ -123,7 +156,11 @@ router.get('/applications/:applicationId', async (req, res) => {
 router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFromCookie, async (req, res) => {
   try {
     const { jobOfferId } = req.params;
-    const { restaurantId } = req;
+    const { restaurantId: queryRestaurantId } = req.query;
+    const { restaurantId: jwtRestaurantId } = req;
+
+    // Use restaurantId from query parameter if provided, otherwise use from JWT token
+    const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
 
     // Validate job offer ID
     const parsedJobOfferId = parseInt(jobOfferId);
@@ -142,9 +179,13 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
       });
     }
 
+    console.log('🔍 [Job Applicants API] Fetching applicants for jobOfferId:', parsedJobOfferId, 'restaurantId:', restaurantId);
+    console.log('🔍 [Job Applicants API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
+
     // Check if job offer exists and belongs to restaurant
     const jobOffer = await getJobOfferForRestaurant(parsedJobOfferId, restaurantId);
     if (!jobOffer) {
+      console.log('🔍 [Job Applicants API] Job offer not found or does not belong to restaurant');
       return res.status(404).json({ 
         success: false,
         message: 'Job offer not found or you do not have permission to view the applicants.' 
@@ -153,6 +194,8 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
 
     // Get applications for this job offer
     const applications = await getApplicationsForJobOffer(parsedJobOfferId);
+
+    console.log('🔍 [Job Applicants API] Found applications:', applications.length);
 
     res.json({ 
       success: true,

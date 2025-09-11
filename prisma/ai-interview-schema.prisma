@@ -1,0 +1,225 @@
+// AI Interview System Schema Extensions
+// This extends the AI Agent system to handle automated interviews
+
+// ========================================
+// INTERVIEW-SPECIFIC MODELS
+// ========================================
+
+model InterviewSession {
+  id                Int      @id @default(autoincrement())
+  agentId           Int      // AI Agent conducting the interview
+  jobOfferId        Int      // Job being interviewed for
+  employeeId        Int      // Candidate being interviewed
+  restaurantId      Int      // Restaurant conducting interview
+  
+  // Interview Details
+  title             String   // e.g., "Interview for Chef Position"
+  type              String   @default("voice") // voice, video, chat
+  status            String   @default("scheduled") // scheduled, in_progress, completed, cancelled
+  scheduledDate     DateTime
+  actualStartDate   DateTime?
+  actualEndDate     DateTime?
+  duration          Int?     // Actual duration in minutes
+  
+  // Recording & Media
+  recordingUrl      String?  // URL to interview recording
+  transcriptUrl     String?  // URL to transcript file
+  
+  // AI Analysis Results
+  overallScore      Float?   // 1-10 overall score
+  recommendation    String?  // "hire", "no_hire", "maybe"
+  confidence        Float?   // AI confidence in recommendation
+  
+  // Interview Summary
+  summary           String?  // AI-generated summary
+  strengths         String[] // Array of candidate strengths
+  weaknesses        String[] // Array of areas for improvement
+  keyPoints         String[] // Key discussion points
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  agent             AiAgent      @relation(fields: [agentId], references: [id])
+  jobOffer          JobOffer     @relation(fields: [jobOfferId], references: [id])
+  employee          Employee     @relation(fields: [employeeId], references: [id])
+  restaurant        Restaurant   @relation(fields: [restaurantId], references: [id])
+  questions         InterviewQuestion[]
+  responses         InterviewResponse[]
+  evaluations       InterviewEvaluation[]
+}
+
+model InterviewQuestion {
+  id                Int      @id @default(autoincrement())
+  interviewSessionId Int
+  questionText      String
+  questionType      String   // "behavioral", "technical", "situational", "cultural"
+  category          String   // "experience", "skills", "motivation", "fit"
+  order             Int      // Order in which question was asked
+  isRequired        Boolean  @default(true)
+  expectedKeywords  String[] // Keywords AI should look for in response
+  
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  interviewSession  InterviewSession @relation(fields: [interviewSessionId], references: [id])
+  responses         InterviewResponse[]
+}
+
+model InterviewResponse {
+  id                Int      @id @default(autoincrement())
+  interviewSessionId Int
+  questionId        Int
+  responseText      String   // Candidate's response
+  responseAudio     String?  // URL to audio clip of response
+  
+  // AI Analysis of Response
+  sentiment         String?  // "positive", "negative", "neutral"
+  sentimentScore    Float?   // -1 to 1 sentiment score
+  relevanceScore    Float?   // How relevant the answer was (0-1)
+  completenessScore Float?   // How complete the answer was (0-1)
+  keywordMatches    String[] // Which expected keywords were found
+  
+  // Response Quality
+  length            Int?     // Response length in words
+  speakingTime      Int?     // Time spent speaking in seconds
+  pauses            Int?     // Number of pauses in response
+  
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  interviewSession  InterviewSession @relation(fields: [interviewSessionId], references: [id])
+  question          InterviewQuestion @relation(fields: [questionId], references: [id])
+}
+
+model InterviewEvaluation {
+  id                Int      @id @default(autoincrement())
+  interviewSessionId Int
+  
+  // Evaluation Criteria
+  communication     Float?   // 1-10 communication skills
+  technicalSkills   Float?   // 1-10 technical competency
+  experience        Float?   // 1-10 relevant experience
+  culturalFit       Float?   // 1-10 cultural fit
+  motivation        Float?   // 1-10 motivation level
+  problemSolving    Float?   // 1-10 problem-solving ability
+  
+  // Overall Assessment
+  overallScore      Float?   // Weighted average of all criteria
+  recommendation    String?  // "strong_hire", "hire", "maybe", "no_hire"
+  reasoning         String?  // AI explanation for recommendation
+  
+  // Detailed Analysis
+  strengths         String[] // Specific strengths identified
+  concerns          String[] // Areas of concern
+  followUpQuestions String[] // Suggested follow-up questions
+  
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  interviewSession  InterviewSession @relation(fields: [interviewSessionId], references: [id])
+}
+
+model InterviewTemplate {
+  id                Int      @id @default(autoincrement())
+  name              String
+  description       String?
+  restaurantId      Int?     // If null, template is global
+  jobCategory       String?  // e.g., "chef", "waiter", "manager"
+  experienceLevel   String?  // e.g., "entry", "mid", "senior"
+  
+  // Template Configuration
+  duration          Int      @default(30) // Expected duration in minutes
+  questionCount     Int      @default(10) // Number of questions
+  includeVideo      Boolean  @default(false)
+  includeTechnical  Boolean  @default(true)
+  includeBehavioral Boolean  @default(true)
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  restaurant        Restaurant? @relation(fields: [restaurantId], references: [id])
+  questions         InterviewTemplateQuestion[]
+  sessions          InterviewSession[]
+}
+
+model InterviewTemplateQuestion {
+  id                Int      @id @default(autoincrement())
+  templateId        Int
+  questionText      String
+  questionType      String   // "behavioral", "technical", "situational"
+  category          String   // "experience", "skills", "motivation"
+  order             Int
+  isRequired        Boolean  @default(true)
+  expectedKeywords  String[] // Keywords to look for
+  followUpQuestions String[] // Possible follow-up questions
+  
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  template          InterviewTemplate @relation(fields: [templateId], references: [id])
+}
+
+// ========================================
+// RELATIONS TO ADD TO EXISTING MODELS
+// ========================================
+
+// Add to AiAgent model:
+// interviewSessions  InterviewSession[]
+
+// Add to JobOffer model:
+// interviewSessions  InterviewSession[]
+
+// Add to Employee model:
+// interviewSessions  InterviewSession[]
+
+// Add to Restaurant model:
+// interviewSessions  InterviewSession[]
+// interviewTemplates InterviewTemplate[]
+
+// ========================================
+// HOW THE AI INTERVIEW SYSTEM WORKS
+// ========================================
+
+/*
+1. INTERVIEW SETUP:
+   - Restaurant creates interview templates for different positions
+   - AI Agent is configured with interview capabilities
+   - Candidate applies to job → Interview is automatically scheduled
+
+2. INTERVIEW CONDUCT:
+   - AI Agent calls candidate at scheduled time
+   - Asks pre-defined questions from template
+   - Records entire conversation (voice/video)
+   - Analyzes responses in real-time
+   - Asks follow-up questions based on answers
+
+3. INTERVIEW ANALYSIS:
+   - Automatic transcription of entire interview
+   - Sentiment analysis of each response
+   - Keyword matching for expected answers
+   - Scoring across multiple criteria
+   - Cultural fit assessment
+
+4. INTERVIEW RESULTS:
+   - Comprehensive interview summary
+   - Candidate scoring (1-10) across different areas
+   - Hire/No-hire recommendation with reasoning
+   - Comparison with other candidates
+   - Detailed strengths and weaknesses
+
+5. INTEGRATION WITH EXISTING SYSTEM:
+   - Uses existing JobOffer, Employee, Restaurant models
+   - Integrates with current application process
+   - Leverages existing user roles and permissions
+   - Works with current plan system (PREMIUM feature)
+
+TECHNICAL IMPLEMENTATION:
+- Voice: WebRTC for real-time audio
+- Transcription: OpenAI Whisper API
+- Analysis: OpenAI GPT-4 for response analysis
+- Recording: Cloud storage (AWS S3, Google Cloud)
+- Real-time: WebSocket for live interview updates
+*/

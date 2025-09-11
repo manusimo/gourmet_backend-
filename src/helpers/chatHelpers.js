@@ -212,7 +212,7 @@ const findConversationByTalentPool = async (employeeId, talentPoolId, restaurant
  * @returns {Object} Created conversation
  */
 const createConversation = async (conversationData) => {
-  const { employeeId, jobPostId, talentPoolId, restaurantUserId, type } = conversationData;
+  const { employeeId, jobPostId, talentPoolId, restaurantUserId, restaurantId, type } = conversationData;
   
   return await prisma.conversation.create({
     data: {
@@ -220,6 +220,7 @@ const createConversation = async (conversationData) => {
       jobOfferId: jobPostId,
       talentPoolId: talentPoolId,
       restaurantUserId,
+      restaurantId: parseInt(restaurantId),
       type
     },
   });
@@ -284,21 +285,52 @@ const getEmployeeConversations = async (employeeId, type) => {
  * Get restaurant user conversations
  * @param {number} restaurantUserId - Restaurant user ID
  * @param {string} type - Conversation type
+ * @param {number} restaurantId - Restaurant ID to filter by (optional)
  * @returns {Array} Array of conversations
  */
-const getRestaurantUserConversations = async (restaurantUserId, type) => {
-  return await prisma.conversation.findMany({
-    where: {
-      restaurantUserId: parseInt(restaurantUserId),
-      type: type || '',
-      deletedAt: null
-    },
+const getRestaurantUserConversations = async (restaurantUserId, type, restaurantId = null) => {
+  let whereClause = {
+    type: type || '',
+    deletedAt: null
+  };
+
+  // If restaurantId is provided, filter by it directly (for admin users or restaurant switching)
+  if (restaurantId) {
+    whereClause.restaurantId = parseInt(restaurantId);
+    console.log('🔍 [getRestaurantUserConversations] Filtering by restaurantId:', restaurantId);
+  } else {
+    // Fallback to restaurantUserId filtering (for staff users)
+    whereClause.restaurantUserId = parseInt(restaurantUserId);
+    console.log('🔍 [getRestaurantUserConversations] Filtering by restaurantUserId:', restaurantUserId);
+  }
+
+  console.log('🔍 [getRestaurantUserConversations] Where clause:', whereClause);
+
+  const conversations = await prisma.conversation.findMany({
+    where: whereClause,
     include: {
       messages: true,
       jobOffer: true,
       employee: true,
+      restaurant: true,
+      restaurantUser: {
+        include: {
+          restaurant: true
+        }
+      }
     },
   });
+
+  console.log('🔍 [getRestaurantUserConversations] Found conversations:', conversations.length);
+  console.log('🔍 [getRestaurantUserConversations] Conversation details:', conversations.map(c => ({
+    id: c.id,
+    restaurantId: c.restaurantId,
+    restaurantUserId: c.restaurantUserId,
+    type: c.type,
+    employeeId: c.employeeId
+  })));
+
+  return conversations;
 };
 
 /**

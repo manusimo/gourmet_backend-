@@ -118,7 +118,7 @@ const deleteTalentPoolEntry = async (talentId) => {
  */
 const approveTalentPoolEntry = async (talentId, restaurantUserId) => {
   const updateData = {
-    status: "approved"
+    status: "accepted"
   };
 
   // Only add addedByUser connection if restaurantUserId exists and is not undefined

@@ -49,8 +49,8 @@ async function updateCompanyProfile(
           where: { id: location.id },
           data: {
             address: location.address,
-            longitude: location.longitude,
-            latitude: location.latitude,
+            longitude: parseFloat(location.longitude),
+            latitude: parseFloat(location.latitude),
           },
         })),
       },
@@ -66,14 +66,38 @@ async function updateCompanyProfile(
  */
 async function createNewLocations(newLocations, restaurantId) {
   if (newLocations.length > 0) {
-    await prisma.location.createMany({
-      data: newLocations.map(location => ({
-        address: location.address,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        restaurantId,
-      })),
-    });
+    // Filter out locations with empty addresses
+    const validLocations = newLocations.filter(location => 
+      location.address && location.address.trim() !== ''
+    );
+    
+    if (validLocations.length > 0) {
+      await prisma.location.createMany({
+        data: validLocations.map(location => {
+          // Handle empty or invalid coordinates
+          const lat = location.latitude && location.latitude.trim() !== '' 
+            ? parseFloat(location.latitude) 
+            : 0;
+          const lng = location.longitude && location.longitude.trim() !== '' 
+            ? parseFloat(location.longitude) 
+            : 0;
+          
+          console.log('🔍 Creating location:', {
+            address: location.address,
+            latitude: lat,
+            longitude: lng,
+            restaurantId
+          });
+          
+          return {
+            address: location.address,
+            latitude: isNaN(lat) ? 0 : lat,
+            longitude: isNaN(lng) ? 0 : lng,
+            restaurantId,
+          };
+        }),
+      });
+    }
   }
 }
 
