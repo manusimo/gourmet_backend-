@@ -4,6 +4,14 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
 const { sendEmail } = require('../helpers/email.js');
 const {
+  validateGoogleOAuthRequest,
+  handleGoogleOAuthError
+} = require('../helpers/validationHelpers.js');
+const {
+  authenticateWithGoogle,
+  createAuthResponse
+} = require('../helpers/googleAuthHelpers.js');
+const {
   checkEmployee,
   checkCompany,
   setUserRole,
@@ -335,9 +343,29 @@ router.post('/signin', validateSignin, async (req, res) => {
   }
 });
 
-// ============================================================================
-// MFA MANAGEMENT ROUTES
-// ============================================================================
+// POST /google-signin - Google OAuth signin
+router.post('/google-signin', async (req, res) => {
+  try {
+    // Validate request
+    const validation = validateGoogleOAuthRequest(req.body);
+    if (!validation.isValid) {
+      return res.status(400).json(validation.error);
+    }
+
+    const { credential, userType } = req.body;
+
+    // Authenticate with Google
+    const authResult = await authenticateWithGoogle(credential, userType);
+    
+    // Create and send response
+    const response = createAuthResponse(res, authResult.token, authResult.user, authResult.isNewUser);
+    return res.status(200).json(response);
+
+  } catch (error) {
+    const errorResponse = handleGoogleOAuthError(error);
+    return res.status(errorResponse.status).json(errorResponse.response);
+  }
+});
 
 // POST /mfa/setup - Setup MFA for user
 router.post('/mfa/setup', validateTokenAndIdentifyUser, async (req, res) => {
@@ -550,15 +578,15 @@ router.post('/logout', async (req, res) => {
     
     // Get token from cookie instead of Authorization header
     const token = req.cookies.manu;
-
+    
     if (token) {
       try {
         // Verify and decode token to get userId
         const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
         console.log(`✅ User logout: ${decodedToken.userId}`);
         
-      // Add token to blacklist
-      invalidateToken(token);
+        // Add token to blacklist
+        invalidateToken(token);
       } catch (tokenError) {
         console.log('⚠️ Invalid token during logout, but continuing logout process');
       }
