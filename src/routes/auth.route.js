@@ -357,9 +357,27 @@ router.post('/google-signin', async (req, res) => {
     // Authenticate with Google
     const authResult = await authenticateWithGoogle(credential, userType);
     
-    // Create and send response
-    const response = createAuthResponse(res, authResult.token, authResult.user, authResult.isNewUser);
-    return res.status(200).json(response);
+    // Set authentication cookie
+    res.cookie('manu', authResult.token, {
+      httpOnly: false, // Allow JavaScript access for development
+      secure: false, // Allow over HTTP for development
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    // Return success response with redirect info
+    return res.status(200).json({
+      success: true,
+      message: 'Google sign-in successful',
+      data: {
+        user: authResult.user,
+        token: authResult.token,
+        redirectUrl: userType === 'profesionales' 
+          ? 'http://localhost:3001/panel-empleado/perfil-empleado'
+          : 'http://localhost:3001/panel-empresa/perfil'
+      }
+    });
 
   } catch (error) {
     const errorResponse = handleGoogleOAuthError(error);
