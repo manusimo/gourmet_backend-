@@ -62,7 +62,6 @@ const handleExistingUser = async (user, userType, googlePayload) => {
     data: {
       name: given_name || name?.split(' ')[0] || 'Google User',
       surname: family_name || name?.split(' ').slice(1).join(' ') || '',
-      profileImageUrl: picture,
       lastLoginAt: new Date()
     }
   });
@@ -89,7 +88,6 @@ const createNewGoogleUser = async (googlePayload, userType) => {
       name: given_name || name?.split(' ')[0] || 'Google User',
       surname: family_name || name?.split(' ').slice(1).join(' ') || '',
       phoneNumber: '+56900000000', // Default phone number
-      profileImageUrl: picture,
       mfaEnabled: false,
       mfaSecret: null,
       accountLocked: false,
@@ -186,8 +184,7 @@ const formatUserResponse = (user) => {
     email: user.email,
     userType: user.userType,
     name: user.name,
-    surname: user.surname,
-    profileImageUrl: user.profileImageUrl
+    surname: user.surname
   };
 };
 

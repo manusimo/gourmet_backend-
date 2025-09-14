@@ -1,7 +1,4 @@
-const sgMail = require('@sendgrid/mail');
-
-// Initialize SendGrid
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+const { sendEmail } = require('../helpers/email.js');
 
 /**
  * Send email notification for job application
@@ -24,12 +21,8 @@ const sendJobApplicationNotification = async (applicationData) => {
       applicationId
     } = applicationData;
 
-    const msg = {
+    const emailData = {
       to: restaurantEmail,
-      from: {
-        email: 'noreply@gourmetjobs.cl',
-        name: 'Gourmet Jobs'
-      },
       subject: `Nueva postulación para ${jobTitle} en ${restaurantName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -76,7 +69,7 @@ const sendJobApplicationNotification = async (applicationData) => {
       `
     };
 
-    await sgMail.send(msg);
+    await sendEmail(emailData);
     console.log('✅ Job application notification sent successfully');
     return { success: true };
   } catch (error) {
@@ -108,12 +101,8 @@ const sendMessageNotification = async (messageData) => {
       conversationId
     } = messageData;
 
-    const msg = {
+    const emailData = {
       to: recipientEmail,
-      from: {
-        email: 'noreply@gourmetjobs.cl',
-        name: 'Gourmet Jobs'
-      },
       subject: `Nuevo mensaje de ${senderName} - ${restaurantName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -158,7 +147,7 @@ const sendMessageNotification = async (messageData) => {
       `
     };
 
-    await sgMail.send(msg);
+    await sendEmail(emailData);
     console.log('✅ Message notification sent successfully');
     return { success: true };
   } catch (error) {
