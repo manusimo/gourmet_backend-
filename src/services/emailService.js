@@ -12,6 +12,8 @@ const { sendEmail } = require('../helpers/email.js');
  */
 const sendJobApplicationNotification = async (applicationData) => {
   try {
+    console.log('📧 Job application notification - Input data:', applicationData);
+    
     const {
       applicantName,
       applicantEmail,
@@ -20,6 +22,12 @@ const sendJobApplicationNotification = async (applicationData) => {
       restaurantEmail,
       applicationId
     } = applicationData;
+    
+    console.log('📧 Job application notification - Extracted data:');
+    console.log('  - Applicant:', applicantName, applicantEmail);
+    console.log('  - Job:', jobTitle);
+    console.log('  - Restaurant:', restaurantName, restaurantEmail);
+    console.log('  - Application ID:', applicationId);
 
     const emailData = {
       to: restaurantEmail,

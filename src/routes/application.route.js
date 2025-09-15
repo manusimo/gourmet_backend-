@@ -12,6 +12,7 @@ const {
   getApplicationsForJobOffer
 } = require('../helpers/applicationHelpers.js');
 const { sendJobApplicationNotification } = require('../services/emailService.js');
+const { createJobApplicationNotification } = require('../services/notificationService.js');
 
 const prisma = new PrismaClient();
 
@@ -76,6 +77,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
       });
 
       if (restaurant && employee) {
+        // Send email notification
         await sendJobApplicationNotification({
           applicantName: employee.user.name,
           applicantEmail: employee.user.email,
@@ -85,6 +87,21 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
           applicationId: application.id
         });
         console.log('📧 Job application notification sent');
+
+        // Create in-app notification
+        try {
+          await createJobApplicationNotification({
+            restaurantUserId: jobPost.restaurantUserId,
+            applicantName: employee.user.name,
+            jobTitle: jobPost.title,
+            restaurantName: restaurant.name,
+            applicationId: application.id
+          });
+          console.log('🔔 In-app notification created');
+        } catch (notificationError) {
+          console.error('❌ Failed to create in-app notification:', notificationError);
+          // Don't fail the application creation if notification fails
+        }
       }
     } catch (emailError) {
       console.error('❌ Failed to send job application notification:', emailError);
