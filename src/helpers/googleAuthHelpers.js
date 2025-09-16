@@ -82,7 +82,7 @@ const createNewGoogleUser = async (googlePayload, userType) => {
   const newUser = await prisma.user.create({
     data: {
       email: email.toLowerCase(),
-      password: null, // No password for Google OAuth users
+      password: 'google_oauth_user', // Default password for Google OAuth users
       userType,
       role: 'admin', // Default role
       name: given_name || name?.split(' ')[0] || 'Google User',

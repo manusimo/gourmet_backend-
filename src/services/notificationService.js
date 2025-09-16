@@ -38,10 +38,10 @@ const createNotification = async (notificationData) => {
 const createJobApplicationNotification = async (applicationData) => {
   const { restaurantUserId, applicantName, jobTitle, restaurantName, applicationId } = applicationData;
 
-  // Get the restaurant owner's user ID
+  // Get the restaurant ID from the restaurant user
   const restaurantUser = await prisma.restaurantUser.findUnique({
     where: { id: restaurantUserId },
-    select: { userId: true }
+    select: { restaurantId: true }
   });
 
   if (!restaurantUser) {
@@ -49,19 +49,55 @@ const createJobApplicationNotification = async (applicationData) => {
     return;
   }
 
-  return await createNotification({
-    userId: restaurantUser.userId,
-    type: 'job_application',
-    title: 'Nueva postulación recibida',
-    message: `${applicantName} se postuló para el puesto de ${jobTitle} en ${restaurantName}`,
-    data: {
-      applicationId,
-      applicantName,
-      jobTitle,
-      restaurantName,
-      type: 'job_application'
-    }
+  // Get ALL users associated with this restaurant (admin + staff)
+  const restaurantUsers = await prisma.restaurantUser.findMany({
+    where: { restaurantId: restaurantUser.restaurantId },
+    select: { userId: true }
   });
+
+  // Also get the restaurant owner (admin user)
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantUser.restaurantId },
+    select: { userId: true }
+  });
+
+  // Collect all unique user IDs
+  const userIds = new Set();
+  
+  // Add restaurant owner (admin)
+  if (restaurant) {
+    userIds.add(restaurant.userId);
+  }
+  
+  // Add all staff users
+  restaurantUsers.forEach(ru => userIds.add(ru.userId));
+
+  console.log(`🔔 Creating job application notifications for ${userIds.size} users:`, Array.from(userIds));
+
+  // Create notifications for all users
+  const notifications = [];
+  for (const userId of userIds) {
+    try {
+      const notification = await createNotification({
+        userId,
+        type: 'job_application',
+        title: 'Nueva postulación recibida',
+        message: `${applicantName} se postuló para el puesto de ${jobTitle} en ${restaurantName}`,
+        data: {
+          applicationId,
+          applicantName,
+          jobTitle,
+          restaurantName,
+          type: 'job_application'
+        }
+      });
+      notifications.push(notification);
+    } catch (error) {
+      console.error(`❌ Failed to create notification for user ${userId}:`, error);
+    }
+  }
+
+  return notifications;
 };
 
 /**
@@ -106,6 +142,7 @@ const createJobOfferNotification = async (jobOfferData) => {
     }
   });
 };
+
 
 /**
  * Create a system notification

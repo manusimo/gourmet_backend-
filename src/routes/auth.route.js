@@ -1151,7 +1151,7 @@ router.get('/user-info', async (req, res) => {
       });
       
     } catch (tokenError) {
-      console.log('❌ user-info: Token verification failed:', tokenError.message);
+      console.log('❌ user-info: Token verification failed:',isAuthenticated, tokenError.message);
       return res.status(401).json({
         success: false,
         message: 'Invalid authentication token'
@@ -1194,12 +1194,28 @@ router.post('/switch-restaurant', async (req, res) => {
       const userId = decodedToken.userId;
 
       // Verify that the user has access to this restaurant
-      const restaurantUser = await prisma.restaurantUser.findFirst({
+      let restaurantUser = await prisma.restaurantUser.findFirst({
         where: {
           userId: userId,
           restaurantId: parseInt(restaurantId)
         }
       });
+
+      // If no RestaurantUser record found, check if user is admin and owns the restaurant directly
+      if (!restaurantUser && decodedToken.role === 'admin') {
+        const ownedRestaurant = await prisma.restaurant.findFirst({
+          where: {
+            id: parseInt(restaurantId),
+            userId: userId
+          }
+        });
+
+        if (ownedRestaurant) {
+          // Admin user owns this restaurant directly
+          restaurantUser = { id: null }; // Use null for admin users
+          console.log(`👑 Admin user ${userId} accessing owned restaurant ${restaurantId}`);
+        }
+      }
 
       if (!restaurantUser) {
         return res.status(403).json({
@@ -1214,7 +1230,7 @@ router.post('/switch-restaurant', async (req, res) => {
         userType: decodedToken.userType,
         role: decodedToken.role,
         restaurantId: parseInt(restaurantId),
-        restaurantUserId: restaurantUser.id,
+        restaurantUserId: restaurantUser.id, // null for admin users, actual ID for staff
         employeeId: decodedToken.employeeId
       }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
@@ -1231,7 +1247,7 @@ router.post('/switch-restaurant', async (req, res) => {
       return res.json({
         success: true,
         message: 'Restaurant switched successfully',
-        restaurantUserId: restaurantUser.id
+        restaurantUserId: restaurantUser.id // null for admin users, actual ID for staff
       });
 
     } catch (tokenError) {

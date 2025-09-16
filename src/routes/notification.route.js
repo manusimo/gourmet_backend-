@@ -1,35 +1,55 @@
 const express = require('express');
 const { prisma } = require('../db.js');
-const { authenticateToken } = require('../middleware/authenticateToken.js');
+const { getUserIdFromCookie } = require('../helpers/cookies.js');
 const router = express.Router();
+
+// Test route to verify notification routes are working
+router.get('/test', (req, res) => {
+  console.log('🔔 Notification test route hit!');
+  res.json({ success: true, message: 'Notification routes are working!' });
+});
 
 /**
  * Get all notifications for the authenticated user
  */
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', getUserIdFromCookie, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    console.log('🔔 Notification route: GET / called');
+    console.log('🔔 Notification route: req.userId:', req.userId);
+    console.log('🔔 Notification route: req.cookies:', req.cookies);
+    console.log('🔔 Notification route: req.headers:', req.headers);
     
+    const userId = req.userId;
+    console.log('🔔 Notification route: userId:', userId);
+    
+    console.log('🔔 Notification route: Fetching notifications from database...');
     const notifications = await prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50 // Limit to last 50 notifications
     });
+    console.log('🔔 Notification route: Found notifications:', notifications.length);
 
+    console.log('🔔 Notification route: Counting unread notifications...');
     const unreadCount = await prisma.notification.count({
       where: { 
         userId,
         isRead: false 
       }
     });
+    console.log('🔔 Notification route: Unread count:', unreadCount);
 
-    res.json({
+    const response = {
       success: true,
       notifications,
       unreadCount
-    });
+    };
+    console.log('🔔 Notification route: Sending response:', response);
+
+    res.json(response);
   } catch (error) {
     console.error('❌ Error fetching notifications:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch notifications'
@@ -40,9 +60,9 @@ router.get('/', authenticateToken, async (req, res) => {
 /**
  * Mark a specific notification as read
  */
-router.put('/:id/read', authenticateToken, async (req, res) => {
+router.put('/:id/read', getUserIdFromCookie, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.userId;
     const notificationId = parseInt(req.params.id);
 
     const notification = await prisma.notification.updateMany({
@@ -76,9 +96,9 @@ router.put('/:id/read', authenticateToken, async (req, res) => {
 /**
  * Mark all notifications as read for the authenticated user
  */
-router.put('/mark-all-read', authenticateToken, async (req, res) => {
+router.put('/mark-all-read', getUserIdFromCookie, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.userId;
 
     await prisma.notification.updateMany({
       where: { 
@@ -104,9 +124,9 @@ router.put('/mark-all-read', authenticateToken, async (req, res) => {
 /**
  * Delete a specific notification
  */
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', getUserIdFromCookie, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.userId;
     const notificationId = parseInt(req.params.id);
 
     const notification = await prisma.notification.deleteMany({
@@ -139,7 +159,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 /**
  * Create a new notification (internal use)
  */
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', getUserIdFromCookie, async (req, res) => {
   try {
     const { userId, type, title, message, data } = req.body;
 

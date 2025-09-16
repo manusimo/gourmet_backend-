@@ -246,7 +246,7 @@ app.use('/api', poolRoutes);
 app.use('/api', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', csrfProtectionRoutes);
-app.use('/api', notificationRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ============================================================================
 // SECURITY ENDPOINT

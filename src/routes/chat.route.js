@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { sendMessageNotification } = require('../services/emailService.js');
+const { createMessageNotification } = require('../services/notificationService.js');
 
 const prisma = new PrismaClient();
 const {
@@ -314,6 +315,21 @@ router.post('/send-message', async (req, res) => {
           conversationId: conversationId
         });
         console.log('📧 Message notification sent');
+
+        // Create in-app notification
+        try {
+          await createMessageNotification({
+            recipientUserId: parseInt(receiverUserId),
+            senderName: sender.name,
+            restaurantName: conversationWithRestaurant.restaurant?.name || 'Restaurante',
+            messagePreview: text.length > 100 ? text.substring(0, 100) + '...' : text,
+            conversationId: conversationId
+          });
+          console.log('🔔 In-app message notification created');
+        } catch (notificationError) {
+          console.error('❌ Failed to create in-app message notification:', notificationError);
+          // Don't fail the message creation if notification fails
+        }
       }
     } catch (emailError) {
       console.error('❌ Failed to send message notification:', emailError);

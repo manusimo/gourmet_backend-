@@ -81,7 +81,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
         await sendJobApplicationNotification({
           applicantName: employee.user.name,
           applicantEmail: employee.user.email,
-          jobTitle: jobPost.title,
+          jobTitle: jobPost.position,
           restaurantName: restaurant.name,
           restaurantEmail: restaurant.user.email,
           applicationId: application.id
@@ -93,7 +93,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
           await createJobApplicationNotification({
             restaurantUserId: jobPost.restaurantUserId,
             applicantName: employee.user.name,
-            jobTitle: jobPost.title,
+            jobTitle: jobPost.position,
             restaurantName: restaurant.name,
             applicationId: application.id
           });
