@@ -11,8 +11,7 @@ const {
   getJobOfferForRestaurant,
   getApplicationsForJobOffer
 } = require('../helpers/applicationHelpers.js');
-const { sendJobApplicationNotification } = require('../services/emailService.js');
-const { createJobApplicationNotification } = require('../services/notificationService.js');
+const { processApplicationNotifications } = require('../services/applicationNotificationService.js');
 
 const prisma = new PrismaClient();
 
@@ -63,50 +62,13 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
     // Create application
     const application = await createApplication(jobPostId, employeeId, answers);
 
-    // Send email notification to restaurant
-    try {
-      // Get restaurant and employee details for notification
-      const restaurant = await prisma.restaurant.findUnique({
-        where: { id: jobPost.restaurantId },
-        select: { name: true, user: { select: { email: true } } }
-      });
-
-      const employee = await prisma.employee.findUnique({
-        where: { id: employeeId },
-        select: { user: { select: { name: true, email: true } } }
-      });
-
-      if (restaurant && employee) {
-        // Send email notification
-        await sendJobApplicationNotification({
-          applicantName: employee.user.name,
-          applicantEmail: employee.user.email,
-          jobTitle: jobPost.position,
-          restaurantName: restaurant.name,
-          restaurantEmail: restaurant.user.email,
-          applicationId: application.id
-        });
-        console.log('📧 Job application notification sent');
-
-        // Create in-app notification
-        try {
-          await createJobApplicationNotification({
-            restaurantUserId: jobPost.restaurantUserId,
-            applicantName: employee.user.name,
-            jobTitle: jobPost.position,
-            restaurantName: restaurant.name,
-            applicationId: application.id
-          });
-          console.log('🔔 In-app notification created');
-        } catch (notificationError) {
-          console.error('❌ Failed to create in-app notification:', notificationError);
-          // Don't fail the application creation if notification fails
-        }
-      }
-    } catch (emailError) {
-      console.error('❌ Failed to send job application notification:', emailError);
-      // Don't fail the application creation if email fails
-    }
+    // Process notifications (milestone emails + in-app notifications)
+    await processApplicationNotifications({
+      jobPostId,
+      employeeId,
+      applicationId: application.id,
+      jobPost
+    });
 
     res.status(201).json({ 
       success: true,

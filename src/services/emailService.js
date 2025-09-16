@@ -20,7 +20,9 @@ const sendJobApplicationNotification = async (applicationData) => {
       jobTitle,
       restaurantName,
       restaurantEmail,
-      applicationId
+      applicationId,
+      isMilestone = false,
+      totalApplications = 0
     } = applicationData;
     
     console.log('📧 Job application notification - Extracted data:');
@@ -31,29 +33,46 @@ const sendJobApplicationNotification = async (applicationData) => {
 
     const emailData = {
       to: restaurantEmail,
-      subject: `Nueva postulación para ${jobTitle} en ${restaurantName}`,
+      subject: isMilestone 
+        ? `🎉 ¡${totalApplications} postulaciones para ${jobTitle} en ${restaurantName}!`
+        : `Nueva postulación para ${jobTitle} en ${restaurantName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #fb5424 0%, #e04a1f 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">🍽️ Nueva Postulación</h1>
+            <h1 style="color: white; margin: 0; font-size: 24px;">
+              ${isMilestone ? '🎉 ¡Hito Alcanzado!' : '🍽️ Nueva Postulación'}
+            </h1>
           </div>
           
           <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
-            <h2 style="color: #333; margin-top: 0;">¡Tienes una nueva postulación!</h2>
-            
-            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #fb5424;">
-              <h3 style="color: #fb5424; margin-top: 0;">Detalles de la postulación:</h3>
-              <p><strong>👤 Postulante:</strong> ${applicantName}</p>
-              <p><strong>📧 Email:</strong> ${applicantEmail}</p>
-              <p><strong>💼 Puesto:</strong> ${jobTitle}</p>
-              <p><strong>🏪 Restaurante:</strong> ${restaurantName}</p>
-              <p><strong>🆔 ID de postulación:</strong> ${applicationId}</p>
-            </div>
+            ${isMilestone 
+              ? `<h2 style="color: #333; margin-top: 0;">🎉 ¡Felicidades! Has alcanzado ${totalApplications} postulaciones</h2>
+                 <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                   <h3 style="margin: 0; font-size: 28px;">${totalApplications} Postulaciones</h3>
+                   <p style="margin: 10px 0 0 0; font-size: 16px;">para el puesto de <strong>${jobTitle}</strong></p>
+                 </div>
+                 <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #28a745;">
+                   <h3 style="color: #28a745; margin-top: 0;">📊 Estadísticas del puesto:</h3>
+                   <p><strong>💼 Puesto:</strong> ${jobTitle}</p>
+                   <p><strong>🏪 Restaurante:</strong> ${restaurantName}</p>
+                   <p><strong>📈 Total de postulaciones:</strong> ${totalApplications}</p>
+                   <p><strong>👤 Último postulante:</strong> ${applicantName}</p>
+                 </div>`
+              : `<h2 style="color: #333; margin-top: 0;">¡Tienes una nueva postulación!</h2>
+                 <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #fb5424;">
+                   <h3 style="color: #fb5424; margin-top: 0;">Detalles de la postulación:</h3>
+                   <p><strong>👤 Postulante:</strong> ${applicantName}</p>
+                   <p><strong>📧 Email:</strong> ${applicantEmail}</p>
+                   <p><strong>💼 Puesto:</strong> ${jobTitle}</p>
+                   <p><strong>🏪 Restaurante:</strong> ${restaurantName}</p>
+                   <p><strong>🆔 ID de postulación:</strong> ${applicationId}</p>
+                 </div>`
+            }
             
             <div style="text-align: center; margin: 30px 0;">
               <a href="${process.env.FRONTEND_URL || 'http://localhost:3001'}/panel-empresa/trabajos/${applicationId}/postulantes" 
-                 style="background: #fb5424; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                Ver Postulación
+                 style="background: ${isMilestone ? '#28a745' : '#fb5424'}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                ${isMilestone ? 'Ver Todas las Postulaciones' : 'Ver Postulación'}
               </a>
             </div>
             
