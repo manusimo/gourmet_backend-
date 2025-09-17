@@ -2,7 +2,8 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
-const { sendMessageNotification } = require('../services/emailService.js');
+const { processMessageNotifications } = require('../services/messageNotificationService');
+// Message notifications are now handled by messageNotificationService.js
 
 const prisma = new PrismaClient();
 const {
@@ -280,44 +281,45 @@ router.post('/send-message', async (req, res) => {
       receiverType
     });
 
-    // Send email notification to receiver
+    // Process message notifications with smart throttling
     try {
       // Get sender and receiver details for notification
-      const sender = await prisma.user.findUnique({
-        where: { id: parseInt(senderUserId) },
-        select: { name: true, email: true }
-      });
-
-      const receiver = await prisma.user.findUnique({
-        where: { id: parseInt(receiverUserId) },
-        select: { name: true, email: true }
-      });
-
-      // Get restaurant name from conversation
-      const conversationWithRestaurant = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        select: { 
-          restaurant: { 
-            select: { name: true } 
-          } 
-        }
-      });
+      const [sender, receiver, conversationWithRestaurant] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: parseInt(senderUserId) },
+          select: { name: true, email: true }
+        }),
+        prisma.user.findUnique({
+          where: { id: parseInt(receiverUserId) },
+          select: { name: true, email: true }
+        }),
+        prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { 
+            restaurant: { 
+              select: { name: true } 
+            } 
+          }
+        })
+      ]);
 
       if (sender && receiver && conversationWithRestaurant) {
-        await sendMessageNotification({
+        
+        await processMessageNotifications({
+          senderUserId: parseInt(senderUserId),
+          receiverUserId: parseInt(receiverUserId),
+          conversationId,
+          messageText: text,
           senderName: sender.name,
           senderEmail: sender.email,
           recipientName: receiver.name,
           recipientEmail: receiver.email,
-          messagePreview: text.length > 100 ? text.substring(0, 100) + '...' : text,
-          restaurantName: conversationWithRestaurant.restaurant?.name || 'Restaurante',
-          conversationId: conversationId
+          restaurantName: conversationWithRestaurant.restaurant?.name || 'Restaurante'
         });
-        console.log('📧 Message notification sent');
       }
-    } catch (emailError) {
-      console.error('❌ Failed to send message notification:', emailError);
-      // Don't fail the message sending if email fails
+    } catch (notificationError) {
+      console.error('❌ Failed to process message notifications:', notificationError);
+      // Don't fail the message sending if notifications fail
     }
 
     res.status(200).json({ 

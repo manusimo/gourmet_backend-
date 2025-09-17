@@ -2,71 +2,81 @@ const nodemailer = require('nodemailer');
 
 // Email provider configurations
 const EMAIL_PROVIDERS = {
-  gmail: {
-    host: 'smtp.gmail.com',
+  brevo: {
+    host: 'smtp-relay.brevo.com',
     port: 587,
     secure: false,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     }
-  },
-  sendgrid: {
-    host: 'smtp.sendgrid.net',
-    port: 587,
-    secure: false,
-    auth: {
-      user: 'apikey',
-      pass: process.env.SENDGRID_API_KEY,
-    }
   }
 };
 
 async function sendEmail({ to, subject, text, html }) {
-  // Determine provider based on environment
-  const provider = process.env.NODE_ENV === 'production' ? 'sendgrid' : 'gmail';
+  // Use Brevo for all environments
+  const provider = 'brevo';
   
-  // Check if credentials are configured for the selected provider
-  if (provider === 'gmail' && (!process.env.EMAIL_USER || !process.env.EMAIL_PASS)) {
-    console.warn('⚠️ Gmail credentials not configured. Skipping email send.');
+  console.log('📧 Email send attempt started:');
+  console.log('  - To:', to);
+  console.log('  - Subject:', subject);
+  console.log('  - Provider:', provider);
+  console.log('  - EMAIL_USER:', process.env.EMAIL_USER);
+  console.log('  - EMAIL_PASS:', process.env.EMAIL_PASS ? 'Set' : 'Not set');
+  
+  // Check if Brevo credentials are configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠️ Brevo credentials not configured. Skipping email send.');
     console.warn('Please set EMAIL_USER and EMAIL_PASS in your .env file');
-    return { success: false, error: 'Gmail credentials not configured' };
-  }
-  
-  if (provider === 'sendgrid' && !process.env.SENDGRID_API_KEY) {
-    console.warn('⚠️ SendGrid API key not configured. Skipping email send.');
-    console.warn('Please set SENDGRID_API_KEY in your .env file');
-    return { success: false, error: 'SendGrid API key not configured' };
+    return { success: false, error: 'Brevo credentials not configured' };
   }
 
   try {
     const config = EMAIL_PROVIDERS[provider];
+    console.log('📧 Email config:', {
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: { user: config.auth.user, pass: config.auth.pass ? 'Set' : 'Not set' }
+    });
+    
     let transporter = nodemailer.createTransport(config);
 
     // Verify connection configuration
+    console.log('📧 Verifying email server connection...');
     await transporter.verify();
     console.log(`✅ Email server connection verified (${provider})`);
 
-    let info = await transporter.sendMail({
-      from: provider === 'gmail' ? process.env.EMAIL_USER : process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER, 
+    const emailData = {
+      from: process.env.EMAIL_USER, 
       to: to,
       subject: subject,
       text: text,
       html: html,
+    };
+    
+    console.log('📧 Sending email with data:', {
+      from: emailData.from,
+      to: emailData.to,
+      subject: emailData.subject,
+      hasText: !!emailData.text,
+      hasHtml: !!emailData.html
     });
 
-    console.log('✅ Message sent: %s', info.messageId);
+    let info = await transporter.sendMail(emailData);
+
+    console.log('✅ Message sent successfully!');
+    console.log('  - Message ID:', info.messageId);
+    console.log('  - Response:', info.response);
+    console.log('  - Accepted:', info.accepted);
+    console.log('  - Rejected:', info.rejected);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Error sending email:', error.message);
     
     if (error.code === 'EAUTH') {
-      if (provider === 'gmail') {
-        console.error('🔐 Gmail authentication failed. Please check your EMAIL_USER and EMAIL_PASS');
-        console.error('💡 For Gmail, you need to use an App Password, not your regular password');
-      } else {
-        console.error('🔐 SendGrid authentication failed. Please check your SENDGRID_API_KEY');
-      }
+      console.error('🔐 Brevo authentication failed. Please check your EMAIL_USER and EMAIL_PASS');
+      console.error('💡 Make sure your Brevo SMTP credentials are correct');
     }
     
     return { success: false, error: error.message };

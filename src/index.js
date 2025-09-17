@@ -1,3 +1,6 @@
+// Load environment variables
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -22,6 +25,7 @@ const poolRoutes = require('./routes/pool.route.js');
 const chatRoutes = require('./routes/chat.route.js');
 const adminRoutes = require('./routes/admin.route.js');
 const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
+const notificationRoutes = require('./routes/notification.route.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -242,6 +246,7 @@ app.use('/api', poolRoutes);
 app.use('/api', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', csrfProtectionRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ============================================================================
 // SECURITY ENDPOINT
