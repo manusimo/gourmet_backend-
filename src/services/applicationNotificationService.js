@@ -1,6 +1,6 @@
 const { prisma } = require('../db.js');
 const { sendJobApplicationNotification } = require('./emailService.js');
-const { createJobApplicationNotification } = require('./notificationService.js');
+const { createJobApplicationNotification, createJobApplicationNotificationForSpecificUser } = require('./notificationService.js');
 
 /**
  * Process notifications for a job application
@@ -126,6 +126,7 @@ const createInAppNotification = async ({ jobPostId, employeeId, applicationId, j
     ]);
 
     if (employee && restaurant) {
+      // Create notification for ALL restaurant staff (admin + staff)
       await createJobApplicationNotification({
         restaurantUserId: jobPost.restaurantUserId,
         applicantName: employee.user.name,
@@ -133,7 +134,7 @@ const createInAppNotification = async ({ jobPostId, employeeId, applicationId, j
         restaurantName: restaurant.name,
         applicationId: applicationId
       });
-      console.log('🔔 In-app notification created');
+      console.log('🔔 In-app notification created for all restaurant staff');
     }
   } catch (error) {
     console.error('❌ Failed to create in-app notification:', error);

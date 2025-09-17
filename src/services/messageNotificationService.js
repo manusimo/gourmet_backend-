@@ -111,65 +111,130 @@ const shouldSendEmailNotification = async (conversationId, receiverUserId) => {
  */
 const checkUserActivityInConversation = async (conversationId, userId) => {
   try {
-    // Check if user has sent messages in this conversation in the last 10 minutes
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     
-    // Get user's employee or restaurant user IDs
-    const [employee, restaurantUsers] = await Promise.all([
-      prisma.employee.findUnique({
-        where: { userId: parseInt(userId) },
-        select: { id: true }
-      }),
-      prisma.restaurantUser.findMany({
-        where: { userId: parseInt(userId) },
-        select: { id: true }
-      })
-    ]);
+    // Get user data and entity IDs
+    const { user, userEntityIds } = await getUserDataAndEntityIds(userId);
+    
+    // Check for recent messages sent by user
+    const hasRecentMessages = await checkRecentUserMessages(conversationId, userId, user, userEntityIds, tenMinutesAgo);
+    if (hasRecentMessages) return true;
+    
+    // Check for recent notification reads
+    const hasRecentNotificationRead = await checkRecentNotificationRead(conversationId, userId, tenMinutesAgo);
+    if (hasRecentNotificationRead) return true;
+    
+    return false;
+  } catch (error) {
+    console.error('❌ Error checking user activity:', error);
+    return false;
+  }
+};
 
-    const userEntityIds = [];
-    if (employee) userEntityIds.push({ senderEmployeeId: employee.id });
-    if (restaurantUsers.length > 0) {
-      restaurantUsers.forEach(ru => {
-        userEntityIds.push({ senderRestaurantUserId: ru.id });
-      });
-    }
+/**
+ * Get user data and their entity IDs (employee, restaurant user)
+ * @param {number} userId - User ID
+ * @returns {Object} - User data and entity IDs
+ */
+const getUserDataAndEntityIds = async (userId) => {
+  const [employee, restaurantUsers, user] = await Promise.all([
+    prisma.employee.findUnique({
+      where: { userId: parseInt(userId) },
+      select: { id: true }
+    }),
+    prisma.restaurantUser.findMany({
+      where: { userId: parseInt(userId) },
+      select: { id: true }
+    }),
+    prisma.user.findUnique({
+      where: { id: parseInt(userId) },
+      select: { role: true }
+    })
+  ]);
 
-    if (userEntityIds.length === 0) {
-      return false; // User has no entity IDs, can't have been active
-    }
+  const userEntityIds = [];
+  if (employee) userEntityIds.push({ senderEmployeeId: employee.id });
+  if (restaurantUsers.length > 0) {
+    restaurantUsers.forEach(ru => {
+      userEntityIds.push({ senderRestaurantUserId: ru.id });
+    });
+  }
 
-    // Check if user has sent any messages in this conversation recently
+  return { user, userEntityIds };
+};
+
+/**
+ * Check if user has sent recent messages in the conversation
+ * @param {number} conversationId - Conversation ID
+ * @param {number} userId - User ID
+ * @param {Object} user - User data
+ * @param {Array} userEntityIds - User's entity IDs
+ * @param {Date} tenMinutesAgo - Time threshold
+ * @returns {boolean} - Whether user sent recent messages
+ */
+const checkRecentUserMessages = async (conversationId, userId, user, userEntityIds, tenMinutesAgo) => {
+  // For admin users, check through restaurant ownership
+  if (user && user.role === 'admin') {
+    const adminMessageQuery = {
+      conversationId: parseInt(conversationId),
+      createdAt: { gte: tenMinutesAgo },
+      OR: [
+        ...userEntityIds,
+        {
+          conversation: {
+            restaurant: {
+              userId: parseInt(userId)
+            }
+          }
+        }
+      ]
+    };
+    
+    const recentAdminMessages = await prisma.message.findFirst({
+      where: adminMessageQuery
+    });
+    
+    if (recentAdminMessages) return true;
+  }
+
+  // For regular users (employee/restaurant user)
+  if (userEntityIds.length > 0) {
     const recentUserMessages = await prisma.message.findFirst({
       where: {
         conversationId: parseInt(conversationId),
-        createdAt: {
-          gte: tenMinutesAgo
-        },
+        createdAt: { gte: tenMinutesAgo },
         OR: userEntityIds
       }
     });
-
-    // Also check if user has read the conversation recently by looking at notification read status
-    const recentNotificationRead = await prisma.notification.findFirst({
-      where: {
-        userId: parseInt(userId),
-        type: 'MESSAGE',
-        isRead: true,
-        updatedAt: {
-          gte: tenMinutesAgo
-        },
-        metadata: {
-          path: ['conversationId'],
-          equals: conversationId
-        }
-      }
-    });
-
-    return !!(recentUserMessages || recentNotificationRead);
-  } catch (error) {
-    console.error('❌ Error checking user activity:', error);
-    return false; // If error, assume user hasn't been active
+    
+    if (recentUserMessages) return true;
   }
+
+  return false;
+};
+
+/**
+ * Check if user has read notifications recently
+ * @param {number} conversationId - Conversation ID
+ * @param {number} userId - User ID
+ * @param {Date} tenMinutesAgo - Time threshold
+ * @returns {boolean} - Whether user read notifications recently
+ */
+const checkRecentNotificationRead = async (conversationId, userId, tenMinutesAgo) => {
+  const recentNotificationRead = await prisma.notification.findFirst({
+    where: {
+      userId: parseInt(userId),
+      type: 'MESSAGE',
+      isRead: true,
+      updatedAt: { gte: tenMinutesAgo },
+      metadata: {
+        path: ['conversationId'],
+        equals: conversationId
+      }
+    }
+  });
+
+  return !!recentNotificationRead;
 };
 
 /**

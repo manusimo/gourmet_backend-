@@ -32,7 +32,7 @@ const createNotification = async (notificationData) => {
 };
 
 /**
- * Create a job application notification
+ * Create a job application notification for ALL restaurant users (admin + staff)
  * @param {Object} applicationData - Application data
  */
 const createJobApplicationNotification = async (applicationData) => {
@@ -98,6 +98,48 @@ const createJobApplicationNotification = async (applicationData) => {
   }
 
   return notifications;
+};
+
+/**
+ * Create a job application notification for ONLY the specific restaurant user who posted the job
+ * @param {Object} applicationData - Application data
+ */
+const createJobApplicationNotificationForSpecificUser = async (applicationData) => {
+  const { restaurantUserId, applicantName, jobTitle, restaurantName, applicationId } = applicationData;
+
+  // Get the specific restaurant user who posted the job
+  const restaurantUser = await prisma.restaurantUser.findUnique({
+    where: { id: restaurantUserId },
+    select: { userId: true }
+  });
+
+  if (!restaurantUser) {
+    console.error('❌ Restaurant user not found for notification');
+    return;
+  }
+
+  console.log(`🔔 Creating job application notification for specific user: ${restaurantUser.userId}`);
+
+  // Create notification only for the specific restaurant user
+  try {
+    const notification = await createNotification({
+      userId: restaurantUser.userId,
+      type: 'job_application',
+      title: 'Nueva postulación recibida',
+      message: `${applicantName} se postuló para el puesto de ${jobTitle} en ${restaurantName}`,
+      data: {
+        applicationId,
+        applicantName,
+        jobTitle,
+        restaurantName,
+        type: 'job_application'
+      }
+    });
+    return notification;
+  } catch (error) {
+    console.error(`❌ Failed to create notification for user ${restaurantUser.userId}:`, error);
+    throw error;
+  }
 };
 
 /**
@@ -201,6 +243,7 @@ const markAllAsRead = async (userId) => {
 module.exports = {
   createNotification,
   createJobApplicationNotification,
+  createJobApplicationNotificationForSpecificUser,
   createMessageNotification,
   createJobOfferNotification,
   createSystemNotification,

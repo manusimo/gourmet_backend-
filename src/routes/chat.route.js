@@ -2,6 +2,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
+const { processMessageNotifications } = require('../services/messageNotificationService');
 // Message notifications are now handled by messageNotificationService.js
 
 const prisma = new PrismaClient();
@@ -303,7 +304,6 @@ router.post('/send-message', async (req, res) => {
       ]);
 
       if (sender && receiver && conversationWithRestaurant) {
-        const { processMessageNotifications } = require('../services/messageNotificationService');
         
         await processMessageNotifications({
           senderUserId: parseInt(senderUserId),
