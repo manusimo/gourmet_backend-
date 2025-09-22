@@ -107,7 +107,7 @@ router.post('/signup', validateSignup, async (req, res) => {
     // Check if user has a restaurant (for company users)
     let restaurantId = null;
     if (newUser.userType === 'empresas') {
-      const restaurant = await prisma.restaurant.findUnique({
+      const restaurant = await prisma.restaurant.findFirst({
         where: { userId: newUser.id },
         select: { id: true }
       });
