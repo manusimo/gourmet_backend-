@@ -30,6 +30,9 @@ const notificationRoutes = require('./routes/notification.route.js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Heroku (required for rate limiting and IP detection)
+app.set('trust proxy', 1);
+
 // ============================================================================
 // ENHANCED SECURITY CONFIGURATION
 // ============================================================================
