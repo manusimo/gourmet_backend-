@@ -118,6 +118,7 @@ const sendJobApplicationNotification = async (applicationData) => {
  */
 const sendMessageNotification = async (messageData) => {
   try {
+    console.log('📧 [EMAIL] sendMessageNotification called with data:', messageData);
     const {
       senderName,
       senderEmail,
@@ -174,11 +175,13 @@ const sendMessageNotification = async (messageData) => {
       `
     };
 
+    console.log('📧 [EMAIL] Sending email to:', recipientEmail);
     await sendEmail(emailData);
-    console.log('✅ Message notification sent successfully');
+    console.log('✅ [EMAIL] Message notification sent successfully to:', recipientEmail);
     return { success: true };
   } catch (error) {
-    console.error('❌ Error sending message notification:', error);
+    console.error('❌ [EMAIL] Error sending message notification:', error);
+    console.error('❌ [EMAIL] Error stack:', error.stack);
     return { success: false, error: error.message };
   }
 };

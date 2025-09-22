@@ -24,6 +24,17 @@ const processApplicationNotifications = async ({ jobPostId, employeeId, applicat
     // Check if this is a milestone (50, 100, 150, 200, etc.)
     const isMilestone = totalApplications > 0 && totalApplications % 50 === 0;
     
+    // Send email notification for every application
+    await sendRegularApplicationEmailNotification({
+      jobPostId,
+      employeeId,
+      applicationId,
+      jobPost,
+      totalApplications,
+      isMilestone
+    });
+    
+    // Also send milestone notification if it's a milestone
     if (isMilestone) {
       await sendMilestoneEmailNotification({
         jobPostId,
@@ -46,6 +57,73 @@ const processApplicationNotifications = async ({ jobPostId, employeeId, applicat
   } catch (error) {
     console.error('❌ Failed to process application notifications:', error);
     // Don't throw error - notifications shouldn't break application creation
+  }
+};
+
+/**
+ * Send regular email notification for every application
+ * @param {Object} params - Regular notification parameters
+ */
+const sendRegularApplicationEmailNotification = async ({ 
+  jobPostId, 
+  employeeId, 
+  applicationId, 
+  jobPost, 
+  totalApplications, 
+  isMilestone 
+}) => {
+  try {
+    console.log(`📧 Sending regular email notification for application ${applicationId} to job ${jobPostId}`);
+    
+    // Get restaurant and employee details for notification
+    const [restaurant, employee] = await Promise.all([
+      prisma.restaurant.findUnique({
+        where: { id: jobPost.restaurantId },
+        select: { 
+          name: true, 
+          user: { select: { email: true } },
+          restaurantUsers: {
+            include: { user: { select: { email: true } } }
+          }
+        }
+      }),
+      prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { user: { select: { name: true, email: true } } }
+      })
+    ]);
+
+    if (restaurant && employee) {
+      // Collect all email addresses (owner + all staff)
+      const allEmails = [
+        restaurant.user.email, // Restaurant owner
+        ...restaurant.restaurantUsers.map(ru => ru.user.email) // All staff members
+      ];
+
+      // Remove duplicates
+      const uniqueEmails = [...new Set(allEmails)];
+
+      console.log('uniqueEmails', uniqueEmails);
+
+      // Send regular email notification to all users
+      const emailPromises = uniqueEmails.map(email => 
+        sendJobApplicationNotification({
+          applicantName: employee.user.name,
+          applicantEmail: employee.user.email,
+          jobTitle: jobPost.position,
+          restaurantName: restaurant.name,
+          restaurantEmail: email, // Send to each user individually
+          applicationId: applicationId,
+          isMilestone: false, // This is a regular notification
+          totalApplications: totalApplications
+        })
+      );
+
+      await Promise.all(emailPromises);
+      console.log(`📧 Regular email notification sent to ${uniqueEmails.length} users for application ${applicationId}`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to send regular application email notification:', error);
   }
 };
 

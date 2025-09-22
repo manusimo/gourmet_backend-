@@ -12,6 +12,8 @@ const { prisma } = require('../db.js');
 const createNotification = async (notificationData) => {
   try {
     const { userId, type, title, message, data } = notificationData;
+    
+    console.log('🔔 Creating notification with data:', { userId, type, title, message });
 
     const notification = await prisma.notification.create({
       data: {
@@ -23,7 +25,7 @@ const createNotification = async (notificationData) => {
       }
     });
 
-    console.log(`✅ Notification created for user ${userId}: ${title}`);
+    console.log(`✅ Notification created for user ${userId}: ${title} (ID: ${notification.id})`);
     return notification;
   } catch (error) {
     console.error('❌ Error creating notification:', error);
@@ -151,7 +153,7 @@ const createMessageNotification = async (messageData) => {
 
   return await createNotification({
     userId: recipientUserId,
-    type: 'message',
+    type: 'MESSAGE',
     title: 'Nuevo mensaje recibido',
     message: `${senderName} te envió un mensaje desde ${restaurantName}: "${messagePreview}"`,
     data: {
