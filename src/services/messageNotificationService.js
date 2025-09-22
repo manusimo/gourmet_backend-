@@ -18,12 +18,25 @@ const processMessageNotifications = async ({
   restaurantName
 }) => {
   try {
-    console.log(`💬 Processing message notification for conversation ${conversationId}`);
+    console.log(`💬 [NOTIFICATION] Starting processMessageNotifications`);
+    console.log(`💬 [NOTIFICATION] Processing message notification for conversation ${conversationId}`);
+    console.log(`💬 [NOTIFICATION] Notification details:`, {
+      senderUserId,
+      receiverUserId,
+      senderName,
+      recipientName,
+      restaurantName,
+      senderEmail,
+      recipientEmail
+    });
 
     // Check if we should send email notification (throttling)
+    console.log(`💬 [NOTIFICATION] Checking email throttling for conversation ${conversationId}, user ${receiverUserId}`);
     const shouldSendEmail = await shouldSendEmailNotification(conversationId, receiverUserId);
+    console.log(`💬 [NOTIFICATION] Should send email: ${shouldSendEmail}`);
     
     if (shouldSendEmail) {
+      console.log(`💬 [NOTIFICATION] Sending email notification to ${recipientEmail}`);
       await sendMessageNotification({
         senderName,
         senderEmail,
@@ -33,12 +46,13 @@ const processMessageNotifications = async ({
         restaurantName,
         conversationId
       });
-      console.log('📧 Message email notification sent');
+      console.log('📧 [NOTIFICATION] Message email notification sent successfully');
     } else {
-      console.log('⏰ Email notification throttled (sent recently)');
+      console.log('⏰ [NOTIFICATION] Email notification throttled (sent recently)');
     }
 
     // Always create in-app notification (but update existing one)
+    console.log('🔔 [NOTIFICATION] Creating in-app notification for user:', parseInt(receiverUserId));
     await createOrUpdateInAppNotification({
       recipientUserId: parseInt(receiverUserId),
       senderName,
@@ -46,10 +60,11 @@ const processMessageNotifications = async ({
       messagePreview: messageText.length > 100 ? messageText.substring(0, 100) + '...' : messageText,
       conversationId
     });
-    console.log('🔔 In-app message notification updated');
+    console.log('🔔 [NOTIFICATION] In-app message notification updated for user:', parseInt(receiverUserId));
 
   } catch (error) {
-    console.error('❌ Failed to process message notifications:', error);
+    console.error('❌ [NOTIFICATION] Failed to process message notifications:', error);
+    console.error('❌ [NOTIFICATION] Error stack:', error.stack);
     // Don't throw error - notifications shouldn't break message sending
   }
 };
@@ -62,8 +77,10 @@ const processMessageNotifications = async ({
  */
 const shouldSendEmailNotification = async (conversationId, receiverUserId) => {
   try {
+    console.log(`💬 [NOTIFICATION] Checking email throttling for conversation ${conversationId}, user ${receiverUserId}`);
     // Check if we sent an email notification for this conversation in the last 30 minutes
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    console.log(`💬 [NOTIFICATION] Checking for recent notifications since: ${thirtyMinutesAgo.toISOString()}`);
     
     const recentEmailNotification = await prisma.notification.findFirst({
       where: {
@@ -72,29 +89,33 @@ const shouldSendEmailNotification = async (conversationId, receiverUserId) => {
         createdAt: {
           gte: thirtyMinutesAgo
         },
-        // Check if it's for the same conversation (stored in metadata)
-        metadata: {
-          path: ['conversationId'],
-          equals: conversationId
+        // Check if it's for the same conversation (stored in data field)
+        data: {
+          contains: `"conversationId":${conversationId}`
         }
       }
     });
 
+    console.log(`💬 [NOTIFICATION] Recent email notification found:`, recentEmailNotification ? 'YES' : 'NO');
+
     // If we already sent an email recently, don't send another
     if (recentEmailNotification) {
-      console.log('⏰ Email notification throttled (sent recently)');
+      console.log('⏰ [NOTIFICATION] Email notification throttled (sent recently)');
       return false;
     }
 
     // Check if user has been active in this conversation recently (indicating they've seen messages)
+    console.log(`💬 [NOTIFICATION] Checking user activity in conversation ${conversationId} for user ${receiverUserId}`);
     const userHasBeenActive = await checkUserActivityInConversation(conversationId, receiverUserId);
+    console.log(`💬 [NOTIFICATION] User has been active: ${userHasBeenActive}`);
     
     if (userHasBeenActive) {
-      console.log('👀 User has been active in conversation recently, skipping email');
+      console.log('👀 [NOTIFICATION] User has been active in conversation recently, skipping email');
       return false;
     }
 
     // If no recent email and user hasn't been active, we can send one
+    console.log(`💬 [NOTIFICATION] Email notification approved - will send to user ${receiverUserId}`);
     return true;
   } catch (error) {
     console.error('❌ Error checking email notification throttle:', error);
@@ -227,9 +248,8 @@ const checkRecentNotificationRead = async (conversationId, userId, tenMinutesAgo
       type: 'MESSAGE',
       isRead: true,
       updatedAt: { gte: tenMinutesAgo },
-      metadata: {
-        path: ['conversationId'],
-        equals: conversationId
+      data: {
+        contains: `"conversationId":${conversationId}`
       }
     }
   });
@@ -249,18 +269,20 @@ const createOrUpdateInAppNotification = async ({
   conversationId
 }) => {
   try {
+    console.log('🔍 [NOTIFICATION] Checking for existing notification for user:', recipientUserId, 'conversation:', conversationId);
     // Check if there's already an unread notification for this conversation
+    // Since data is a JSON string, we need to use string contains to find the conversationId
     const existingNotification = await prisma.notification.findFirst({
       where: {
         userId: recipientUserId,
         type: 'MESSAGE',
         isRead: false,
-        metadata: {
-          path: ['conversationId'],
-          equals: conversationId
+        data: {
+          contains: `"conversationId":${conversationId}`
         }
       }
     });
+    console.log('🔍 [NOTIFICATION] Existing notification found:', !!existingNotification);
 
     if (existingNotification) {
       // Update existing notification with new message preview and timestamp

@@ -251,6 +251,7 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
 
 // POST /send-message - Send a message
 router.post('/send-message', async (req, res) => {
+  console.log('🔔 [BACKEND] /send-message route called');
   // TODO: Temporarily disabled plan requirement for development
   // requirePlan(['pro', 'plus', 'premium']), 
   try {
@@ -282,19 +283,67 @@ router.post('/send-message', async (req, res) => {
     });
 
     // Process message notifications with smart throttling
+    console.log('🔔 Starting notification processing...');
     try {
+      console.log('🔔 Processing notifications for message:', { 
+        senderUserId, 
+        receiverUserId, 
+        conversationId,
+        senderUserIdType: typeof senderUserId,
+        receiverUserIdType: typeof receiverUserId
+      });
+      
       // Get sender and receiver details for notification
+      // Note: senderUserId and receiverUserId might be RestaurantUser.id, Employee.id, or User.id (for admin users)
+      // We need to find the actual User.id for notifications
       const [sender, receiver, conversationWithRestaurant] = await Promise.all([
-        prisma.user.findUnique({
+        // Try to find sender as RestaurantUser first, then Employee, then direct User (for admin users)
+        prisma.restaurantUser.findUnique({
           where: { id: parseInt(senderUserId) },
-          select: { name: true, email: true }
-        }),
+          select: { 
+            user: { select: { id: true, name: true, email: true } },
+            restaurant: { select: { name: true } }
+          }
+        }).then(ru => ru ? { ...ru.user, restaurantName: ru.restaurant.name } : null)
+        .catch(() => 
+          prisma.employee.findUnique({
+            where: { id: parseInt(senderUserId) },
+            select: { 
+              user: { select: { id: true, name: true, email: true } }
+            }
+          }).then(emp => emp ? emp.user : null)
+        ).catch(() => 
+          // For admin users, senderUserId might be the actual User.id
         prisma.user.findUnique({
+            where: { id: parseInt(senderUserId) },
+            select: { id: true, name: true, email: true }
+          })
+        ),
+        
+        // Try to find receiver as Employee first, then RestaurantUser, then direct User (for admin users)
+        prisma.employee.findUnique({
           where: { id: parseInt(receiverUserId) },
-          select: { name: true, email: true }
-        }),
+          select: { 
+            user: { select: { id: true, name: true, email: true } }
+          }
+        }).then(emp => emp ? emp.user : null)
+        .catch(() => 
+          prisma.restaurantUser.findUnique({
+            where: { id: parseInt(receiverUserId) },
+            select: { 
+              user: { select: { id: true, name: true, email: true } }
+            }
+          }).then(ru => ru ? ru.user : null)
+        ).catch(() => 
+          // For admin users, receiverUserId might be the actual User.id
+          prisma.user.findUnique({
+            where: { id: parseInt(receiverUserId) },
+            select: { id: true, name: true, email: true }
+          })
+        ),
+        
         prisma.conversation.findUnique({
-          where: { id: conversationId },
+          where: { id: parseInt(conversationId) },
           select: { 
             restaurant: { 
               select: { name: true } 
@@ -302,23 +351,47 @@ router.post('/send-message', async (req, res) => {
           }
         })
       ]);
+      
+      console.log('🔔 User lookup results:', { 
+        sender: sender ? { id: sender.id, name: sender.name, email: sender.email } : null,
+        receiver: receiver ? { id: receiver.id, name: receiver.name, email: receiver.email } : null,
+        restaurant: conversationWithRestaurant?.restaurant?.name || null
+      });
 
       if (sender && receiver && conversationWithRestaurant) {
+        console.log('🔔 All required data found, calling processMessageNotifications...');
+        
+        console.log('🔔 Calling processMessageNotifications with:', {
+          senderUserId: sender.id,
+          receiverUserId: receiver.id,
+          conversationId,
+          senderName: sender.name,
+          recipientName: receiver.name
+        });
         
         await processMessageNotifications({
-          senderUserId: parseInt(senderUserId),
-          receiverUserId: parseInt(receiverUserId),
+          senderUserId: sender.id, // Use the actual User.id
+          receiverUserId: receiver.id, // Use the actual User.id
           conversationId,
           messageText: text,
           senderName: sender.name,
           senderEmail: sender.email,
           recipientName: receiver.name,
           recipientEmail: receiver.email,
-          restaurantName: conversationWithRestaurant.restaurant?.name || 'Restaurante'
+          restaurantName: sender.restaurantName || conversationWithRestaurant.restaurant?.name || 'Restaurante'
+        });
+        
+        console.log('🔔 processMessageNotifications completed successfully');
+      } else {
+        console.log('❌ Missing required data for notifications:', {
+          hasSender: !!sender,
+          hasReceiver: !!receiver,
+          hasRestaurant: !!conversationWithRestaurant
         });
       }
     } catch (notificationError) {
       console.error('❌ Failed to process message notifications:', notificationError);
+      console.error('❌ Notification error stack:', notificationError.stack);
       // Don't fail the message sending if notifications fail
     }
 
