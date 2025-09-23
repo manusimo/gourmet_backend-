@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { processMessageNotifications } = require('../services/messageNotificationService');
+const conversationalAgent = require('../services/conversationalAgent.js');
 // Message notifications are now handled by messageNotificationService.js
 
 const prisma = new PrismaClient();
@@ -281,6 +282,19 @@ router.post('/send-message', async (req, res) => {
       senderType,
       receiverType
     });
+
+    // Process message through conversational agent (if active)
+    try {
+      console.log('🤖 Processing message through conversational agent...');
+      await conversationalAgent.processMessage(
+        parseInt(conversationId),
+        text,
+        senderType
+      );
+    } catch (error) {
+      console.error('❌ Error processing message through conversational agent:', error);
+      // Don't fail the message send if agent processing fails
+    }
 
     // Process message notifications with smart throttling
     console.log('🔔 Starting notification processing...');

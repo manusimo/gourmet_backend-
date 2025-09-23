@@ -26,6 +26,9 @@ const chatRoutes = require('./routes/chat.route.js');
 const adminRoutes = require('./routes/admin.route.js');
 const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
+const meetingRoutes = require('./routes/meeting.route.js');
+const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
+const conversationalAgentRoutes = require('./routes/conversationalAgent.route.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -250,6 +253,9 @@ app.use('/api', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api', meetingRoutes);
+app.use('/api', meetingAgentRoutes);
+app.use('/api', conversationalAgentRoutes);
 
 // ============================================================================
 // SECURITY ENDPOINT
