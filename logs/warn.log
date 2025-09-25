@@ -294,3 +294,19 @@
 {"timestamp":"2025-09-16T13:07:03.995Z","level":"WARN","message":"404 - Route not found","path":"/api/notifications","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36","pid":3831,"memory":28084792}
 {"timestamp":"2025-09-16T13:07:04.022Z","level":"WARN","message":"404 - Route not found","path":"/api/notifications","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36","pid":3831,"memory":27512752}
 {"timestamp":"2025-09-21T23:05:08.867Z","level":"WARN","message":"404 - Route not found","path":"/api/chat/send-message","method":"POST","ip":"::ffff:127.0.0.1","userAgent":"curl/8.1.2","pid":41146,"memory":25488896}
+{"timestamp":"2025-09-25T00:40:42.986Z","level":"WARN","message":"404 - Route not found","path":"/","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36","pid":88075,"memory":25613304}
+{"timestamp":"2025-09-25T00:40:44.850Z","level":"WARN","message":"404 - Route not found","path":"/favicon.ico","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36","pid":88075,"memory":26017976}
+{"timestamp":"2025-09-25T00:41:51.748Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26134096}
+{"timestamp":"2025-09-25T00:41:51.762Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26537712}
+{"timestamp":"2025-09-25T00:41:51.777Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26680808}
+{"timestamp":"2025-09-25T00:41:51.787Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26828864}
+{"timestamp":"2025-09-25T00:41:51.811Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26972016}
+{"timestamp":"2025-09-25T00:41:51.823Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26354296}
+{"timestamp":"2025-09-25T00:41:51.836Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26502368}
+{"timestamp":"2025-09-25T00:41:51.846Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26696536}
+{"timestamp":"2025-09-25T00:41:51.852Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26845152}
+{"timestamp":"2025-09-25T00:41:51.861Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":27002952}
+{"timestamp":"2025-09-25T00:41:51.872Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26498144}
+{"timestamp":"2025-09-25T00:41:51.886Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26647376}
+{"timestamp":"2025-09-25T00:41:51.892Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26808984}
+{"timestamp":"2025-09-25T00:42:09.075Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26991120}

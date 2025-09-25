@@ -26,9 +26,11 @@ const chatRoutes = require('./routes/chat.route.js');
 const adminRoutes = require('./routes/admin.route.js');
 const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
-const meetingRoutes = require('./routes/meeting.route.js');
-const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
+// const meetingRoutes = require('./routes/meeting.route.js');
+// const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
 const conversationalAgentRoutes = require('./routes/conversationalAgent.route.js');
+const aiCallSchedulerRoutes = require('./routes/aiCallScheduler.route.js');
+const jobPostingAgentRoutes = require('./routes/jobPostingAgent.route.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -124,7 +126,12 @@ app.use(xssMiddleware);
 // ENHANCED CORS CONFIGURATION
 // ============================================================================
 
-const allowedOrigins = [process.env.FRONTEND_URL, process.env.CHAT_SERVICE_URL];
+const allowedOrigins = [
+  process.env.FRONTEND_URL, 
+  process.env.CHAT_SERVICE_URL,
+  'http://localhost:3001', // Frontend development server
+  'http://localhost:3000'  // Backend development server
+].filter(Boolean); // Remove undefined values
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -253,9 +260,11 @@ app.use('/api', chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api', meetingRoutes);
-app.use('/api', meetingAgentRoutes);
+// app.use('/api', meetingRoutes);
+// app.use('/api', meetingAgentRoutes);
 app.use('/api', conversationalAgentRoutes);
+app.use('/api/ai', aiCallSchedulerRoutes);
+app.use('/api/ai', jobPostingAgentRoutes);
 
 // ============================================================================
 // SECURITY ENDPOINT
