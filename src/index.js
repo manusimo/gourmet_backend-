@@ -1,6 +1,56 @@
 // Load environment variables
 require('dotenv').config();
 
+// Add fetch polyfill for Node.js v16
+if (!globalThis.fetch) {
+  const fetch = require('node-fetch');
+  globalThis.fetch = fetch;
+}
+
+// Add Headers polyfill for Node.js v16
+if (!globalThis.Headers) {
+  const { Headers } = require('node-fetch');
+  globalThis.Headers = Headers;
+}
+
+// Add FormData polyfill for Node.js v16
+if (!globalThis.FormData) {
+  // Simple FormData polyfill for OpenAI compatibility
+  globalThis.FormData = class FormData {
+    constructor() {
+      this.data = new Map();
+    }
+    
+    append(key, value) {
+      this.data.set(key, value);
+    }
+    
+    get(key) {
+      return this.data.get(key);
+    }
+    
+    has(key) {
+      return this.data.has(key);
+    }
+    
+    delete(key) {
+      return this.data.delete(key);
+    }
+    
+    entries() {
+      return this.data.entries();
+    }
+    
+    keys() {
+      return this.data.keys();
+    }
+    
+    values() {
+      return this.data.values();
+    }
+  };
+}
+
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -30,8 +80,8 @@ const notificationRoutes = require('./routes/notification.route.js');
 // const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
 const conversationalAgentRoutes = require('./routes/conversationalAgent.route.js');
 const aiCallSchedulerRoutes = require('./routes/aiCallScheduler.route.js');
-const jobPostingAgentRoutes = require('./routes/jobPostingAgent.route.js');
 const aiJobCreationRoutes = require('./routes/aiJobCreation.route.js');
+const ragRoutes = require('./routes/rag.route.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -265,8 +315,8 @@ app.use('/api/notifications', notificationRoutes);
 // app.use('/api', meetingAgentRoutes);
 app.use('/api', conversationalAgentRoutes);
 app.use('/api/ai', aiCallSchedulerRoutes);
-app.use('/api/ai', jobPostingAgentRoutes);
 app.use('/api/ai-job-creation', aiJobCreationRoutes);
+app.use('/api/rag', ragRoutes);
 
 // ============================================================================
 // SECURITY ENDPOINT

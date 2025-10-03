@@ -310,3 +310,6 @@
 {"timestamp":"2025-09-25T00:41:51.886Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26647376}
 {"timestamp":"2025-09-25T00:41:51.892Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26808984}
 {"timestamp":"2025-09-25T00:42:09.075Z","level":"WARN","message":"CORS violation attempt","origin":"http://localhost:3001","pid":88075,"memory":26991120}
+{"timestamp":"2025-10-03T20:16:16.278Z","level":"WARN","message":"404 - Route not found","path":"/ws","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36","pid":18366,"memory":26911352}
+{"timestamp":"2025-10-03T20:16:19.488Z","level":"WARN","message":"404 - Route not found","path":"/ws","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36","pid":18366,"memory":27205544}
+{"timestamp":"2025-10-03T20:16:23.722Z","level":"WARN","message":"404 - Route not found","path":"/ws","method":"GET","ip":"::1","userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36","pid":18366,"memory":27311920}

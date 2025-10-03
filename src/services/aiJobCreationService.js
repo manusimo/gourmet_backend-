@@ -1,5 +1,10 @@
 const OpenAI = require('openai');
+const ragService = require('./ragService.js');
 
+/**
+ * Enterprise-Grade AI Job Creation Service
+ * Provides reliable, context-aware job creation with RAG integration
+ */
 class AIJobCreationService {
   constructor() {
     this.openai = new OpenAI({
@@ -9,6 +14,9 @@ class AIJobCreationService {
     this.defaultModel = "gpt-4";
     this.maxTokens = 2000;
     this.temperature = 0.7;
+    this.ragService = ragService;
+    this.maxRetries = 3;
+    this.timeout = 30000; // 30 seconds
     
     // Job creation system prompt
     this.systemPrompt = `Eres un asistente de IA especializado en crear ofertas de trabajo para restaurantes. Tu trabajo es analizar descripciones de trabajos en lenguaje natural y extraer información estructurada.
@@ -19,6 +27,8 @@ INSTRUCCIONES:
 3. Si falta información importante, haz preguntas específicas al usuario
 4. Mantén un tono profesional y amigable
 5. Siempre confirma los detalles antes de proceder
+6. IMPORTANTE: Si falta información crítica (como posición, horario, salario), pregunta específicamente por ella
+7. Usa el status "incomplete" cuando necesites más información del usuario
 
 CAMPOS DISPONIBLES:
 - position: Posición del trabajo (Garzón, Chef, Bartender, etc.)
@@ -69,7 +79,31 @@ EJEMPLOS DE CONTRATOS VÁLIDOS:
 EJEMPLOS DE PERÍODOS VÁLIDOS:
 - Permanente, Reemplazo Temporal, Reemplazo Urgente, Sin información
 
-Si el usuario proporciona información incompleta, haz preguntas específicas para completar los campos faltantes.`;
+Si el usuario proporciona información incompleta, haz preguntas específicas para completar los campos faltantes.
+
+EJEMPLO DE RESPUESTA CUANDO FALTA INFORMACIÓN:
+Usuario: "Necesito un chef"
+Respuesta:
+{
+  "status": "incomplete",
+  "message": "Perfecto, necesitas un chef. Para crear la oferta completa, necesito algunos detalles más: ¿Qué tipo de horario necesitas? (Full-time, Part-time), ¿Cuál es el salario que ofreces?, ¿Cuántos años de experiencia requiere el puesto?",
+  "extractedData": {
+    "position": "Chef",
+    "schedule": "",
+    "contract": "",
+    "salary": 0,
+    "propina": "Si",
+    "vacancies": 1,
+    "yearsOfExperience": 0,
+    "period": "Sin información",
+    "description": "",
+    "requirements": "",
+    "functions": "",
+    "questions": []
+  },
+  "missingFields": ["schedule", "salary", "yearsOfExperience", "description", "requirements", "functions"],
+  "suggestions": ["Considera incluir beneficios adicionales", "Especifica el tipo de cocina"]
+}`;
   }
 
   /**
@@ -80,18 +114,129 @@ Si el usuario proporciona información incompleta, haz preguntas específicas pa
    * @returns {Object} AI response with extracted job data
    */
   async processJobDescription(userMessage, conversationHistory = [], restaurantContext = {}) {
+    const startTime = Date.now();
+    const requestId = this.generateRequestId();
+    
     try {
-      // Build conversation context
-      const messages = [
-        { role: "system", content: this.systemPrompt },
-        ...conversationHistory,
-        { role: "user", content: userMessage }
-      ];
-
-      // Add restaurant context if available
-      if (restaurantContext.name) {
-        messages[0].content += `\n\nCONTEXTO DEL RESTAURANTE: ${restaurantContext.name}`;
+      console.log(`🚀 [AI JOB CREATION] Request ${requestId} started`);
+      
+      // Validate input
+      if (!userMessage || userMessage.trim().length < 3) {
+        throw new Error('Invalid input: Message too short');
       }
+
+      // Get context with fallback
+      let ragContext = '';
+      try {
+        const contextResult = await this.ragService.getContextForAgent(
+          `restaurant job creation ${userMessage}`,
+          'job_creation'
+        );
+        ragContext = contextResult.context || '';
+        console.log(`📚 [AI JOB CREATION] Retrieved RAG context: ${ragContext.length} chars`);
+      } catch (ragError) {
+        console.warn('⚠️ [AI JOB CREATION] RAG context failed, continuing without context:', ragError.message);
+        // Continue without RAG context - graceful degradation
+      }
+
+      // Process with retry logic
+      const result = await this.processWithRetry(userMessage, conversationHistory, restaurantContext, ragContext);
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ [AI JOB CREATION] Request ${requestId} completed in ${duration}ms`);
+      
+      // Log performance metrics
+      this.logMetrics({
+        requestId,
+        duration,
+        success: true,
+        userMessageLength: userMessage.length,
+        hasRAGContext: !!ragContext
+      });
+      
+      return result;
+      
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [AI JOB CREATION] Request ${requestId} failed after ${duration}ms:`, error.message);
+      
+      this.logMetrics({
+        requestId,
+        duration,
+        success: false,
+        error: error.message
+      });
+      
+      return {
+        status: "error",
+        message: "Lo siento, hubo un error procesando tu solicitud. Por favor intenta de nuevo.",
+        extractedData: {},
+        missingFields: [],
+        suggestions: []
+      };
+    }
+  }
+
+  /**
+   * Process with retry logic and timeout protection
+   */
+  async processWithRetry(userMessage, conversationHistory, restaurantContext, ragContext) {
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await this.processWithTimeout(userMessage, conversationHistory, restaurantContext, ragContext);
+      } catch (error) {
+        console.warn(`❌ [AI JOB CREATION] Attempt ${attempt} failed:`, error.message);
+        
+        if (attempt === this.maxRetries) {
+          throw error;
+        }
+        
+        // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  }
+
+  /**
+   * Process with timeout protection
+   */
+  async processWithTimeout(userMessage, conversationHistory, restaurantContext, ragContext) {
+    return new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Request timeout'));
+      }, this.timeout);
+
+      try {
+        const result = await this.callOpenAI(userMessage, conversationHistory, restaurantContext, ragContext);
+        clearTimeout(timeout);
+        resolve(result);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Call OpenAI API with enhanced context
+   */
+  async callOpenAI(userMessage, conversationHistory, restaurantContext, ragContext) {
+    // Build conversation context
+    const messages = [
+      { role: "system", content: this.systemPrompt },
+      ...conversationHistory,
+      { role: "user", content: userMessage }
+    ];
+
+    // Add restaurant context if available
+    if (restaurantContext.name) {
+      messages[0].content += `\n\nCONTEXTO DEL RESTAURANTE: ${restaurantContext.name}`;
+    }
+
+    // Add RAG context if available
+    if (ragContext) {
+      messages[0].content += `\n\nCONTEXTO RELEVANTE DE LA EMPRESA:\n${ragContext}`;
+    }
 
       const completion = await this.openai.chat.completions.create({
         model: this.defaultModel,
@@ -101,13 +246,16 @@ Si el usuario proporciona información incompleta, haz preguntas específicas pa
       });
 
       const responseText = completion.choices[0].message.content;
+      console.log('🤖 [AI JOB CREATION] Raw AI response:', responseText);
       
       // Try to parse JSON response
       let parsedResponse;
       try {
         parsedResponse = JSON.parse(responseText);
+        console.log('🤖 [AI JOB CREATION] Parsed AI response:', parsedResponse);
       } catch (parseError) {
         console.error('❌ Error parsing AI response:', parseError);
+        console.error('❌ Raw response that failed to parse:', responseText);
         return {
           status: "error",
           message: "Lo siento, hubo un error procesando tu solicitud. ¿Podrías intentar de nuevo?",
@@ -328,6 +476,77 @@ Responde en formato JSON:
         suggestedSchedule: "Full-time",
         suggestedExperience: 1
       };
+    }
+  }
+}
+
+  /**
+   * Generate unique request ID for tracking
+   * @returns {string} Request ID
+   */
+  generateRequestId() {
+    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Log performance metrics
+   * @param {Object} metrics - Performance metrics
+   */
+  logMetrics(metrics) {
+    console.log(`📊 [AI JOB CREATION] Metrics:`, {
+      requestId: metrics.requestId,
+      duration: `${metrics.duration}ms`,
+      success: metrics.success,
+      userMessageLength: metrics.userMessageLength,
+      hasRAGContext: metrics.hasRAGContext,
+      error: metrics.error || 'none'
+    });
+  }
+
+  /**
+   * Validate AI response structure
+   * @param {Object} response - AI response to validate
+   * @returns {boolean} Validation result
+   */
+  validateAIResponse(response) {
+    const requiredFields = ['status', 'message', 'extractedData'];
+    
+    // Check required fields
+    for (const field of requiredFields) {
+      if (!response[field]) {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+
+    // Validate status
+    if (!['complete', 'incomplete', 'error'].includes(response.status)) {
+      throw new Error(`Invalid status: ${response.status}`);
+    }
+
+    // Validate extracted data structure
+    if (response.status === 'complete') {
+      const requiredJobFields = ['position', 'schedule', 'contract'];
+      for (const field of requiredJobFields) {
+        if (!response.extractedData[field]) {
+          throw new Error(`Missing required job field: ${field}`);
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Initialize the service and knowledge base
+   * @returns {Promise<void>}
+   */
+  async initialize() {
+    try {
+      console.log('🚀 [AI JOB CREATION] Initializing service...');
+      await this.ragService.initializeKnowledgeBase();
+      console.log('✅ [AI JOB CREATION] Service initialized successfully');
+    } catch (error) {
+      console.error('❌ [AI JOB CREATION] Failed to initialize service:', error);
     }
   }
 }

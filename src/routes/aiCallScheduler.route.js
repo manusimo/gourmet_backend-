@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db.js');
-const { getUserIdFromCookie } = require('../middleware/auth.js');
+const { getUserIdFromCookie } = require('../helpers/cookies.js');
 const conversationalCallScheduler = require('../services/conversationalCallScheduler.js');
 
 /**

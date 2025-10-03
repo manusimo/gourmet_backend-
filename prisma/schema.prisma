@@ -48,6 +48,19 @@ model TokenDenyList {
   invalidatedAt DateTime @default(now())
 }
 
+model KnowledgeDocument {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.Text
+  embedding String   // JSON string of vector
+  metadata  String   // JSON string of metadata
+  type      String   // 'hiring_criteria', 'interview_questions', etc.
+  qualityScore Int    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("KnowledgeDocument")
+}
+
 model Employee {
   id           Int      @id @default(autoincrement())
   name         String

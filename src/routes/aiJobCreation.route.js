@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../db.js');
-const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../middleware/auth.js');
+const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
 const aiJobCreationService = require('../services/aiJobCreationService.js');
+
 
 /**
  * POST /ai-job-creation/process - Process natural language job description and extract structured data
@@ -29,7 +30,7 @@ router.post('/process', getUserIdFromCookie, getRestaurantUserIdFromCookie, asyn
     if (restaurantId) {
       const restaurant = await prisma.restaurant.findUnique({
         where: { id: parseInt(restaurantId) },
-        select: { name: true, address: true }
+        select: { name: true, legalName: true }
       });
       restaurantContext = restaurant || {};
     }
