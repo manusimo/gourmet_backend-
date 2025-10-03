@@ -31,6 +31,7 @@ const notificationRoutes = require('./routes/notification.route.js');
 const conversationalAgentRoutes = require('./routes/conversationalAgent.route.js');
 const aiCallSchedulerRoutes = require('./routes/aiCallScheduler.route.js');
 const jobPostingAgentRoutes = require('./routes/jobPostingAgent.route.js');
+const aiJobCreationRoutes = require('./routes/aiJobCreation.route.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -265,6 +266,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api', conversationalAgentRoutes);
 app.use('/api/ai', aiCallSchedulerRoutes);
 app.use('/api/ai', jobPostingAgentRoutes);
+app.use('/api/ai-job-creation', aiJobCreationRoutes);
 
 // ============================================================================
 // SECURITY ENDPOINT
