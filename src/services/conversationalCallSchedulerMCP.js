@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const GourmetMCPClient = require('../mcp/mcpClient.js');
+const EmbeddedMCPClient = require('../mcp/embeddedClient.js');
 const { prisma } = require('../db.js');
 
 /**
@@ -18,7 +18,7 @@ class ConversationalCallSchedulerMCP {
     this.conversationContexts = new Map(); // Store conversation contexts
     
     // Initialize MCP client
-    this.mcpClient = new GourmetMCPClient();
+    this.mcpClient = new EmbeddedMCPClient();
   }
 
   /**

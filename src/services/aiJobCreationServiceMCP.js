@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const GourmetMCPClient = require('../mcp/mcpClient.js');
+const EmbeddedMCPClient = require('../mcp/embeddedClient.js');
 const ragService = require('./ragService.js');
 
 /**
@@ -20,7 +20,7 @@ class AIJobCreationServiceMCP {
     this.timeout = 30000;
     
     // Initialize MCP client
-    this.mcpClient = new GourmetMCPClient();
+    this.mcpClient = new EmbeddedMCPClient();
     
     // Job creation system prompt
     this.systemPrompt = `Eres un asistente de IA especializado en crear ofertas de trabajo para restaurantes. Tu trabajo es analizar descripciones de trabajos en lenguaje natural y extraer información estructurada.

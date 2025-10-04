@@ -6,6 +6,7 @@
   "scripts": {
     "start:mcp": "node src/mcp/startServer.js",
     "test:mcp": "node src/mcp/testMCP.js",
+    "test:embedded-mcp": "node src/mcp/testEmbeddedMCP.js",
     "dev:mcp": "nodemon src/mcp/startServer.js"
   },
   "dependencies": {

@@ -83,6 +83,9 @@ const aiCallSchedulerRoutes = require('./routes/aiCallScheduler.route.js');
 const aiJobCreationRoutes = require('./routes/aiJobCreation.route.js');
 const ragRoutes = require('./routes/rag.route.js');
 
+// Import MCP
+const EmbeddedMCPServer = require('./mcp/embeddedServer.js');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -319,6 +322,13 @@ app.use('/api/ai-job-creation', aiJobCreationRoutes);
 app.use('/api/rag', ragRoutes);
 
 // ============================================================================
+// EMBEDDED MCP SERVER INTEGRATION
+// ============================================================================
+
+// Initialize MCP server (will be started after database connection)
+let mcpServer = null;
+
+// ============================================================================
 // SECURITY ENDPOINT
 // ============================================================================
 
@@ -421,7 +431,7 @@ app.use('*', (req, res) => {
 // SERVER STARTUP AND GRACEFUL SHUTDOWN
 // ============================================================================
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   Logger.info('🚀 Server started successfully', {
     port: PORT,
     environment: process.env.NODE_ENV || 'development',
@@ -451,19 +461,48 @@ const server = app.listen(PORT, () => {
   console.log(`🔑 Multi-factor authentication support enabled`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🛡️  Security status: /api/security/status`);
+
+  // Initialize MCP server after Express server is ready
+  try {
+    const { prisma } = require('./db.js');
+    mcpServer = new EmbeddedMCPServer(app, prisma);
+    await mcpServer.start();
+    console.log(`🤖 MCP Server integrated successfully`);
+    console.log(`🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`❤️ MCP health check: http://localhost:${PORT}/mcp/health`);
+  } catch (error) {
+    console.error('❌ Failed to initialize MCP server:', error);
+    Logger.error('Failed to initialize MCP server', { error: error.message });
+  }
 });
 
 // Enhanced graceful shutdown handling
-const gracefulShutdown = (signal) => {
+const gracefulShutdown = async (signal) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
   Logger.info(`${signal} received. Shutting down gracefully...`);
   
-  server.close(() => {
+  server.close(async () => {
     Logger.info('HTTP server closed');
     console.log('HTTP server closed');
     
+    // Cleanup MCP server
+    if (mcpServer) {
+      try {
+        await mcpServer.cleanup();
+        console.log('🤖 MCP server cleaned up');
+      } catch (error) {
+        console.error('❌ Error cleaning up MCP server:', error);
+      }
+    }
+    
     // Close database connections
-    // prisma.$disconnect() if needed
+    try {
+      const { prisma } = require('./db.js');
+      await prisma.$disconnect();
+      console.log('🗄️ Database connection closed');
+    } catch (error) {
+      console.error('❌ Error closing database connection:', error);
+    }
     
     Logger.info('Process terminated');
     console.log('Process terminated');
