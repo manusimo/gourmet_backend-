@@ -1,0 +1,19 @@
+{
+  "name": "gourmet-jobs-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Gourmet Jobs Platform",
+  "main": "src/mcp/mcpServer.js",
+  "scripts": {
+    "start:mcp": "node src/mcp/startServer.js",
+    "test:mcp": "node src/mcp/testMCP.js",
+    "dev:mcp": "nodemon src/mcp/startServer.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "@prisma/client": "^5.0.0",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}
