@@ -7,15 +7,15 @@ This directory contains all routes that use the Model Context Protocol (MCP) for
 ```
 src/routes/mcp/
 ├── index.js                           # Centralized exports
-├── aiJobCreationMCP.route.js          # Job creation agent routes
-├── aiCallSchedulerMCP.route.js        # Call scheduling agent routes
+├── aiJobCreation.route.js             # Job creation agent routes
+├── aiCallScheduler.route.js           # Call scheduling agent routes
 └── README.md                          # This file
 ```
 
 ## 🛣️ **Available Routes**
 
 ### **1. AI Job Creation Routes**
-- **File**: `aiJobCreationMCP.route.js`
+- **File**: `aiJobCreation.route.js`
 - **Base Path**: `/api/ai-job-creation`
 - **Service**: `AIJobCreationServiceMCP`
 
@@ -25,7 +25,7 @@ src/routes/mcp/
 - `GET /api/ai-job-creation/health` - Health check
 
 ### **2. AI Call Scheduler Routes**
-- **File**: `aiCallSchedulerMCP.route.js`
+- **File**: `aiCallScheduler.route.js`
 - **Base Path**: `/api/ai-call-scheduler`
 - **Service**: `ConversationalCallSchedulerMCP`
 
@@ -38,13 +38,13 @@ src/routes/mcp/
 
 ### **Import Routes**
 ```javascript
-const { aiJobCreationMCPRoutes, aiCallSchedulerMCPRoutes } = require('./routes/mcp');
+const { aiJobCreationRoutes, aiCallSchedulerRoutes } = require('./routes/mcp');
 ```
 
 ### **Register Routes in Main App**
 ```javascript
-app.use('/api/ai-job-creation', aiJobCreationMCPRoutes);
-app.use('/api/ai-call-scheduler', aiCallSchedulerMCPRoutes);
+app.use('/api/ai-job-creation', aiJobCreationRoutes);
+app.use('/api/ai-call-scheduler', aiCallSchedulerRoutes);
 ```
 
 ## ➕ **Adding New MCP Routes**

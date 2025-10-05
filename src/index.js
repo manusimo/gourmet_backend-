@@ -81,7 +81,7 @@ const notificationRoutes = require('./routes/notification.route.js');
 const ragRoutes = require('./routes/rag.route.js');
 
 // Import MCP routes
-const { aiJobCreationMCPRoutes, aiCallSchedulerMCPRoutes } = require('./routes/mcp');
+const { aiJobCreationRoutes, aiCallSchedulerRoutes } = require('./routes/mcp');
 
 // Import MCP
 const EmbeddedMCPServer = require('./mcp/embeddedServer.js');
@@ -319,8 +319,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/rag', ragRoutes);
 
 // MCP Routes
-app.use('/api/ai-job-creation', aiJobCreationMCPRoutes);
-app.use('/api/ai-call-scheduler', aiCallSchedulerMCPRoutes);
+app.use('/api/ai-job-creation', aiJobCreationRoutes);
+app.use('/api/ai-call-scheduler', aiCallSchedulerRoutes);
 
 // ============================================================================
 // EMBEDDED MCP SERVER INTEGRATION

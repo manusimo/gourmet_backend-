@@ -3,10 +3,10 @@
  * Centralized exports for all MCP-related routes
  */
 
-const aiJobCreationMCPRoutes = require('./aiJobCreationMCP.route');
-const aiCallSchedulerMCPRoutes = require('./aiCallSchedulerMCP.route');
+const aiJobCreationRoutes = require('./aiJobCreation.route');
+const aiCallSchedulerRoutes = require('./aiCallScheduler.route');
 
 module.exports = {
-  aiJobCreationMCPRoutes,
-  aiCallSchedulerMCPRoutes
+  aiJobCreationRoutes,
+  aiCallSchedulerRoutes
 };
