@@ -64,6 +64,11 @@ class EmbeddedMCPClient {
   }
 
   // Convenience methods for common operations
+  async processJobCreation(jobCreationData) {
+    const response = await this.callTool('process_job_creation', jobCreationData);
+    return this.parseResponse(response);
+  }
+
   async createJobOffer(jobData) {
     const response = await this.callTool('create_job_offer', jobData);
     return this.parseResponse(response);
