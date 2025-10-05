@@ -3,9 +3,11 @@ const router = express.Router();
 const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../../helpers/cookies.js');
 const { requirePlan } = require('../../middleware/checkPlan.js');
 const { AIJobCreationServiceMCP } = require('../../services/mcp');
+const { prisma } = require('../../db.js');
 
 /**
- * AI Job Creation Routes with MCP Integration
+ * AI Job Creation Routes
+ * Handles natural language job creation with AI processing
  * Requires PRO+ plan for AI agent features
  */
 
@@ -18,93 +20,42 @@ aiJobCreationService.initialize().catch(error => {
 });
 
 /**
- * POST /ai-job-creation-mcp/process - Process job creation message with MCP
+ * POST /process - Process job creation message with AI
+ * @description Analyzes natural language job descriptions and extracts structured data
  */
 router.post('/process', requirePlan(['pro', 'plus', 'premium']), getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
-    console.log('🤖 [AI JOB CREATION MCP] Processing job creation message');
+    const result = await aiJobCreationService.processJobCreationRequest(req.body, req.restaurantUserId);
     
-    const { 
-      message, 
-      conversationHistory = [], 
-      restaurantId,
-      locationId 
-    } = req.body;
-
-    if (!message || !restaurantId) {
-      return res.status(400).json({
-        success: false,
-        error: 'message and restaurantId are required'
-      });
+    if (result.statusCode) {
+      return res.status(result.statusCode).json(result);
     }
-
-    // Get restaurant context
-    const { prisma } = require('../../db.js');
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: parseInt(restaurantId) },
-      include: { user: true }
-    });
-
-    if (!restaurant) {
-      return res.status(404).json({
-        success: false,
-        error: 'Restaurant not found'
-      });
-    }
-
-    const restaurantContext = {
-      id: restaurant.id,
-      name: restaurant.name,
-      userId: req.restaurantUserId,
-      locationId: locationId || 1
-    };
-
-    // Process message with MCP
-    const result = await aiJobCreationService.processMessage(
-      message, 
-      conversationHistory, 
-      restaurantContext
-    );
-
-    console.log('✅ [AI JOB CREATION MCP] Message processed successfully');
-
-    res.status(200).json({
-      success: true,
-      data: result
-    });
-
+    
+    res.json(result);
   } catch (error) {
-    console.error('❌ [AI JOB CREATION MCP] Error processing message:', error);
+    console.error('❌ [AI JOB CREATION] Error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to process job creation message'
+      error: 'Failed to process job creation request'
     });
   }
 });
 
 /**
- * POST /ai-job-creation-mcp/validate - Validate job data
+ * POST /validate - Validate extracted job data
+ * @description Validates job data completeness and structure
  */
 router.post('/validate', requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
   try {
-    const { extractedData } = req.body;
-
-    if (!extractedData) {
-      return res.status(400).json({
-        success: false,
-        error: 'extractedData is required'
-      });
+    const result = await aiJobCreationService.validateJobDataRequest(req.body);
+    
+    if (result.statusCode) {
+      return res.status(result.statusCode).json(result);
     }
-
-    const validation = aiJobCreationService.validateJobData(extractedData);
-
-    res.status(200).json({
-      success: true,
-      validation
-    });
-
+    
+    res.json(result);
   } catch (error) {
-    console.error('❌ [AI JOB CREATION MCP] Error validating job data:', error);
+    console.error('❌ [AI JOB CREATION] Validation error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to validate job data'
@@ -113,14 +64,14 @@ router.post('/validate', requirePlan(['pro', 'plus', 'premium']), async (req, re
 });
 
 /**
- * GET /ai-job-creation-mcp/health - Health check
+ * GET /health - Health check endpoint
+ * @description Checks service health and MCP connection status
  */
 router.get('/health', async (req, res) => {
   try {
-    // Check if MCP client is connected
-    const isConnected = aiJobCreationService.mcpClient.isConnected;
+    const isConnected = aiJobCreationService.mcpClient?.isConnected || false;
     
-    res.status(200).json({
+    res.json({
       success: true,
       status: 'healthy',
       mcpConnected: isConnected,
