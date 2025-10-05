@@ -1,6 +1,6 @@
 const OpenAI = require('openai');
-const EmbeddedMCPClient = require('../mcp/embeddedClient.js');
-const { prisma } = require('../db.js');
+const EmbeddedMCPClient = require('../../mcp/embeddedClient.js');
+const { prisma } = require('../../db.js');
 
 /**
  * Conversational Call Scheduler with MCP Integration

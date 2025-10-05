@@ -1,6 +1,6 @@
 const OpenAI = require('openai');
 const { PrismaClient } = require('@prisma/client');
-const { sendMessageNotification } = require('./emailService');
+const { sendMessageNotification } = require('../emailService');
 
 const prisma = new PrismaClient();
 

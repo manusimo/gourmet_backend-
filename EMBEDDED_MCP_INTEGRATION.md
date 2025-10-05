@@ -13,9 +13,10 @@ Your MCP server is now **fully integrated** into your existing backend as an emb
 - ✅ Automatic startup and graceful shutdown
 
 ### **2. Updated Agents**
-- ✅ `AIJobCreationServiceMCP` now uses `EmbeddedMCPClient`
-- ✅ `ConversationalCallSchedulerMCP` now uses `EmbeddedMCPClient`
+- ✅ `AIJobCreationServiceMCP` now uses `EmbeddedMCPClient` (moved to `src/services/mcp/`)
+- ✅ `ConversationalCallSchedulerMCP` now uses `EmbeddedMCPClient` (moved to `src/services/mcp/`)
 - ✅ Both agents connect to embedded MCP server
+- ✅ Organized in dedicated MCP services directory
 
 ### **3. New Endpoints**
 - ✅ `GET /mcp/health` - MCP server health check
@@ -142,5 +143,30 @@ Your MCP implementation is now:
 - ✅ **Production Ready** - Proper error handling and cleanup
 - ✅ **Scalable** - Easy to add new tools and agents
 - ✅ **Maintainable** - Clean, modular architecture
+
+## 📁 **Updated File Structure**
+
+```
+src/
+├── mcp/                           # MCP Core Components
+│   ├── embeddedServer.js         # Embedded MCP server
+│   ├── embeddedClient.js         # Embedded MCP client
+│   ├── tools/                    # MCP Tools
+│   └── testEmbeddedMCP.js        # Embedded MCP test
+└── services/
+    └── mcp/                      # MCP Services Directory
+        ├── index.js              # Centralized exports
+        ├── aiJobCreationServiceMCP.js
+        ├── conversationalCallSchedulerMCP.js
+        └── README.md
+```
+
+## 🎯 **Organization Benefits**
+
+- ✅ **Clear Separation**: MCP services grouped in dedicated directory
+- ✅ **Easy Discovery**: All MCP services in one place
+- ✅ **Consistent Imports**: Centralized exports via `src/services/mcp/index.js`
+- ✅ **Scalable**: Easy to add new MCP services
+- ✅ **Maintainable**: Clean structure for future development
 
 **The embedded MCP server is ready for your 5-agent ecosystem!** 🚀

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
 const { requirePlan } = require('../middleware/checkPlan.js');
-const AIJobCreationServiceMCP = require('../services/aiJobCreationServiceMCP.js');
+const { AIJobCreationServiceMCP } = require('../services/mcp');
 
 /**
  * AI Job Creation Routes with MCP Integration

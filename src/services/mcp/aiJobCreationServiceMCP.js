@@ -1,6 +1,6 @@
 const OpenAI = require('openai');
-const EmbeddedMCPClient = require('../mcp/embeddedClient.js');
-const ragService = require('./ragService.js');
+const EmbeddedMCPClient = require('../../mcp/embeddedClient.js');
+const ragService = require('../ragService.js');
 
 /**
  * AI Job Creation Service with MCP Integration
