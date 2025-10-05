@@ -3,7 +3,7 @@
  * Central registry for all available MCP tools
  */
 
-const jobTools = require('./jobTools');
+const jobTools = require('./job');
 const schedulingTools = require('./schedulingTools');
 const dataTools = require('./dataTools');
 const notificationTools = require('./notificationTools');

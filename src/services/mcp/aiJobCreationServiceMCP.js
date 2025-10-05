@@ -53,25 +53,6 @@ class AIJobCreationServiceMCP {
     }
   }
 
-  /**
-   * Validate job data request from route handler
-   */
-  async validateJobDataRequest(requestBody) {
-    try {
-      const { extractedData } = requestBody;
-
-      if (!extractedData) {
-        return this.createErrorResponse('Job data is required', 400);
-      }
-
-      const validation = this.validateJobData(extractedData);
-      return { success: true, validation };
-
-    } catch (error) {
-      console.error('❌ [AI JOB CREATION] Validation error:', error);
-      return this.createErrorResponse('Failed to validate job data', 500);
-    }
-  }
 
   /**
    * Initialize MCP connection
@@ -151,17 +132,6 @@ class AIJobCreationServiceMCP {
       name: restaurant.name,
       userId: restaurantUserId,
       locationId: locationId || 1
-    };
-  }
-
-
-  validateJobData(data) {
-    const requiredFields = ['position', 'schedule', 'contract', 'salary', 'description'];
-    const missingFields = requiredFields.filter(field => !data[field] || data[field] === '');
-    
-    return {
-      isValid: missingFields.length === 0,
-      missingFields
     };
   }
 

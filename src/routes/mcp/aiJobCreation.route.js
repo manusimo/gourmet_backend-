@@ -42,28 +42,6 @@ router.post('/process', requirePlan(['pro', 'plus', 'premium']), getUserIdFromCo
 });
 
 /**
- * POST /validate - Validate extracted job data
- * @description Validates job data completeness and structure
- */
-router.post('/validate', requirePlan(['pro', 'plus', 'premium']), async (req, res) => {
-  try {
-    const result = await aiJobCreationService.validateJobDataRequest(req.body);
-    
-    if (result.statusCode) {
-      return res.status(result.statusCode).json(result);
-    }
-    
-    res.json(result);
-  } catch (error) {
-    console.error('❌ [AI JOB CREATION] Validation error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to validate job data'
-    });
-  }
-});
-
-/**
  * GET /health - Health check endpoint
  * @description Checks service health and MCP connection status
  */
