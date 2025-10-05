@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
-const { requirePlan } = require('../middleware/checkPlan.js');
-const { AIJobCreationServiceMCP } = require('../services/mcp');
+const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../../helpers/cookies.js');
+const { requirePlan } = require('../../middleware/checkPlan.js');
+const { AIJobCreationServiceMCP } = require('../../services/mcp');
 
 /**
  * AI Job Creation Routes with MCP Integration
@@ -39,7 +39,7 @@ router.post('/process', requirePlan(['pro', 'plus', 'premium']), getUserIdFromCo
     }
 
     // Get restaurant context
-    const { prisma } = require('../db.js');
+    const { prisma } = require('../../db.js');
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: parseInt(restaurantId) },
       include: { user: true }

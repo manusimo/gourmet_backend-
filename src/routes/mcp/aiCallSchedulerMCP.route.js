@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { prisma } = require('../db.js');
-const { getUserIdFromCookie } = require('../helpers/cookies.js');
-const { ConversationalCallSchedulerMCP } = require('../services/mcp');
+const { prisma } = require('../../db.js');
+const { getUserIdFromCookie } = require('../../helpers/cookies.js');
+const { ConversationalCallSchedulerMCP } = require('../../services/mcp');
 
 /**
  * AI Call Scheduler Routes with MCP Integration

@@ -1,5 +1,5 @@
 const OpenAI = require('openai');
-const ragService = require('./ragService.js');
+const ragService = require('../ragService.js');
 
 /**
  * Enterprise-Grade AI Job Creation Service
@@ -221,22 +221,23 @@ Respuesta:
    * Call OpenAI API with enhanced context
    */
   async callOpenAI(userMessage, conversationHistory, restaurantContext, ragContext) {
-    // Build conversation context
-    const messages = [
-      { role: "system", content: this.systemPrompt },
-      ...conversationHistory,
-      { role: "user", content: userMessage }
-    ];
+    try {
+      // Build conversation context
+      const messages = [
+        { role: "system", content: this.systemPrompt },
+        ...conversationHistory,
+        { role: "user", content: userMessage }
+      ];
 
-    // Add restaurant context if available
-    if (restaurantContext.name) {
-      messages[0].content += `\n\nCONTEXTO DEL RESTAURANTE: ${restaurantContext.name}`;
-    }
+      // Add restaurant context if available
+      if (restaurantContext.name) {
+        messages[0].content += `\n\nCONTEXTO DEL RESTAURANTE: ${restaurantContext.name}`;
+      }
 
-    // Add RAG context if available
-    if (ragContext) {
-      messages[0].content += `\n\nCONTEXTO RELEVANTE DE LA EMPRESA:\n${ragContext}`;
-    }
+      // Add RAG context if available
+      if (ragContext) {
+        messages[0].content += `\n\nCONTEXTO RELEVANTE DE LA EMPRESA:\n${ragContext}`;
+      }
 
       const completion = await this.openai.chat.completions.create({
         model: this.defaultModel,
@@ -478,7 +479,6 @@ Responde en formato JSON:
       };
     }
   }
-}
 
   /**
    * Generate unique request ID for tracking

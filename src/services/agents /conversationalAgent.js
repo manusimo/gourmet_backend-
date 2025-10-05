@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { createMessage } = require('../helpers/chatHelpers.js');
+const { createMessage } = require('../../helpers/chatHelpers.js');
 
 const prisma = new PrismaClient();
 

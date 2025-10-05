@@ -1,4 +1,4 @@
-const { prisma } = require('../db.js');
+const { prisma } = require('../../db.js');
 const OpenAI = require('openai');
 
 // Initialize OpenAI client

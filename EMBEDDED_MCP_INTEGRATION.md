@@ -49,9 +49,9 @@ npm run test:embedded-mcp
 ```
 
 ### **4. Use MCP Routes**
-Your existing MCP routes now work with the embedded server:
-- `POST /api/ai-job-creation-mcp/process`
-- `POST /api/ai-call-scheduler-mcp/schedule-calls`
+Your MCP routes work with the embedded server:
+- `POST /api/ai-job-creation/process`
+- `POST /api/ai-call-scheduler/schedule-calls`
 
 ## 🔧 **Available Tools**
 
@@ -133,7 +133,7 @@ const result = await mcpClient.createJobOffer(jobData);
 
 1. **Start Your Backend**: `npm start`
 2. **Test Integration**: `npm run test:embedded-mcp`
-3. **Use MCP Routes**: Switch to `/api/ai-job-creation-mcp/` and `/api/ai-call-scheduler-mcp/`
+3. **Use MCP Routes**: Use `/api/ai-job-creation/` and `/api/ai-call-scheduler/`
 4. **Add New Agents**: They'll automatically get all MCP tools!
 
 ## 🎉 **Result**
@@ -153,20 +153,27 @@ src/
 │   ├── embeddedClient.js         # Embedded MCP client
 │   ├── tools/                    # MCP Tools
 │   └── testEmbeddedMCP.js        # Embedded MCP test
-└── services/
-    └── mcp/                      # MCP Services Directory
+├── services/
+│   └── mcp/                      # MCP Services Directory
+│       ├── index.js              # Centralized exports
+│       ├── aiJobCreationServiceMCP.js
+│       ├── conversationalCallSchedulerMCP.js
+│       └── README.md
+└── routes/
+    └── mcp/                      # MCP Routes Directory
         ├── index.js              # Centralized exports
-        ├── aiJobCreationServiceMCP.js
-        ├── conversationalCallSchedulerMCP.js
+        ├── aiJobCreationMCP.route.js
+        ├── aiCallSchedulerMCP.route.js
         └── README.md
 ```
 
 ## 🎯 **Organization Benefits**
 
-- ✅ **Clear Separation**: MCP services grouped in dedicated directory
-- ✅ **Easy Discovery**: All MCP services in one place
-- ✅ **Consistent Imports**: Centralized exports via `src/services/mcp/index.js`
-- ✅ **Scalable**: Easy to add new MCP services
+- ✅ **Clear Separation**: MCP services and routes grouped in dedicated directories
+- ✅ **Easy Discovery**: All MCP components in organized locations
+- ✅ **Consistent Imports**: Centralized exports via index.js files
+- ✅ **Scalable**: Easy to add new MCP services and routes
 - ✅ **Maintainable**: Clean structure for future development
+- ✅ **Modular**: Each MCP component has its own directory with documentation
 
 **The embedded MCP server is ready for your 5-agent ecosystem!** 🚀

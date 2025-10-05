@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { processMeetingNotifications } = require('./meetingNotificationService.js');
+const { processMeetingNotifications } = require('../meetingNotificationService.js');
 
 const prisma = new PrismaClient();
 

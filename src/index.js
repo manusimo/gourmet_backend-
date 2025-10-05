@@ -78,10 +78,10 @@ const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
 // const meetingRoutes = require('./routes/meeting.route.js');
 // const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
-const conversationalAgentRoutes = require('./routes/conversationalAgent.route.js');
-const aiCallSchedulerRoutes = require('./routes/aiCallScheduler.route.js');
-const aiJobCreationRoutes = require('./routes/aiJobCreation.route.js');
 const ragRoutes = require('./routes/rag.route.js');
+
+// Import MCP routes
+const { aiJobCreationMCPRoutes, aiCallSchedulerMCPRoutes } = require('./routes/mcp');
 
 // Import MCP
 const EmbeddedMCPServer = require('./mcp/embeddedServer.js');
@@ -316,10 +316,11 @@ app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api', meetingRoutes);
 // app.use('/api', meetingAgentRoutes);
-app.use('/api', conversationalAgentRoutes);
-app.use('/api/ai', aiCallSchedulerRoutes);
-app.use('/api/ai-job-creation', aiJobCreationRoutes);
 app.use('/api/rag', ragRoutes);
+
+// MCP Routes
+app.use('/api/ai-job-creation', aiJobCreationMCPRoutes);
+app.use('/api/ai-call-scheduler', aiCallSchedulerMCPRoutes);
 
 // ============================================================================
 // EMBEDDED MCP SERVER INTEGRATION
