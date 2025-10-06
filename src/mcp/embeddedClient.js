@@ -1,3 +1,13 @@
+// Ensure EventSource exists in Node BEFORE importing MCP SDK, so it picks it up
+try {
+  if (!globalThis.EventSource) {
+    // eslint-disable-next-line global-require
+    const EventSource = require('eventsource');
+    globalThis.EventSource = EventSource;
+  }
+} catch (_) {
+  // If eventsource is not available, the transport will likely fail; user should install it
+}
 const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
 const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js');
 
@@ -7,7 +17,7 @@ const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js'
  */
 class EmbeddedMCPClient {
   constructor(baseUrl = 'http://localhost:3000') {
-    this.baseUrl = baseUrl;
+    this.baseUrl = String(baseUrl || '').trim();
     this.client = new Client(
       {
         name: 'gourmet-jobs-agent',
@@ -23,7 +33,12 @@ class EmbeddedMCPClient {
   async connect() {
     if (this.isConnected) return;
 
-    const transport = new SSEClientTransport(new URL('/mcp', this.baseUrl));
+    const streamUrl = `${this.baseUrl.replace(/\/$/, '')}/mcp/stream`;
+    if (!/^https?:\/\//.test(streamUrl)) {
+      throw new Error(`[MCP Client] Invalid stream URL: ${streamUrl}`);
+    }
+    console.log(`[MCP Client] Connecting to SSE: ${streamUrl}`);
+    const transport = new SSEClientTransport(streamUrl);
     await this.client.connect(transport);
     this.isConnected = true;
     console.log('🔗 [MCP Client] Connected to embedded MCP server');

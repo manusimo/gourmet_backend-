@@ -1,19 +1,20 @@
 // Load environment variables
 require('dotenv').config();
 
-// Add fetch polyfill for Node.js v16
-if (!globalThis.fetch) {
-  const fetch = require('node-fetch');
+// Prefer undici for fetch only; avoid overriding Response/Request/Headers to keep
+// compatibility with libraries (e.g., EventSource) that expect Node stream bodies.
+try {
+  const { fetch } = require('undici');
   globalThis.fetch = fetch;
+} catch (e) {
+  console.warn('⚠️  undici not available, falling back to node-fetch; MCP SSE may not work on Node 16:', e.message);
+  if (!globalThis.fetch) {
+    const fetch = require('node-fetch');
+    globalThis.fetch = fetch;
+  }
 }
 
-// Add Headers polyfill for Node.js v16
-if (!globalThis.Headers) {
-  const { Headers } = require('node-fetch');
-  globalThis.Headers = Headers;
-}
-
-// Add FormData polyfill for Node.js v16
+// Add Web Streams polyfill for Node.js v16
 if (!globalThis.FormData) {
   // Simple FormData polyfill for OpenAI compatibility
   globalThis.FormData = class FormData {
@@ -51,12 +52,25 @@ if (!globalThis.FormData) {
   };
 }
 
+// Ensure WHATWG ReadableStream exists (used by MCP SDK SSE client)
+try {
+  if (!globalThis.ReadableStream) {
+    const { ReadableStream, TransformStream, WritableStream } = require('stream/web');
+    globalThis.ReadableStream = ReadableStream;
+    globalThis.TransformStream = TransformStream;
+    globalThis.WritableStream = WritableStream;
+  }
+} catch (_) {
+  // ignore if not available
+}
+
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const xss = require('xss');
 const cookieParser = require('cookie-parser');
+const compression = require('compression');
 
 // Import middleware
 const { ddosMonitoring } = require('./middleware/ddosMonitoring.js');
@@ -78,19 +92,29 @@ const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
 // const meetingRoutes = require('./routes/meeting.route.js');
 // const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
-const ragRoutes = require('./routes/rag.route.js');
+// Embedded MCP server (conditionally enabled)
+let EmbeddedMCPServer = null;
+if (process.env.MCP_SERVER_ENABLED === 'true') {
+  try {
+    EmbeddedMCPServer = require('./mcp/embeddedServer.js');
+  } catch (e) {
+    console.warn('⚠️  MCP server module unavailable, continuing without it:', e.message);
+    EmbeddedMCPServer = null;
+  }
+}
 
 // Import MCP routes
 const { aiJobCreationRoutes, aiCallSchedulerRoutes } = require('./routes/mcp');
-
-// Import MCP
-const EmbeddedMCPServer = require('./mcp/embeddedServer.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Trust proxy for Heroku (required for rate limiting and IP detection)
 app.set('trust proxy', 1);
+
+// Disable Express compression for SSE and remove x-powered-by header
+app.disable('x-powered-by');
+app.use(compression({ filter: () => false }));
 
 // ============================================================================
 // ENHANCED SECURITY CONFIGURATION
@@ -316,9 +340,6 @@ app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api', meetingRoutes);
 // app.use('/api', meetingAgentRoutes);
-app.use('/api/rag', ragRoutes);
-
-// MCP Routes
 app.use('/api/ai-job-creation', aiJobCreationRoutes);
 app.use('/api/ai-call-scheduler', aiCallSchedulerRoutes);
 
@@ -328,6 +349,17 @@ app.use('/api/ai-call-scheduler', aiCallSchedulerRoutes);
 
 // Initialize MCP server (will be started after database connection)
 let mcpServer = null;
+
+// Register MCP routes BEFORE 404 handler so they are reachable
+if (EmbeddedMCPServer) {
+  try {
+    const { prisma } = require('./db.js');
+    mcpServer = new EmbeddedMCPServer(app, prisma);
+    console.log('🔗 [MCP] Routes registered on Express app');
+  } catch (error) {
+    console.warn('⚠️  Failed to register MCP routes early:', error.message);
+  }
+}
 
 // ============================================================================
 // SECURITY ENDPOINT
@@ -465,12 +497,14 @@ const server = app.listen(PORT, async () => {
 
   // Initialize MCP server after Express server is ready
   try {
-    const { prisma } = require('./db.js');
-    mcpServer = new EmbeddedMCPServer(app, prisma);
-    await mcpServer.start();
-    console.log(`🤖 MCP Server integrated successfully`);
-    console.log(`🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
-    console.log(`❤️ MCP health check: http://localhost:${PORT}/mcp/health`);
+    if (mcpServer) {
+      await mcpServer.start();
+      console.log(`🤖 MCP Server integrated successfully`);
+      console.log(`🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
+      console.log(`❤️ MCP health check: http://localhost:${PORT}/mcp/health`);
+    } else {
+      console.log('ℹ️  MCP server disabled (MCP_SERVER_ENABLED!=true).');
+    }
   } catch (error) {
     console.error('❌ Failed to initialize MCP server:', error);
     Logger.error('Failed to initialize MCP server', { error: error.message });

@@ -124,22 +124,29 @@ Edit `src/mcp/config.js` to adjust:
 
 ## 🚀 **Next Steps**
 
-1. **Install Dependencies**:
+1. **Environment Flag (production-safe)**:
+   - Add `MCP_CLIENT_ENABLED=false` to your environment (recommended default). This keeps the embedded MCP client disabled while the MCP server at `/mcp` remains available. The API uses an in-process tool fallback.
+   - To enable the embedded client later, set `MCP_CLIENT_ENABLED=true` and install the SDK (see below).
+
+2. **Install Dependencies (only if enabling embedded client)**:
    ```bash
-   npm install @modelcontextprotocol/sdk
+   npm install @modelcontextprotocol/sdk --legacy-peer-deps
    ```
 
-2. **Test the Refactored Server**:
+3. **Test the Refactored Server**:
    ```bash
    npm run test:mcp
    ```
 
-3. **Start Using**:
+4. **Start Using**:
    ```bash
    npm run start:mcp
    ```
 
-4. **Add Your Next 3 Agents** - they'll automatically get all tools!
+5. **External Client (optional, no backend deps)**:
+   - You can test MCP end-to-end with a tiny client outside this repo connecting to `http://localhost:3000/mcp`. This avoids backend dependency conflicts and is production-safe.
+
+6. **Add Your Next 3 Agents** - they'll automatically get all tools!
 
 ## 🎉 **Result**
 

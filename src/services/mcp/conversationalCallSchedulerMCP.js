@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
-const EmbeddedMCPClient = require('../../mcp/embeddedClient.js');
 const { prisma } = require('../../db.js');
+
+const MCP_CLIENT_ENABLED = process.env.MCP_CLIENT_ENABLED === 'true';
 
 /**
  * Conversational Call Scheduler with MCP Integration
@@ -17,8 +18,18 @@ class ConversationalCallSchedulerMCP {
     this.temperature = 0.7;
     this.conversationContexts = new Map(); // Store conversation contexts
     
-    // Initialize MCP client
-    this.mcpClient = new EmbeddedMCPClient();
+    // Initialize MCP client conditionally
+    this.mcpClient = null;
+    if (MCP_CLIENT_ENABLED) {
+      try {
+        // eslint-disable-next-line global-require, import/no-dynamic-require
+        const EmbeddedMCPClient = require('../../mcp/embeddedClient.js');
+        this.mcpClient = new EmbeddedMCPClient();
+      } catch (e) {
+        console.warn('⚠️  [CONVERSATIONAL CALL SCHEDULER MCP] MCP client unavailable:', e.message);
+        this.mcpClient = null;
+      }
+    }
   }
 
   /**
@@ -67,7 +78,7 @@ class ConversationalCallSchedulerMCP {
       const savedMessage = await this.saveAIMessage(conversationId, aiResponse, candidateMessage);
 
       // Check if call is scheduled
-      if (context.stage === 'scheduled') {
+      if (context.stage === 'scheduled' && this.mcpClient) {
         await this.createScheduledCallViaMCP(conversationId, context.confirmedTime, candidateName, candidateEmail);
       }
 
@@ -258,6 +269,7 @@ Responde de manera natural y conversacional.`;
   async createScheduledCallViaMCP(conversationId, confirmedTime, candidateName, candidateEmail) {
     try {
       console.log(`📅 [AI AGENT MCP] Creating scheduled call for ${candidateName} at ${confirmedTime}`);
+      if (!this.mcpClient) return { success: false, error: 'MCP client unavailable' };
       
       // Get conversation details
       const conversation = await prisma.conversation.findUnique({
@@ -369,12 +381,16 @@ Responde de manera natural y conversacional.`;
    * Initialize MCP connection
    */
   async initialize() {
-    try {
-      await this.mcpClient.connect();
-      console.log('✅ [CONVERSATIONAL CALL SCHEDULER MCP] MCP client initialized');
-    } catch (error) {
-      console.error('❌ [CONVERSATIONAL CALL SCHEDULER MCP] Failed to initialize MCP client:', error);
-      throw error;
+    if (this.mcpClient) {
+      try {
+        await this.mcpClient.connect();
+        console.log('✅ [CONVERSATIONAL CALL SCHEDULER MCP] MCP client initialized');
+      } catch (error) {
+        console.error('❌ [CONVERSATIONAL CALL SCHEDULER MCP] Failed to initialize MCP client:', error);
+        throw error;
+      }
+    } else {
+      console.warn('⚠️  [CONVERSATIONAL CALL SCHEDULER MCP] MCP client is disabled or unavailable.');
     }
   }
 
@@ -382,11 +398,13 @@ Responde de manera natural y conversacional.`;
    * Cleanup MCP connection
    */
   async cleanup() {
-    try {
-      await this.mcpClient.disconnect();
-      console.log('✅ [CONVERSATIONAL CALL SCHEDULER MCP] MCP client disconnected');
-    } catch (error) {
-      console.error('❌ [CONVERSATIONAL CALL SCHEDULER MCP] Error disconnecting MCP client:', error);
+    if (this.mcpClient) {
+      try {
+        await this.mcpClient.disconnect();
+        console.log('✅ [CONVERSATIONAL CALL SCHEDULER MCP] MCP client disconnected');
+      } catch (error) {
+        console.error('❌ [CONVERSATIONAL CALL SCHEDULER MCP] Error disconnecting MCP client:', error);
+      }
     }
   }
 }
