@@ -1,5 +1,5 @@
 const { OpenAI } = require('openai');
-const { prisma } = require('../db.js');
+const { prisma } = require('../../db.js');
 
 /**
  * Enterprise-Grade RAG Service
@@ -7,12 +7,19 @@ const { prisma } = require('../db.js');
  */
 class RAGService {
   constructor() {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    this.openai = null;
     this.embeddingModel = 'text-embedding-3-small';
     this.minSimilarityThreshold = 0.7;
     this.maxContextLength = 2000; // Prevent context overflow
     this.maxRetries = 3;
     this.timeout = 30000; // 30 seconds
+  }
+
+  getOpenAI() {
+    if (!this.openai) {
+      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    }
+    return this.openai;
   }
 
   /**
@@ -22,7 +29,7 @@ class RAGService {
    */
   async createEmbedding(text) {
     try {
-      const response = await this.openai.embeddings.create({
+      const response = await this.getOpenAI().embeddings.create({
         model: this.embeddingModel,
         input: text.trim()
       });

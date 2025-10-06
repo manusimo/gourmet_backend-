@@ -3,6 +3,7 @@ const BaseTool = require('../baseTool');
 const OpenAI = require('openai');
 const { JOB_CREATION_SYSTEM_PROMPT } = require('./aiPrompts');
 const JobDataCleaner = require('./dataCleaner');
+const { JobRAGService } = require('../../../services/rag');
 
 /**
  * Process Job Creation Tool - Pure MCP approach
@@ -25,6 +26,7 @@ class ProcessJobCreationTool extends BaseTool {
     );
     
     this.openai = null;
+    this.ragService = new JobRAGService();
   }
 
   getOpenAI() {
@@ -42,10 +44,13 @@ class ProcessJobCreationTool extends BaseTool {
     try {
       console.log('🤖 [MCP] Processing job creation request:', userMessage);
       
-      // Build messages for OpenAI
-      const messages = this.buildMessages(userMessage, conversationHistory, restaurantContext);
+      // Get RAG context for enhanced job creation
+      const ragContext = await this.getRAGContext(userMessage, restaurantContext);
+      
+      // Build messages for OpenAI with RAG context
+      const messages = this.buildMessages(userMessage, conversationHistory, restaurantContext, ragContext);
 
-      // Call OpenAI
+      // Call OpenAI with enhanced context
       const aiResponse = await this.callOpenAI(messages);
       
       // Clean extracted data
@@ -66,17 +71,38 @@ class ProcessJobCreationTool extends BaseTool {
     }
   }
 
-  buildMessages(userMessage, conversationHistory, restaurantContext) {
+  async getRAGContext(userMessage, restaurantContext) {
+    try {
+      // Use job-specific RAG service for enhanced context
+      const ragResult = await this.ragService.getJobCreationContext(userMessage, restaurantContext);
+      
+      console.log(`📚 [Job-RAG] Retrieved ${ragResult.sources.length} job-related documents`);
+      
+      return ragResult;
+    } catch (error) {
+      console.error('❌ [Job-RAG] Error retrieving context:', error);
+      return { context: '', sources: [] };
+    }
+  }
+
+  buildMessages(userMessage, conversationHistory, restaurantContext, ragContext) {
+    let systemPrompt = JOB_CREATION_SYSTEM_PROMPT;
+    
+    // Add restaurant context
+    if (restaurantContext.name) {
+      systemPrompt += `\n\nCONTEXTO DEL RESTAURANTE: ${restaurantContext.name}`;
+    }
+    
+    // Add RAG context if available
+    if (ragContext.context && ragContext.context.trim()) {
+      systemPrompt += `\n\nCONTEXTO ENRIQUECIDO (RAG):\n${ragContext.context}`;
+    }
+
     const messages = [
-      { role: "system", content: JOB_CREATION_SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       ...conversationHistory,
       { role: "user", content: userMessage }
     ];
-
-    // Add restaurant context
-    if (restaurantContext.name) {
-      messages[0].content += `\n\nCONTEXTO DEL RESTAURANTE: ${restaurantContext.name}`;
-    }
 
     return messages;
   }
