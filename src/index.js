@@ -145,6 +145,19 @@ app.use(performanceMonitoring);
 // Apply enhanced security middleware to all routes
 app.use(enhancedSecurityMiddleware);
 
+// Initialize MCP server BEFORE JSON parsing middleware
+// This ensures MCP routes can handle raw request bodies
+let mcpServer = null;
+if (EmbeddedMCPServer) {
+  try {
+    const { prisma } = require('./db.js');
+    mcpServer = new EmbeddedMCPServer(app, prisma);
+    console.log('🔗 [MCP] Routes registered on Express app (before JSON parsing)');
+  } catch (error) {
+    console.warn('⚠️  Failed to register MCP routes early:', error.message);
+  }
+}
+
 // Enhanced XSS Protection middleware
 const xssMiddleware = (req, res, next) => {
   if (req.body && typeof req.body === 'object') {
@@ -291,8 +304,14 @@ const mfaLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply general rate limiting to all routes
-app.use(generalLimiter);
+// Apply general rate limiting to all routes EXCEPT MCP endpoints
+app.use((req, res, next) => {
+  // Skip rate limiting for MCP endpoints
+  if (req.path.startsWith('/mcp/')) {
+    return next();
+  }
+  return generalLimiter(req, res, next);
+});
 
 // Apply specific rate limiting to vulnerable endpoints
 app.use('/api/signin', authLimiter);
@@ -347,19 +366,7 @@ app.use('/api/ai-call-scheduler', aiCallSchedulerRoutes);
 // EMBEDDED MCP SERVER INTEGRATION
 // ============================================================================
 
-// Initialize MCP server (will be started after database connection)
-let mcpServer = null;
-
-// Register MCP routes BEFORE 404 handler so they are reachable
-if (EmbeddedMCPServer) {
-  try {
-    const { prisma } = require('./db.js');
-    mcpServer = new EmbeddedMCPServer(app, prisma);
-    console.log('🔗 [MCP] Routes registered on Express app');
-  } catch (error) {
-    console.warn('⚠️  Failed to register MCP routes early:', error.message);
-  }
-}
+// MCP server already initialized above (before JSON parsing)
 
 // ============================================================================
 // SECURITY ENDPOINT

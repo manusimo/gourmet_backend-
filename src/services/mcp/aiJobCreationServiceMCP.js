@@ -11,6 +11,7 @@ class AIJobCreationServiceMCP {
   constructor() {
     this.mcpClient = null;
     this.mcpAvailable = false;
+    this.initializationPromise = null;
     this.initializeMCPClient();
   }
 
@@ -32,6 +33,9 @@ class AIJobCreationServiceMCP {
       const EmbeddedMCPClient = require('../../mcp/embeddedClient.js');
       this.mcpClient = new EmbeddedMCPClient();
       this.mcpAvailable = true;
+      
+      // Initialize asynchronously to prevent blocking constructor
+      this.initializationPromise = this.initialize();
     } catch (error) {
       console.warn('⚠️  [AI JOB CREATION MCP] MCP client unavailable, falling back to direct tool handler:', error.message);
       this.mcpClient = null;
@@ -54,6 +58,11 @@ class AIJobCreationServiceMCP {
       const validation = this.validateRequestInput(message, restaurantId);
       if (!validation.isValid) {
         return this.createErrorResponse(validation.error, validation.statusCode);
+      }
+
+      // Wait for MCP initialization to complete if it's in progress
+      if (this.initializationPromise) {
+        await this.initializationPromise;
       }
 
       // Get restaurant context
@@ -87,7 +96,13 @@ class AIJobCreationServiceMCP {
       }
     } catch (error) {
       console.error('❌ [AI JOB CREATION MCP] Failed to initialize MCP client:', error);
-      throw error;
+      
+      // Mark MCP as unavailable on connection failure
+      this.mcpAvailable = false;
+      this.mcpClient = null;
+      
+      // Don't throw the error - allow fallback to work
+      console.log('🔄 [AI JOB CREATION MCP] Falling back to direct tool execution');
     }
   }
 
@@ -102,6 +117,10 @@ class AIJobCreationServiceMCP {
       }
     } catch (error) {
       console.error('❌ [AI JOB CREATION MCP] Error disconnecting MCP client:', error);
+    } finally {
+      this.mcpAvailable = false;
+      this.mcpClient = null;
+      this.initializationPromise = null;
     }
   }
 
@@ -114,24 +133,32 @@ class AIJobCreationServiceMCP {
    */
   async processMessage(userMessage, conversationHistory = [], restaurantContext = {}) {
     try {
-      console.log('🤖 [AI JOB CREATION MCP] Processing message via MCP:', userMessage);
+      console.log('🤖 [AI JOB CREATION MCP] Processing message:', userMessage);
 
+      // Try MCP client first if available and healthy
       if (this.mcpAvailable && this.mcpClient) {
-        // Use MCP client when available
-        const mcpResult = await this.mcpClient.processJobCreation({
-          userMessage,
-          conversationHistory,
-          restaurantContext
-        });
-        return mcpResult;
+        try {
+          console.log('🔄 [AI JOB CREATION MCP] Using MCP client');
+          const mcpResult = await this.mcpClient.processJobCreation({
+            userMessage,
+            conversationHistory,
+            restaurantContext
+          });
+          return mcpResult;
+        } catch (mcpError) {
+          console.warn('⚠️  [AI JOB CREATION MCP] MCP client failed, falling back to direct handler:', mcpError.message);
+          this.mcpAvailable = false; // Disable MCP on failure
+        }
       }
 
       // Fallback: call the tool handler directly in-process
+      console.log('🔄 [AI JOB CREATION MCP] Using direct tool handler fallback');
       const handler = getToolHandler('process_job_creation');
       if (!handler) {
         console.error('❌ [AI JOB CREATION MCP] process_job_creation handler not found');
         return this.createErrorAIResponse();
       }
+      
       const response = await handler({ userMessage, conversationHistory, restaurantContext }, { prisma });
       return this.parseMCPStyleResponse(response);
 
@@ -197,10 +224,39 @@ class AIJobCreationServiceMCP {
       }
       const txt = response?.content?.[0]?.text;
       if (!txt) return this.createErrorAIResponse();
-      return JSON.parse(txt);
+      
+      // Handle both stringified JSON and direct object responses
+      if (typeof txt === 'string') {
+        return JSON.parse(txt);
+      } else if (typeof txt === 'object') {
+        return txt;
+      } else {
+        return this.createErrorAIResponse();
+      }
     } catch (e) {
       console.error('❌ [AI JOB CREATION MCP] Failed to parse tool response:', e);
       return this.createErrorAIResponse();
+    }
+  }
+
+  /**
+   * Health check for MCP client
+   */
+  async healthCheck() {
+    if (!this.mcpAvailable || !this.mcpClient) {
+      return { healthy: false, reason: 'MCP client not available' };
+    }
+
+    try {
+      // Add a simple health check method to your embeddedClient if needed
+      if (typeof this.mcpClient.healthCheck === 'function') {
+        return await this.mcpClient.healthCheck();
+      }
+      
+      // If no health check method, assume healthy if client exists
+      return { healthy: true };
+    } catch (error) {
+      return { healthy: false, reason: error.message };
     }
   }
 }
