@@ -6,7 +6,9 @@
   "scripts": {
     "test": "jest",
     "start": "node src/index.js",
-    "dev": "npx nodemon src/index.js"
+    "dev": "npx nodemon src/index.js",
+    "mcp-server": "node src/mcp/startMCP.js",
+    "dev:mcp": "MCP_CLIENT_ENABLED=true MCP_DEBUG=true npx nodemon src/index.js"
   },
   "keywords": [],
   "author": "",

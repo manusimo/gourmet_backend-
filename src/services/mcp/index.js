@@ -4,9 +4,7 @@
  */
 
 const AIJobCreationServiceMCP = require('./aiJobCreationServiceMCP');
-const ConversationalCallSchedulerMCP = require('./conversationalCallSchedulerMCP');
 
 module.exports = {
-  AIJobCreationServiceMCP,
-  ConversationalCallSchedulerMCP
+  AIJobCreationServiceMCP
 };

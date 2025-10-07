@@ -2,17 +2,29 @@ const { prisma } = require('../../db.js');
 const { getToolHandler } = require('../../mcp/tools');
 
 const MCP_CLIENT_ENABLED = process.env.MCP_CLIENT_ENABLED === 'true';
+const MCP_DEBUG = process.env.MCP_DEBUG === 'true';
+const withTs = (level, parts) => {
+  const ts = new Date().toISOString();
+  // eslint-disable-next-line no-console
+  console[level](`[${ts}]`, ...parts);
+};
+const dbg = (...parts) => {
+  if (MCP_DEBUG) withTs('log', ['🐛 [AI JOB CREATION MCP DEBUG]', ...parts]);
+};
 
 /**
  * AI Job Creation Service with MCP Integration
  * Clean, organized service for handling job creation requests
  */
+
 class AIJobCreationServiceMCP {
+  
   constructor() {
     this.mcpClient = null;
     this.mcpAvailable = false;
     this.initializationPromise = null;
     this.initializeMCPClient();
+    dbg('Service constructed. MCP_CLIENT_ENABLED:', MCP_CLIENT_ENABLED);
   }
 
   // ============================================================================
@@ -21,23 +33,30 @@ class AIJobCreationServiceMCP {
 
   initializeMCPClient() {
     if (!MCP_CLIENT_ENABLED) {
-      console.log('ℹ️  [AI JOB CREATION MCP] Embedded MCP client disabled (MCP_CLIENT_ENABLED=false). Using fallback.');
+      console.log('ℹ️  [AI JOB CREATION MCP] MCP client disabled (MCP_CLIENT_ENABLED=false). Using fallback.');
       this.mcpClient = null;
       this.mcpAvailable = false;
       return;
     }
 
     try {
-      // Lazy-require to avoid crashing if SDK/client is missing
+      // Use real MCP client (connects to MCP server)
       // eslint-disable-next-line global-require, import/no-dynamic-require
-      const EmbeddedMCPClient = require('../../mcp/embeddedClient.js');
-      this.mcpClient = new EmbeddedMCPClient();
+      const MCPClient = require('../../mcp/standaloneClient.js');
+      console.log('🔗 [AI JOB CREATION MCP] Using MCP client');
+      
+      this.mcpClient = new MCPClient();
       this.mcpAvailable = true;
+      dbg('MCP client created. Status:', this.mcpClient.getStatus?.());
       
       // Initialize asynchronously to prevent blocking constructor
       this.initializationPromise = this.initialize();
     } catch (error) {
-      console.warn('⚠️  [AI JOB CREATION MCP] MCP client unavailable, falling back to direct tool handler:', error.message);
+      if (MCP_DEBUG) {
+        withTs('warn', ['⚠️  [AI JOB CREATION MCP] MCP client unavailable (stack):', error]);
+      } else {
+        console.warn('⚠️  [AI JOB CREATION MCP] MCP client unavailable, falling back to direct tool handler:', error.message);
+      }
       this.mcpClient = null;
       this.mcpAvailable = false;
     }
@@ -89,13 +108,29 @@ class AIJobCreationServiceMCP {
   async initialize() {
     try {
       if (this.mcpAvailable && this.mcpClient) {
+        dbg('Initializing MCP client connection...');
         await this.mcpClient.connect();
+        const status = this.mcpClient.getStatus?.();
         console.log('✅ [AI JOB CREATION MCP] MCP client initialized');
+        dbg('MCP client status after init:', status);
+
+        // Wait briefly until connection is actually healthy
+        const becameHealthy = await (this.mcpClient.waitUntilConnected?.(8000) || Promise.resolve(false));
+        if (!becameHealthy) {
+          const postHealth = this.mcpClient.getStatus?.();
+          console.warn('⚠️  [AI JOB CREATION MCP] MCP client not healthy after init; will fallback on failure', postHealth);
+        } else {
+          dbg('MCP client confirmed healthy after init');
+        }
       } else {
         console.log('ℹ️  [AI JOB CREATION MCP] Using direct tool handler fallback');
       }
     } catch (error) {
-      console.error('❌ [AI JOB CREATION MCP] Failed to initialize MCP client:', error);
+      if (MCP_DEBUG) {
+        withTs('error', ['❌ [AI JOB CREATION MCP] Failed to initialize MCP client (stack):', error]);
+      } else {
+        console.error('❌ [AI JOB CREATION MCP] Failed to initialize MCP client:', error.message || error);
+      }
       
       // Mark MCP as unavailable on connection failure
       this.mcpAvailable = false;
@@ -116,7 +151,11 @@ class AIJobCreationServiceMCP {
         console.log('✅ [AI JOB CREATION MCP] MCP client disconnected');
       }
     } catch (error) {
-      console.error('❌ [AI JOB CREATION MCP] Error disconnecting MCP client:', error);
+      if (MCP_DEBUG) {
+        withTs('error', ['❌ [AI JOB CREATION MCP] Error disconnecting MCP client (stack):', error]);
+      } else {
+        console.error('❌ [AI JOB CREATION MCP] Error disconnecting MCP client:', error.message || error);
+      }
     } finally {
       this.mcpAvailable = false;
       this.mcpClient = null;
@@ -134,19 +173,26 @@ class AIJobCreationServiceMCP {
   async processMessage(userMessage, conversationHistory = [], restaurantContext = {}) {
     try {
       console.log('🤖 [AI JOB CREATION MCP] Processing message:', userMessage);
+      dbg('Context:', { conversationHistoryPreview: Array.isArray(conversationHistory) ? conversationHistory.length : typeof conversationHistory, restaurantContext });
 
       // Try MCP client first if available and healthy
       if (this.mcpAvailable && this.mcpClient) {
         try {
           console.log('🔄 [AI JOB CREATION MCP] Using MCP client');
+          dbg('Calling processJobCreation via MCP client...');
           const mcpResult = await this.mcpClient.processJobCreation({
             userMessage,
             conversationHistory,
             restaurantContext
           });
+          dbg('MCP result:', mcpResult);
           return mcpResult;
         } catch (mcpError) {
-          console.warn('⚠️  [AI JOB CREATION MCP] MCP client failed, falling back to direct handler:', mcpError.message);
+          if (MCP_DEBUG) {
+            withTs('warn', ['⚠️  [AI JOB CREATION MCP] MCP client failed (stack):', mcpError]);
+          } else {
+            console.warn('⚠️  [AI JOB CREATION MCP] MCP client failed, falling back to direct handler:', mcpError.message);
+          }
           this.mcpAvailable = false; // Disable MCP on failure
         }
       }
@@ -159,11 +205,17 @@ class AIJobCreationServiceMCP {
         return this.createErrorAIResponse();
       }
       
+      dbg('Invoking direct tool handler process_job_creation...');
       const response = await handler({ userMessage, conversationHistory, restaurantContext }, { prisma });
+      dbg('Direct handler response envelope:', response);
       return this.parseMCPStyleResponse(response);
 
     } catch (error) {
-      console.error('❌ [AI JOB CREATION MCP] Error processing message:', error);
+      if (MCP_DEBUG) {
+        withTs('error', ['❌ [AI JOB CREATION MCP] Error processing message (stack):', error]);
+      } else {
+        console.error('❌ [AI JOB CREATION MCP] Error processing message:', error.message || error);
+      }
       return this.createErrorAIResponse();
     }
   }

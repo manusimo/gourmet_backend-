@@ -1,57 +1,6 @@
 // Load environment variables
 require('dotenv').config();
 
-// Prefer undici for fetch only; avoid overriding Response/Request/Headers to keep
-// compatibility with libraries (e.g., EventSource) that expect Node stream bodies.
-try {
-  const { fetch } = require('undici');
-  globalThis.fetch = fetch;
-} catch (e) {
-  console.warn('⚠️  undici not available, falling back to node-fetch; MCP SSE may not work on Node 16:', e.message);
-  if (!globalThis.fetch) {
-    const fetch = require('node-fetch');
-    globalThis.fetch = fetch;
-  }
-}
-
-// Add Web Streams polyfill for Node.js v16
-if (!globalThis.FormData) {
-  // Simple FormData polyfill for OpenAI compatibility
-  globalThis.FormData = class FormData {
-    constructor() {
-      this.data = new Map();
-    }
-    
-    append(key, value) {
-      this.data.set(key, value);
-    }
-    
-    get(key) {
-      return this.data.get(key);
-    }
-    
-    has(key) {
-      return this.data.has(key);
-    }
-    
-    delete(key) {
-      return this.data.delete(key);
-    }
-    
-    entries() {
-      return this.data.entries();
-    }
-    
-    keys() {
-      return this.data.keys();
-    }
-    
-    values() {
-      return this.data.values();
-    }
-  };
-}
-
 // Ensure WHATWG ReadableStream exists (used by MCP SDK SSE client)
 try {
   if (!globalThis.ReadableStream) {
@@ -92,19 +41,9 @@ const csrfProtectionRoutes = require('./routes/csrfProtection.route.js');
 const notificationRoutes = require('./routes/notification.route.js');
 // const meetingRoutes = require('./routes/meeting.route.js');
 // const meetingAgentRoutes = require('./routes/meetingAgent.route.js');
-// Embedded MCP server (conditionally enabled)
-let EmbeddedMCPServer = null;
-if (process.env.MCP_SERVER_ENABLED === 'true') {
-  try {
-    EmbeddedMCPServer = require('./mcp/embeddedServer.js');
-  } catch (e) {
-    console.warn('⚠️  MCP server module unavailable, continuing without it:', e.message);
-    EmbeddedMCPServer = null;
-  }
-}
+// MCP server is now standalone - no embedded server needed
 
-// Import MCP routes
-const { aiJobCreationRoutes, aiCallSchedulerRoutes } = require('./routes/mcp');
+// MCP routes will be mounted after server starts
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -147,16 +86,7 @@ app.use(enhancedSecurityMiddleware);
 
 // Initialize MCP server BEFORE JSON parsing middleware
 // This ensures MCP routes can handle raw request bodies
-let mcpServer = null;
-if (EmbeddedMCPServer) {
-  try {
-    const { prisma } = require('./db.js');
-    mcpServer = new EmbeddedMCPServer(app, prisma);
-    console.log('🔗 [MCP] Routes registered on Express app (before JSON parsing)');
-  } catch (error) {
-    console.warn('⚠️  Failed to register MCP routes early:', error.message);
-  }
-}
+// MCP server is standalone - no embedded server needed
 
 // Enhanced XSS Protection middleware
 const xssMiddleware = (req, res, next) => {
@@ -359,8 +289,7 @@ app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api', meetingRoutes);
 // app.use('/api', meetingAgentRoutes);
-app.use('/api/ai-job-creation', aiJobCreationRoutes);
-app.use('/api/ai-call-scheduler', aiCallSchedulerRoutes);
+// app.use('/api/ai-job-creation', aiJobCreationRoutes); // Mounted after MCP server starts
 
 // ============================================================================
 // EMBEDDED MCP SERVER INTEGRATION
@@ -502,19 +431,13 @@ const server = app.listen(PORT, async () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🛡️  Security status: /api/security/status`);
 
-  // Initialize MCP server after Express server is ready
+  // Mount AI Job Creation routes (connects to standalone MCP server)
   try {
-    if (mcpServer) {
-      await mcpServer.start();
-      console.log(`🤖 MCP Server integrated successfully`);
-      console.log(`🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
-      console.log(`❤️ MCP health check: http://localhost:${PORT}/mcp/health`);
-    } else {
-      console.log('ℹ️  MCP server disabled (MCP_SERVER_ENABLED!=true).');
-    }
-  } catch (error) {
-    console.error('❌ Failed to initialize MCP server:', error);
-    Logger.error('Failed to initialize MCP server', { error: error.message });
+    const { aiJobCreationRoutes } = require('./routes/mcp');
+    app.use('/api/ai-job-creation', aiJobCreationRoutes);
+    console.log('🧭 AI Job Creation routes mounted');
+  } catch (e) {
+    console.error('❌ Failed to mount AI Job Creation routes:', e);
   }
 });
 
@@ -527,15 +450,7 @@ const gracefulShutdown = async (signal) => {
     Logger.info('HTTP server closed');
     console.log('HTTP server closed');
     
-    // Cleanup MCP server
-    if (mcpServer) {
-      try {
-        await mcpServer.cleanup();
-        console.log('🤖 MCP server cleaned up');
-      } catch (error) {
-        console.error('❌ Error cleaning up MCP server:', error);
-      }
-    }
+    // MCP server is standalone - no cleanup needed
     
     // Close database connections
     try {

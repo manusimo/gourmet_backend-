@@ -4,9 +4,7 @@
  */
 
 const aiJobCreationRoutes = require('./aiJobCreation.route');
-const aiCallSchedulerRoutes = require('./aiCallScheduler.route');
 
 module.exports = {
-  aiJobCreationRoutes,
-  aiCallSchedulerRoutes
+  aiJobCreationRoutes
 };

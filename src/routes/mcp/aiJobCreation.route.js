@@ -14,16 +14,13 @@ const { prisma } = require('../../db.js');
 // Initialize MCP service
 const aiJobCreationService = new AIJobCreationServiceMCP();
 
-// Initialize MCP connection on startup
-aiJobCreationService.initialize().catch(error => {
-  console.error('❌ [AI JOB CREATION MCP] Failed to initialize:', error);
-});
+// Note: client initialization is handled internally by the service constructor
 
 /**
  * POST /process - Process job creation message with AI
  * @description Analyzes natural language job descriptions and extracts structured data
  */
-router.post('/process', requirePlan(['pro', 'plus', 'premium']), getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+router.post('/process', getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const result = await aiJobCreationService.processJobCreationRequest(req.body, req.restaurantUserId);
     
@@ -47,12 +44,17 @@ router.post('/process', requirePlan(['pro', 'plus', 'premium']), getUserIdFromCo
  */
 router.get('/health', async (req, res) => {
   try {
-    const isConnected = aiJobCreationService.mcpClient?.isConnected || false;
+    const client = aiJobCreationService.mcpClient;
+    const isConnected = client?.isConnected || false;
+    const status = client?.getStatus ? client.getStatus() : { isConnected };
+    const health = client?.healthCheck ? await client.healthCheck() : { healthy: false, reason: 'No client' };
     
     res.json({
       success: true,
       status: 'healthy',
       mcpConnected: isConnected,
+      mcpStatus: status,
+      mcpHealth: health,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
