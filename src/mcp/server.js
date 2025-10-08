@@ -86,13 +86,18 @@ class GourmetMCPServer {
         });
         
         return {
+          isError: true,
           content: [
             {
-              type: 'text',
-              text: `Error: ${error.message}`
+              type: 'json',
+              json: {
+                error: error.message,
+                stack: error.stack,
+                executionTime: `${executionTime}ms`,
+                timestamp: new Date().toISOString()
+              }
             }
-          ],
-          isError: true
+          ]
         };
       }
     });

@@ -289,7 +289,15 @@ app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
 // app.use('/api', meetingRoutes);
 // app.use('/api', meetingAgentRoutes);
-// app.use('/api/ai-job-creation', aiJobCreationRoutes); // Mounted after MCP server starts
+
+// Mount AI Job Creation routes (MCP routes)
+try {
+  const { aiJobCreationRoutes } = require('./routes/mcp');
+  app.use('/api/ai-job-creation', aiJobCreationRoutes);
+  console.log('🧭 AI Job Creation routes mounted');
+} catch (e) {
+  console.error('❌ Failed to mount AI Job Creation routes:', e);
+}
 
 // ============================================================================
 // EMBEDDED MCP SERVER INTEGRATION
@@ -431,14 +439,7 @@ const server = app.listen(PORT, async () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🛡️  Security status: /api/security/status`);
 
-  // Mount AI Job Creation routes (connects to standalone MCP server)
-  try {
-    const { aiJobCreationRoutes } = require('./routes/mcp');
-    app.use('/api/ai-job-creation', aiJobCreationRoutes);
-    console.log('🧭 AI Job Creation routes mounted');
-  } catch (e) {
-    console.error('❌ Failed to mount AI Job Creation routes:', e);
-  }
+  // MCP routes are now mounted above with other routes
 });
 
 // Enhanced graceful shutdown handling

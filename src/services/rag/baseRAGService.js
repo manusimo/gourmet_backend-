@@ -18,7 +18,10 @@ class BaseRAGService {
 
   getOpenAI() {
     if (!this.openai) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      this.openai = new OpenAI({ 
+        apiKey: process.env.OPENAI_API_KEY,
+        fetch: fetch // Pass fetch explicitly
+      });
     }
     return this.openai;
   }

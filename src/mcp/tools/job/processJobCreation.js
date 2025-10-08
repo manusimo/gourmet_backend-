@@ -33,6 +33,7 @@ class ProcessJobCreationTool extends BaseTool {
     if (!this.openai) {
       this.openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
+        fetch: fetch, // Pass fetch explicitly
       });
     }
     return this.openai;
@@ -42,32 +43,90 @@ class ProcessJobCreationTool extends BaseTool {
     const { userMessage, conversationHistory = [], restaurantContext } = args;
     
     try {
-      console.log('🤖 [MCP] Processing job creation request:', userMessage);
+      console.log('🤖 [MCP] Processing job creation request:', {
+        userMessage,
+        conversationHistoryLength: conversationHistory.length,
+        restaurantContext: restaurantContext ? 'present' : 'missing',
+        hasPrisma: !!prisma
+      });
       
-      // Get RAG context for enhanced job creation
-      const ragContext = await this.getRAGContext(userMessage, restaurantContext);
+      // Check OpenAI API key
+      const apiKey = process.env.OPENAI_API_KEY;
+      console.log('🔑 [MCP] OpenAI API Key check:', {
+        hasApiKey: !!apiKey,
+        keyLength: apiKey ? apiKey.length : 0,
+        keyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'none'
+      });
       
-      // Build messages for OpenAI with RAG context
-      const messages = this.buildMessages(userMessage, conversationHistory, restaurantContext, ragContext);
+      // Try to get RAG context, but don't fail if it doesn't work
+      console.log('📚 [MCP] Getting RAG context...');
+      let ragContext = { context: '', sources: [] };
+      try {
+        ragContext = await this.getRAGContext(userMessage, restaurantContext);
+        console.log('📚 [MCP] RAG context retrieved:', {
+          hasContext: !!ragContext.context,
+          contextLength: ragContext.context ? ragContext.context.length : 0,
+          sourcesCount: ragContext.sources ? ragContext.sources.length : 0
+        });
+      } catch (ragError) {
+        console.log('⚠️ [MCP] RAG context failed, continuing without it:', ragError.message);
+      }
+      
+      // Try OpenAI first, fallback to simple parsing if it fails
+      let aiResponse;
+      try {
+        // Build messages for OpenAI with RAG context
+        console.log('💬 [MCP] Building messages for OpenAI...');
+        const messages = this.buildMessages(userMessage, conversationHistory, restaurantContext, ragContext);
+        console.log('💬 [MCP] Messages built:', {
+          messagesCount: messages.length,
+          systemPromptLength: messages[0]?.content?.length || 0,
+          userMessageLength: messages[messages.length - 1]?.content?.length || 0
+        });
 
-      // Call OpenAI with enhanced context
-      const aiResponse = await this.callOpenAI(messages);
+        // Call OpenAI with enhanced context
+        console.log('🚀 [MCP] Calling OpenAI API...');
+        aiResponse = await this.callOpenAI(messages);
+        console.log('🚀 [MCP] OpenAI response received:', {
+          hasResponse: !!aiResponse,
+          status: aiResponse?.status,
+          hasMessage: !!aiResponse?.message,
+          hasExtractedData: !!aiResponse?.extractedData
+        });
+      } catch (openaiError) {
+        console.log('⚠️ [MCP] OpenAI failed, using fallback parser:', openaiError.message);
+        aiResponse = this.createFallbackResponse(userMessage, restaurantContext);
+        console.log('🔄 [MCP] Fallback response created:', {
+          status: aiResponse.status,
+          hasMessage: !!aiResponse.message
+        });
+      }
       
       // Clean extracted data
       if (aiResponse.extractedData) {
+        console.log('🧹 [MCP] Cleaning extracted data...');
         aiResponse.extractedData = JobDataCleaner.cleanExtractedData(aiResponse.extractedData);
+        console.log('🧹 [MCP] Data cleaned successfully');
       }
 
       // If complete, create the job
       if (aiResponse.status === 'complete' && aiResponse.extractedData) {
+        console.log('💼 [MCP] Creating job offer...');
         await this.createJobIfComplete(aiResponse, restaurantContext);
+        console.log('💼 [MCP] Job creation completed');
       }
 
+      console.log('✅ [MCP] Processing completed successfully');
       return this.createSuccessResponse(aiResponse);
 
     } catch (error) {
-      console.error('❌ [MCP] Error processing job creation:', error);
-      return this.createErrorResponse('Failed to process job creation request');
+      console.error('❌ [MCP] Error processing job creation:', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name,
+        args: { userMessage, conversationHistoryLength: conversationHistory.length, hasRestaurantContext: !!restaurantContext }
+      });
+      return this.createErrorResponse(`Failed to process job creation request: ${error.message}`);
     }
   }
 
@@ -108,22 +167,131 @@ class ProcessJobCreationTool extends BaseTool {
   }
 
   async callOpenAI(messages) {
-    const completion = await this.getOpenAI().chat.completions.create({
-      model: "gpt-4",
-      messages: messages,
-      max_tokens: 2000,
-      temperature: 0.7
-    });
-
-    const responseText = completion.choices[0].message.content;
-    
-    // Parse AI response
     try {
-      return JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('❌ Error parsing AI response:', parseError);
-      throw new Error('Error processing AI response');
+      console.log('🔗 [MCP] Creating OpenAI client...');
+      const openai = this.getOpenAI();
+      console.log('🔗 [MCP] OpenAI client created successfully');
+      
+      console.log('📤 [MCP] Sending request to OpenAI:', {
+        model: "gpt-4",
+        messagesCount: messages.length,
+        maxTokens: 2000,
+        temperature: 0.7
+      });
+      
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: messages,
+        max_tokens: 2000,
+        temperature: 0.7
+      });
+
+      console.log('📥 [MCP] OpenAI response received:', {
+        hasChoices: !!completion.choices,
+        choicesCount: completion.choices?.length || 0,
+        hasContent: !!completion.choices?.[0]?.message?.content
+      });
+
+      const responseText = completion.choices[0].message.content;
+      console.log('📝 [MCP] Raw response text:', {
+        length: responseText.length,
+        preview: responseText.substring(0, 200) + '...'
+      });
+      
+      // Parse AI response
+      try {
+        const parsedResponse = JSON.parse(responseText);
+        console.log('✅ [MCP] Successfully parsed AI response:', {
+          hasStatus: !!parsedResponse.status,
+          status: parsedResponse.status,
+          hasMessage: !!parsedResponse.message,
+          hasExtractedData: !!parsedResponse.extractedData
+        });
+        return parsedResponse;
+      } catch (parseError) {
+        console.error('❌ [MCP] Error parsing AI response:', {
+          error: parseError.message,
+          responseText: responseText.substring(0, 500)
+        });
+        throw new Error(`Error processing AI response: ${parseError.message}`);
+      }
+    } catch (error) {
+      console.error('❌ [MCP] OpenAI API call failed:', {
+        error: error.message,
+        name: error.name,
+        status: error.status,
+        code: error.code
+      });
+      throw error;
     }
+  }
+
+  createFallbackResponse(userMessage, restaurantContext) {
+    console.log('🔄 [MCP] Creating fallback response for:', userMessage);
+    
+    // Simple keyword-based parsing
+    const lowerMessage = userMessage.toLowerCase();
+    const position = this.extractPositionFromMessage(lowerMessage);
+    const salary = this.extractSalaryFromMessage(lowerMessage);
+    
+    return {
+      status: 'incomplete',
+      message: `Entiendo que quieres crear un trabajo para ${position || 'una posición'}. Para completar la oferta, necesito más información: ¿Cuál es el horario de trabajo (tiempo completo, medio tiempo)? ¿Cuál es el salario ofrecido? ¿Qué experiencia se requiere?`,
+      extractedData: {
+        position: position || '',
+        schedule: '',
+        contract: '',
+        salary: salary || 0,
+        propina: 'No',
+        vacancies: 1,
+        yearsOfExperience: 0,
+        period: 'Permanente',
+        description: '',
+        requirements: '',
+        functions: '',
+        questions: []
+      },
+      missingFields: ['schedule', 'salary', 'yearsOfExperience', 'description', 'requirements'],
+      suggestions: [
+        'Especifica el horario de trabajo (Full-time, Part-time)',
+        'Menciona el salario ofrecido',
+        'Indica los años de experiencia requeridos',
+        'Describe las funciones principales del puesto'
+      ]
+    };
+  }
+
+  extractPositionFromMessage(message) {
+    const positions = {
+      'garzon': 'Garzón',
+      'waiter': 'Garzón',
+      'chef': 'Chef',
+      'cook': 'Chef',
+      'bartender': 'Bartender',
+      'barista': 'Barista',
+      'delivery': 'Delivery',
+      'cajero': 'Cajero',
+      'cashier': 'Cajero',
+      'anfitrion': 'Anfitrión',
+      'host': 'Anfitrión',
+      'limpieza': 'Limpieza',
+      'cleaner': 'Limpieza'
+    };
+    
+    for (const [key, value] of Object.entries(positions)) {
+      if (message.includes(key)) {
+        return value;
+      }
+    }
+    return 'Posición no especificada';
+  }
+
+  extractSalaryFromMessage(message) {
+    const salaryMatch = message.match(/\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
+    if (salaryMatch) {
+      return parseInt(salaryMatch[1].replace(/,/g, ''));
+    }
+    return 0;
   }
 
   async createJobIfComplete(aiResponse, restaurantContext) {
