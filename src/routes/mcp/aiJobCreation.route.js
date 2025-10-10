@@ -39,6 +39,54 @@ router.post('/process', getUserIdFromCookie, getRestaurantUserIdFromCookie, asyn
 });
 
 /**
+ * POST /create-job - Create job from AI extracted data
+ * @description Creates a job offer from the AI extracted data
+ */
+router.post('/create-job', getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    const { extractedData, restaurantId, locationId } = req.body;
+    
+    if (!extractedData || !restaurantId || !locationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: extractedData, restaurantId, locationId'
+      });
+    }
+
+    // Import the job creation helper
+    const { createJobOffer } = require('../../helpers/jobHelpers.js');
+    
+    // Prepare job data for database insertion
+    const jobData = {
+      ...extractedData,
+      restaurantId: parseInt(restaurantId),
+      restaurantUserId: req.restaurantUserId,
+      locationId: parseInt(locationId)
+    };
+
+    console.log('💼 [AI JOB CREATION] Creating job from extracted data:', jobData);
+
+    // Create the job offer
+    const jobOffer = await createJobOffer(jobData);
+    
+    console.log('✅ [AI JOB CREATION] Job created successfully:', jobOffer.id);
+
+    res.json({
+      success: true,
+      message: 'Job created successfully',
+      data: jobOffer
+    });
+
+  } catch (error) {
+    console.error('❌ [AI JOB CREATION] Error creating job:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create job offer'
+    });
+  }
+});
+
+/**
  * GET /health - Health check endpoint
  * @description Checks service health and MCP connection status
  */
