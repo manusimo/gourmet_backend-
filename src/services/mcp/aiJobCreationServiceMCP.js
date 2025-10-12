@@ -187,6 +187,17 @@ class AIJobCreationServiceMCP {
             restaurantContext
           });
           dbg('MCP result:', mcpResult);
+          
+          // Check if MCP result indicates an error
+          if (mcpResult && mcpResult.isError) {
+            console.log('🚨 [AI JOB CREATION MCP] MCP tool returned error:', {
+              isError: mcpResult.isError,
+              content: mcpResult.content,
+              contentLength: mcpResult.content?.length,
+              firstContent: mcpResult.content?.[0]
+            });
+          }
+          
           return mcpResult;
         } catch (mcpError) {
           if (MCP_DEBUG) {

@@ -79,10 +79,14 @@ class ValidationHelpers {
    * @returns {boolean} True if has minimum data
    */
   static hasMinimumData(data) {
-    const requiredFields = ['position', 'schedule', 'contract', 'vacancies', 'functions', 'description', 'requirements', 'salary', 'locationId', 'period', 'yearsOfExperience'];
+    const requiredFields = ['position', 'schedule', 'contract', 'vacancies', 'functions', 'description', 'requirements', 'salary', 'period', 'yearsOfExperience', 'questions'];
     return requiredFields.every(field => {
       if (field === 'questions') {
         return data[field] && data[field].length > 0;
+      }
+      if (field === 'locationId') {
+        // locationId is handled separately in the frontend (user selection)
+        return true;
       }
       return data[field] && data[field] !== '' && data[field] !== 0;
     });

@@ -98,6 +98,16 @@ CUANDO PREGUNTES:
 - Pregunta por lo que falta
 - Mantén lo que ya tienes
 
+CUANDO TENGAS TODOS LOS CAMPOS (status: "complete"):
+- Muestra un resumen de todos los datos extraídos
+- Pregunta: "¿Quieres que publique esta oferta de trabajo o prefieres cambiar algo?"
+- Usa status: "complete" para indicar que está listo para publicar
+
+CUANDO EL USUARIO CONFIRME PUBLICAR (respuestas como "sí", "publicar", "crear", "ok"):
+- Usa status: "ready_to_publish" para indicar que debe crear el trabajo
+- Mantén todos los datos extraídos
+- Mensaje: "¡Perfecto! Voy a crear la oferta de trabajo ahora..."
+
 EJEMPLO SIMPLE:
 Usuario: "quiero crear un trabajo de garzon"
 AI: {
@@ -119,6 +129,29 @@ AI: {
   },
   "missingFields": ["schedule", "salary", "contract", "vacancies", "yearsOfExperience", "period", "description", "requirements", "functions", "questions"],
   "suggestions": ["Especifica el horario", "Menciona el salario", "Indica el contrato"]
+}
+
+EJEMPLO CUANDO ESTÁ COMPLETO:
+Usuario: "la descripción es: buscamos garzón para restaurante familiar, las funciones son: atender mesas y tomar pedidos, los requisitos son: experiencia en restaurantes, y la pregunta es: ¿tienes experiencia como garzón?"
+AI: {
+  "status": "complete",
+  "message": "¡Perfecto! He recopilado toda la información necesaria para crear la oferta de trabajo:\n\n📋 **RESUMEN DE LA OFERTA:**\n• **Posición:** Garzón\n• **Horario:** Full-time\n• **Salario:** $1,400\n• **Contrato:** A Plazo\n• **Vacantes:** 2\n• **Experiencia:** 0 años\n• **Período:** Permanente\n• **Descripción:** Buscamos garzón para restaurante familiar\n• **Funciones:** Atender mesas y tomar pedidos\n• **Requisitos:** Experiencia en restaurantes\n• **Preguntas:** ¿Tienes experiencia como garzón?\n\n¿Quieres que publique esta oferta de trabajo o prefieres cambiar algo?",
+  "extractedData": {
+    "position": "Garzón",
+    "schedule": "Full-time",
+    "contract": "A Plazo",
+    "salary": 1400,
+    "propina": "No",
+    "vacancies": 2,
+    "yearsOfExperience": 0,
+    "period": "Permanente",
+    "description": "Buscamos garzón para restaurante familiar",
+    "requirements": "Experiencia en restaurantes",
+    "functions": "Atender mesas y tomar pedidos",
+    "questions": ["¿Tienes experiencia como garzón?"]
+  },
+  "missingFields": [],
+  "suggestions": []
 }
 
 IMPORTANTE: Mantén TODA la información de mensajes anteriores.`;

@@ -22,7 +22,24 @@ const aiJobCreationService = new AIJobCreationServiceMCP();
  */
 router.post('/process', getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
+    console.log('📥 [AI JOB CREATION ROUTE] Received request:', {
+      body: req.body,
+      restaurantUserId: req.restaurantUserId,
+      hasMessage: !!req.body.message,
+      hasRestaurantId: !!req.body.restaurantId
+    });
+    
     const result = await aiJobCreationService.processJobCreationRequest(req.body, req.restaurantUserId);
+    
+    console.log('📤 [AI JOB CREATION ROUTE] Returning result:', {
+      success: result.success,
+      hasData: !!result.data,
+      dataType: typeof result.data,
+      dataKeys: Object.keys(result.data || {}),
+      isError: result.data?.isError,
+      statusCode: result.statusCode,
+      error: result.error
+    });
     
     if (result.statusCode) {
       return res.status(result.statusCode).json(result);
@@ -61,7 +78,9 @@ router.post('/create-job', getUserIdFromCookie, getRestaurantUserIdFromCookie, a
       ...extractedData,
       restaurantId: parseInt(restaurantId),
       restaurantUserId: req.restaurantUserId,
-      locationId: parseInt(locationId)
+      locationId: parseInt(locationId),
+      // Map tips to propina for compatibility with createJobOffer
+      propina: extractedData.tips ? 'Si' : 'No'
     };
 
     console.log('💼 [AI JOB CREATION] Creating job from extracted data:', jobData);
