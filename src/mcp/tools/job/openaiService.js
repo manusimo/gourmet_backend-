@@ -3,7 +3,7 @@
  * Handles all OpenAI API interactions
  */
 
-const { JOB_CREATION_SYSTEM_PROMPT } = require('../aiPrompts');
+const { JOB_CREATION_SYSTEM_PROMPT } = require('./aiPrompts');
 
 class OpenAIService {
   constructor() {
@@ -92,7 +92,6 @@ class OpenAIService {
 
     // Parse JSON response
     let parsedResponse;
-    
     try {
       parsedResponse = JSON.parse(responseText);
       console.log('✅ [MCP] Successfully parsed OpenAI response:', {

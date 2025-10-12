@@ -75,6 +75,7 @@ class AIJobCreationServiceMCP {
 
       // Validate input
       const validation = this.validateRequestInput(message, restaurantId);
+      
       if (!validation.isValid) {
         return this.createErrorResponse(validation.error, validation.statusCode);
       }

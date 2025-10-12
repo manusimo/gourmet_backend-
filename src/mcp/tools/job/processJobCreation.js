@@ -6,6 +6,7 @@ const JobDataCleaner = require('./dataCleaner');
 const { JobRAGService } = require('../../../services/rag');
 const ProcessJobCreationHelpers = require('./helpers/processJobCreationHelpers');
 const OpenAIService = require('./services/openaiService');
+const ValidationHelpers = require('./helpers/validationHelpers');
 
 /**
  * Process Job Creation Tool - Pure MCP approach
@@ -323,13 +324,7 @@ AI: Mantiene todo lo anterior, agrega description y functions, status: "complete
     }
     
     // Determine if we have enough data to be complete
-    const hasMinimumData = finalData.position && finalData.position !== 'Posición no especificada' && 
-                          finalData.schedule && finalData.salary > 0 &&
-                          finalData.contract && finalData.vacancies > 0 &&
-                          (finalData.yearsOfExperience !== null && finalData.yearsOfExperience !== undefined && finalData.yearsOfExperience !== '') &&
-                          finalData.period && finalData.description &&
-                          finalData.requirements && finalData.functions &&
-                          finalData.questions && finalData.questions.length > 0;
+    const hasMinimumData = ValidationHelpers.hasMinimumData(finalData);
     
     return {
       status: hasMinimumData ? 'complete' : 'incomplete',
@@ -367,17 +362,17 @@ AI: Mantiene todo lo anterior, agrega description y functions, status: "complete
   extractAccumulatedDataFromHistory(conversationHistory) {
     const accumulated = {
       position: '',
-      schedule: '',
-      contract: '',
+        schedule: '',
+        contract: '',
       salary: 0,
-      propina: 'No',
-      vacancies: 1,
-      yearsOfExperience: 0,
-      period: 'Permanente',
-      description: '',
-      requirements: '',
-      functions: '',
-      questions: []
+        propina: 'No',
+        vacancies: 1,
+        yearsOfExperience: 0,
+        period: 'Permanente',
+        description: '',
+        requirements: '',
+        functions: '',
+        questions: []
     };
     
     console.log('🔍 [MCP] Extracting accumulated data from history:', {
@@ -561,57 +556,19 @@ AI: Mantiene todo lo anterior, agrega description y functions, status: "complete
   }
 
   getMissingFields(position, schedule, salary, contract, vacancies, yearsOfExperience, period, description, requirements, functions, questions) {
-    const missing = [];
-    if (!position || position === 'Posición no especificada') missing.push('position');
-    if (!schedule) missing.push('schedule');
-    if (!salary || salary === 0) missing.push('salary');
-    if (!contract) missing.push('contract');
-    if (!vacancies || vacancies === 0) missing.push('vacancies');
-    if (yearsOfExperience === null || yearsOfExperience === undefined || yearsOfExperience === '') missing.push('yearsOfExperience');
-    if (!period) missing.push('period');
-    if (!description) missing.push('description');
-    if (!requirements) missing.push('requirements');
-    if (!functions) missing.push('functions');
-    if (!questions || questions.length === 0) missing.push('questions');
-    return missing;
+    const data = {
+      position, schedule, salary, contract, vacancies, yearsOfExperience, 
+      period, description, requirements, functions, questions
+    };
+    return ValidationHelpers.getMissingFields(data);
   }
 
   getSuggestions(position, schedule, salary, contract, vacancies, yearsOfExperience, period, description, requirements, functions, questions) {
-    const suggestions = [];
-    if (!position || position === 'Posición no especificada') {
-      suggestions.push('Especifica la posición: Garzón, Runner, Chef, Ayudante de Cocina, Anfitrión, Delivery, Cajero, Copero, Barista, Bartender, Sommelier, Maitre, Jefe de salón, o Limpieza');
-    }
-    if (!schedule) {
-      suggestions.push('Menciona el horario: Full-time (tiempo completo), Part-time (medio tiempo), u Otro');
-    }
-    if (!salary || salary === 0) {
-      suggestions.push('Indica el salario ofrecido (solo el número, ej: 1200000)');
-    }
-    if (!contract) {
-      suggestions.push('Especifica el tipo de contrato: A Plazo, Indefinido, Honorarios, Práctica, u Otros');
-    }
-    if (!vacancies || vacancies === 0) {
-      suggestions.push('Indica el número de vacantes');
-    }
-    if (yearsOfExperience === null || yearsOfExperience === undefined || yearsOfExperience === '') {
-      suggestions.push('Especifica los años de experiencia: Sin experiencia (0), 1 año, 2 años, 3 años, 4 años, o +5 años');
-    }
-    if (!period) {
-      suggestions.push('Indica el período: Permanente, Reemplazo Temporal, Reemplazo Urgente, o Sin información');
-    }
-    if (!description) {
-      suggestions.push('Describe el trabajo y sus responsabilidades');
-    }
-    if (!requirements) {
-      suggestions.push('Menciona los requisitos específicos del puesto');
-    }
-    if (!functions) {
-      suggestions.push('Describe las funciones principales del trabajo');
-    }
-    if (!questions || questions.length === 0) {
-      suggestions.push('Agrega al menos una pregunta para la entrevista');
-    }
-    return suggestions;
+    const data = {
+      position, schedule, salary, contract, vacancies, yearsOfExperience, 
+      period, description, requirements, functions, questions
+    };
+    return ValidationHelpers.getSuggestions(data);
   }
 
   async createJobIfComplete(aiResponse, restaurantContext) {
