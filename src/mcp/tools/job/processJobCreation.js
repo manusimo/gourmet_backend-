@@ -53,7 +53,7 @@ class ProcessJobCreationTool extends BaseTool {
       ProcessJobCreationHelpers.validateOpenAIApiKey();
       
       // Get RAG context (optional)
-      const ragContext = await ProcessJobCreationHelpers.getRAGContextSafely(this.ragService, userMessage, restaurantContext);
+      // const ragContext = await ProcessJobCreationHelpers.getRAGContextSafely(this.ragService, userMessage, restaurantContext);
       
       // Process with OpenAI
       const aiResponse = await ProcessJobCreationHelpers.processWithOpenAI(this.openaiService, userMessage, conversationHistory, restaurantContext, ragContext);
@@ -153,22 +153,22 @@ class ProcessJobCreationTool extends BaseTool {
 
     // Add conversation context instructions
     systemPrompt += `\n\nIMPORTANTE - GESTIÓN DE CONTEXTO:
-- Mantén y acumula la información extraída de mensajes anteriores
-- NO pierdas datos ya extraídos en conversaciones previas
-- Solo pregunta por información que realmente falta
-- Si el usuario proporciona información adicional, agrégala a los datos existentes
-- Usa el status "incomplete" solo cuando falten campos críticos
-- Usa el status "complete" cuando tengas suficiente información para crear el trabajo
+      - Mantén y acumula la información extraída de mensajes anteriores
+      - NO pierdas datos ya extraídos en conversaciones previas
+      - Solo pregunta por información que realmente falta
+      - Si el usuario proporciona información adicional, agrégala a los datos existentes
+      - Usa el status "incomplete" solo cuando falten campos críticos
+      - Usa el status "complete" cuando tengas suficiente información para crear el trabajo
 
-EJEMPLO DE FLUJO DE CONVERSACIÓN:
-Usuario: "quiero postular un trabajo de garzon"
-AI: Extrae position: "Garzón", pregunta por horario y salario
+      EJEMPLO DE FLUJO DE CONVERSACIÓN:
+      Usuario: "quiero postular un trabajo de garzon"
+      AI: Extrae position: "Garzón", pregunta por horario y salario
 
-Usuario: "el horario es tiempo completo, el salario es de 1200000"  
-AI: Mantiene position: "Garzón", agrega schedule: "Full-time", salary: 1200000, pregunta por descripción y funciones
+      Usuario: "el horario es tiempo completo, el salario es de 1200000"  
+      AI: Mantiene position: "Garzón", agrega schedule: "Full-time", salary: 1200000, pregunta por descripción y funciones
 
-Usuario: "necesito que atienda mesas y sea amable"
-AI: Mantiene todo lo anterior, agrega description y functions, status: "complete"`;
+      Usuario: "necesito que atienda mesas y sea amable"
+      AI: Mantiene todo lo anterior, agrega description y functions, status: "complete"`;
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -453,20 +453,20 @@ AI: Mantiene todo lo anterior, agrega description y functions, status: "complete
         status = 'complete';
         message = `¡Perfecto! He recopilado toda la información necesaria para crear la oferta de trabajo:
 
-📋 **RESUMEN DE LA OFERTA:**
-• **Posición:** ${finalData.position}
-• **Horario:** ${finalData.schedule}
-• **Salario:** $${finalData.salary?.toLocaleString()}
-• **Contrato:** ${finalData.contract}
-• **Vacantes:** ${finalData.vacancies}
-• **Experiencia:** ${finalData.yearsOfExperience} años
-• **Período:** ${finalData.period}
-• **Descripción:** ${finalData.description}
-• **Funciones:** ${finalData.functions}
-• **Requisitos:** ${finalData.requirements}
-• **Preguntas:** ${finalData.questions?.length || 0} pregunta(s)
+        📋 **RESUMEN DE LA OFERTA:**
+        • **Posición:** ${finalData.position}
+        • **Horario:** ${finalData.schedule}
+        • **Salario:** $${finalData.salary?.toLocaleString()}
+        • **Contrato:** ${finalData.contract}
+        • **Vacantes:** ${finalData.vacancies}
+        • **Experiencia:** ${finalData.yearsOfExperience} años
+        • **Período:** ${finalData.period}
+        • **Descripción:** ${finalData.description}
+        • **Funciones:** ${finalData.functions}
+        • **Requisitos:** ${finalData.requirements}
+        • **Preguntas:** ${finalData.questions?.length || 0} pregunta(s)
 
-¿Quieres que publique esta oferta de trabajo o prefieres cambiar algo?`;
+        ¿Quieres que publique esta oferta de trabajo o prefieres cambiar algo?`;
       }
     }
     

@@ -85,16 +85,16 @@ class JobRAGService extends BaseRAGService {
    */
   getDefaultJobContext() {
     return `
-Job Creation Best Practices:
-- Include clear position title and responsibilities
-- Specify work schedule (Full-time, Part-time, etc.)
-- Mention salary range and benefits
-- List required experience and skills
-- Include restaurant culture and team environment
-- Add interview questions for candidate assessment
-- Specify contract type and duration
-- Mention tips and additional compensation if applicable
-`;
+      Job Creation Best Practices:
+      - Include clear position title and responsibilities
+      - Specify work schedule (Full-time, Part-time, etc.)
+      - Mention salary range and benefits
+      - List required experience and skills
+      - Include restaurant culture and team environment
+      - Add interview questions for candidate assessment
+      - Specify contract type and duration
+      - Mention tips and additional compensation if applicable
+   `;
   }
 
   /**
