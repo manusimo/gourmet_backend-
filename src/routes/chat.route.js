@@ -596,8 +596,6 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     const { type, restaurantId } = req.query;
     
-    console.log('🔍 [Conversations API] Fetching conversations with params:', { type, restaurantId });
-
     if (req.employeeId) {
       const employeeConversations = await getEmployeeConversations(req.employeeId, type);
       return res.status(200).json({ 
@@ -615,7 +613,6 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
       });
     }
 
-    console.log('No valid user type found in the request. Unable to fetch conversations.');
     return res.status(400).json({ 
       success: false,
       message: 'Invalid user type or ID' 
@@ -637,8 +634,6 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
     const userId = req.userId;
     const userType = req.userType;
     const role = req.role;
-
-    console.log('🗑️ Delete conversation request:', { conversationId, userId, userType, role });
 
     // For admin/staff users, we need to check if they have access to this conversation
     if (userType === 'empresas' && (role === 'admin' || role === 'staff')) {
@@ -678,7 +673,6 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
         });
       }
 
-      console.log('🗑️ Admin/Staff user has access, proceeding with deletion');
     } else {
       // For regular users, use the existing logic
     const employeeId = req.employeeId;
@@ -702,8 +696,7 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
     }
 
     const conversationDeleted = await deleteConversation(conversationId);
-    console.log('conversation deleted', conversationDeleted);
-
+  
     res.status(200).json({ 
       success: true,
       message: 'Conversation deleted successfully.' 
