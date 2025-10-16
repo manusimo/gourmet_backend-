@@ -4,7 +4,7 @@ const { checkCompany, checkEmployee } = require('../helpers/authenticateToken.js
 const { getUserIdFromCookie, getAuthFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } = require('../helpers/cookies.js');
 const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
 const { checkJobOfferLimit } = require('../middleware/checkPlan.js');
-const { convertJobsImageUrls, convertJobImageUrls, convertApplicationsRestaurantImageUrls } = require('../utils/imageUrlUtils.js');
+const { convertImageUrls } = require('../utils/imageUrlUtils.js');
 const {
   fetchTopRatedJobs,
   fetchJobsByNameAndLocation,
@@ -265,8 +265,16 @@ router.get('/jobs', async (req, res) => {
       getTotalJobsCount(restaurantFilter, searchConditions),
     ]);
 
-    // Convert image keys to signed URL endpoints for each job
-    const jobsWithSignedUrls = convertJobsImageUrls(jobs);
+    // Convert image keys to actual signed URLs for each job's restaurant
+    const jobsWithSignedUrls = await Promise.all(
+      jobs.map(async (job) => {
+        const convertedJob = { ...job };
+        if (job.restaurant) {
+          convertedJob.restaurant = await convertImageUrls(job.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        }
+        return convertedJob;
+      })
+    );
 
     const totalPages = Math.ceil(totalJobs / limitNumber);
 
@@ -341,8 +349,16 @@ router.get('/jobs/restaurant', checkCompany, getAuthFromCookie, async (req, res)
       },
     });
     
-    // Convert image keys to signed URL endpoints for each job
-    const jobOffersWithSignedUrls = convertJobsImageUrls(jobOffers);
+    // Convert image keys to actual signed URLs for each job's restaurant
+    const jobOffersWithSignedUrls = await Promise.all(
+      jobOffers.map(async (job) => {
+        const convertedJob = { ...job };
+        if (job.restaurant) {
+          convertedJob.restaurant = await convertImageUrls(job.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        }
+        return convertedJob;
+      })
+    );
     
     res.status(200).json({
       success: true,

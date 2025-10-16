@@ -34,7 +34,7 @@ const {
   // generatePlanInfo, // Temporarily disabled
   // generateUpdatePlanInfo // Temporarily disabled
 } = require('../helpers/companyHelpers.js');
-const { convertCompaniesImageUrls, convertCompanyImageUrls, convertTalentsEmployeeImageUrls } = require('../utils/imageUrlUtils.js');
+const { convertCompaniesImageUrls, convertCompanyImageUrls, convertTalentsEmployeeImageUrls, convertImageKeyToSignedUrl } = require('../utils/imageUrlUtils.js');
 
 const csrfProtection = csrf({ cookie: true });
 const router = express.Router();
@@ -88,8 +88,26 @@ router.get('/companies', async (req, res) => {
     const companies = await getCompanies(filters, searchConditions, limitInt, (pageInt - 1) * limitInt);
     const totalCompanies = await getTotalCompanies(filters, searchConditions);
 
-    // Convert image keys to signed URL endpoints for each company
-    const companiesWithSignedUrls = convertCompaniesImageUrls(companies);
+    // Convert image keys to actual signed URLs for each company
+    const companiesWithSignedUrls = await Promise.all(
+      companies.map(async (company) => {
+        const updatedCompany = { ...company };
+        
+        // Convert profile image URL
+        if (updatedCompany.profileImageUrl) {
+          updatedCompany.profileImageUrl = await convertImageKeyToSignedUrl(updatedCompany.profileImageUrl);
+        }
+        
+        // Convert carousel image URLs
+        if (updatedCompany.profileCarouselUrls && Array.isArray(updatedCompany.profileCarouselUrls)) {
+          updatedCompany.profileCarouselUrls = await Promise.all(
+            updatedCompany.profileCarouselUrls.map(url => convertImageKeyToSignedUrl(url))
+          );
+        }
+        
+        return updatedCompany;
+      })
+    );
 
     res.json({
       success: true,
@@ -172,7 +190,7 @@ router.get('/restaurant/:restaurantUserId', async (req, res) => {
 });
 
 // GET /api/company/restaurantUser/:userId - Get restaurant user by user ID
-router.get('/api/company/restaurantUser/:userId', async (req, res) => {
+router.get('/company/restaurantUser/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
@@ -613,6 +631,18 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
 
     if (company) {
       console.log('🔍 [Company Profile API] Found company:', company.name);
+      
+      // Convert image keys to actual signed URLs
+      if (company.profileImageUrl) {
+        company.profileImageUrl = await convertImageKeyToSignedUrl(company.profileImageUrl);
+      }
+      
+      if (company.profileCarouselUrls && Array.isArray(company.profileCarouselUrls)) {
+        company.profileCarouselUrls = await Promise.all(
+          company.profileCarouselUrls.map(url => convertImageKeyToSignedUrl(url))
+        );
+      }
+      
       res.status(200).json({
         success: true,
         data: company

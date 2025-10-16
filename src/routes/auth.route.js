@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
 const { sendEmail } = require('../helpers/email.js');
+const { convertImageKeyToSignedUrl } = require('../utils/imageUrlUtils.js');
 const {
   validateGoogleOAuthRequest,
   handleGoogleOAuthError
@@ -1071,12 +1072,12 @@ router.get('/user-info', async (req, res) => {
       const allRestaurants = [];
       
       // Add restaurants from RestaurantUser table (staff access)
-      restaurantUsers.forEach(ru => {
+      for (const ru of restaurantUsers) {
         allRestaurants.push({
           restaurantUserId: ru.id,
           restaurantId: ru.restaurant.id,
           restaurantName: ru.restaurant.name,
-          restaurantImage: ru.restaurant.profileImageUrl,
+          restaurantImage: await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl),
           restaurantDescription: ru.restaurant.description,
           specialty: ru.restaurant.specialty,
           format: ru.restaurant.format,
@@ -1084,10 +1085,10 @@ router.get('/user-info', async (req, res) => {
           comuna: ru.restaurant.comuna,
           role: ru.role
         });
-      });
+      }
       
       // Add owned restaurants (direct ownership)
-      ownedRestaurants.forEach(restaurant => {
+      for (const restaurant of ownedRestaurants) {
         // Check if this restaurant is already in the list (avoid duplicates)
         const exists = allRestaurants.some(r => r.restaurantId === restaurant.id);
         if (!exists) {
@@ -1095,7 +1096,7 @@ router.get('/user-info', async (req, res) => {
             restaurantUserId: null, // No RestaurantUser record for direct ownership
             restaurantId: restaurant.id,
             restaurantName: restaurant.name,
-            restaurantImage: restaurant.profileImageUrl,
+            restaurantImage: await convertImageKeyToSignedUrl(restaurant.profileImageUrl),
             restaurantDescription: restaurant.description,
             specialty: restaurant.specialty,
             format: restaurant.format,
@@ -1104,7 +1105,7 @@ router.get('/user-info', async (req, res) => {
             role: 'admin' // Owner has admin role
           });
         }
-      });
+      }
 
       userRestaurants = allRestaurants;
 
