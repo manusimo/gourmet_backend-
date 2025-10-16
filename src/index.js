@@ -19,7 +19,7 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const xss = require('xss');
 const cookieParser = require('cookie-parser');
-const compression = require('compression');
+const multer = require('multer');
 
 // Import middleware
 const { ddosMonitoring } = require('./middleware/ddosMonitoring.js');
@@ -51,9 +51,8 @@ const PORT = process.env.PORT || 3000;
 // Trust proxy for Heroku (required for rate limiting and IP detection)
 app.set('trust proxy', 1);
 
-// Disable Express compression for SSE and remove x-powered-by header
+// Remove x-powered-by header
 app.disable('x-powered-by');
-app.use(compression({ filter: () => false }));
 
 // ============================================================================
 // ENHANCED SECURITY CONFIGURATION
@@ -137,6 +136,30 @@ app.use(express.urlencoded({
   extended: true,
   parameterLimit: 100 // Limit number of parameters
 }));
+
+// Configure multer for handling multipart/form-data (file uploads)
+const upload = multer({
+  storage: multer.memoryStorage(), // Store files in memory for processing
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit per file
+    files: 10 // Maximum 10 files
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow images and common file types
+    const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx/;
+    const extname = allowedTypes.test(file.originalname.toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only images and documents are allowed.'));
+    }
+  }
+});
+
+// Apply multer middleware to handle multipart/form-data
+app.use(upload.any());
 
 app.use(cookieParser());
 

@@ -148,6 +148,8 @@ const getTalentsApplications = async (restaurantId) => {
  * @returns {Object} Created company
  */
 const createCompanyProfile = async (companyData) => {
+  console.log('🏗️ [createCompanyProfile] Starting company creation with data:', companyData);
+  
   const {
     name,
     specialty,
@@ -168,42 +170,102 @@ const createCompanyProfile = async (companyData) => {
     userId
   } = companyData;
 
-  // Create restaurant first
-  const restaurant = await prisma.restaurant.create({
-    data: {
-      name,
-      specialty,
-      format,
-      description,
-      rut,
-      legalName,
-      region,
-      comuna,
-      numberOfRestaurants: Number(numberOfRestaurants),
-      workers: String(workers),
-      weeklyAverageClients: String(weeklyAverageClients),
-      benefits,
-      profileImageUrl,
-      profileCarouselUrls,
-      user: { connect: { id: userId } },
-    },
+  console.log('🏗️ [createCompanyProfile] Extracted data:', {
+    name,
+    specialty,
+    format,
+    description,
+    rut,
+    legalName,
+    region,
+    comuna,
+    numberOfRestaurants,
+    workers,
+    weeklyAverageClients,
+    benefits,
+    locations,
+    jobOffers,
+    profileImageUrl,
+    profileCarouselUrls,
+    userId
   });
+
+  console.log('🏗️ [createCompanyProfile] About to create restaurant in database...');
+  
+  try {
+    // Create restaurant first
+    const restaurant = await prisma.restaurant.create({
+      data: {
+        name,
+        specialty,
+        format,
+        description,
+        rut,
+        legalName,
+        region,
+        comuna,
+        numberOfRestaurants: Number(numberOfRestaurants),
+        workers: String(workers),
+        weeklyAverageClients: String(weeklyAverageClients),
+        benefits,
+        profileImageUrl,
+        profileCarouselUrls,
+        user: { connect: { id: userId } },
+      },
+    });
+
+    console.log('✅ [createCompanyProfile] Restaurant created successfully:', {
+      id: restaurant.id,
+      name: restaurant.name,
+      specialty: restaurant.specialty
+    });
 
   // Create locations separately if they exist
   if (locations && locations.length > 0) {
-    const locationData = locations.map(location => ({
-      address: location.address || '',
-      latitude: location.latitude ? parseFloat(location.latitude) : 0,
-      longitude: location.longitude ? parseFloat(location.longitude) : 0,
-      restaurantId: restaurant.id
-    }));
+    console.log('🏗️ [createCompanyProfile] Creating locations:', locations.length);
+    console.log('🏗️ [createCompanyProfile] Locations type:', typeof locations);
+    console.log('🏗️ [createCompanyProfile] Locations data:', locations);
+    
+    // Ensure locations is an array
+    let locationsArray = locations;
+    if (typeof locations === 'string') {
+      try {
+        locationsArray = JSON.parse(locations);
+        console.log('🏗️ [createCompanyProfile] Parsed locations from string:', locationsArray);
+      } catch (error) {
+        console.error('🏗️ [createCompanyProfile] Error parsing locations string:', error);
+        locationsArray = [];
+      }
+    }
+    
+    if (Array.isArray(locationsArray) && locationsArray.length > 0) {
+      const locationData = locationsArray.map(location => ({
+        address: location.address || '',
+        latitude: location.latitude ? parseFloat(location.latitude) : 0,
+        longitude: location.longitude ? parseFloat(location.longitude) : 0,
+        restaurantId: restaurant.id
+      }));
 
-    await prisma.location.createMany({
-      data: locationData
-    });
+      console.log('🏗️ [createCompanyProfile] Location data to create:', locationData);
+
+      await prisma.location.createMany({
+        data: locationData
+      });
+      
+      console.log('✅ [createCompanyProfile] Locations created successfully');
+    } else {
+      console.log('ℹ️ [createCompanyProfile] No valid locations to create');
+    }
+  } else {
+    console.log('ℹ️ [createCompanyProfile] No locations to create');
   }
 
-  return restaurant;
+    console.log('✅ [createCompanyProfile] Company profile creation completed successfully');
+    return restaurant;
+  } catch (error) {
+    console.error('❌ [createCompanyProfile] Error creating company profile:', error);
+    throw error;
+  }
 };
 
 /**
@@ -249,18 +311,41 @@ const generateCompanyToken = (tokenData) => {
  * @returns {Object|null} Company or null if not found
  */
 const getCompanyById = async (companyId) => {
-  return await prisma.restaurant.findUnique({
-    where: { id: Number(companyId) },
-    include: {
-      locations: true,
-      jobOffers: {
-        where: { deletedAt: null },
-        include: {
-          applications: { where: { deletedAt: null } },
+  console.log('🔍 [getCompanyById] Starting database query for company ID:', companyId);
+  console.log('🔍 [getCompanyById] Converted to number:', Number(companyId));
+  
+  try {
+    const result = await prisma.restaurant.findUnique({
+      where: { id: Number(companyId) },
+      include: {
+        locations: true,
+        jobOffers: {
+          where: { deletedAt: null },
+          include: {
+            applications: { where: { deletedAt: null } },
+          },
         },
       },
-    },
-  });
+    });
+    
+    console.log('🔍 [getCompanyById] Database query result:', result ? 'Found' : 'Not found');
+    if (result) {
+      console.log('🔍 [getCompanyById] Company data structure:', {
+        id: result.id,
+        name: result.name,
+        hasLocations: result.locations ? result.locations.length : 0,
+        hasJobOffers: result.jobOffers ? result.jobOffers.length : 0,
+        profileImageUrl: result.profileImageUrl,
+        profileCarouselUrls: result.profileCarouselUrls,
+        benefits: result.benefits
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ [getCompanyById] Database error:', error);
+    throw error;
+  }
 };
 
 /**

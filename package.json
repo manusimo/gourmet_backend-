@@ -38,6 +38,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "langchain": "^0.3.35",
+    "multer": "^2.0.2",
     "node-fetch": "^2.7.0",
     "nodemailer": "^6.9.9",
     "openai": "^6.1.0",
