@@ -436,7 +436,7 @@ router.post('/company', ...createCompanyMiddleware, async (req, res) => {
     const role = req.role;
 
     // Handle file uploads
-    let finalProfileImageUrl = profileImageUrl || 'No photo';
+    let finalProfileImageUrl = 'No photo'; // Start with default, will be updated if file is uploaded
     let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
 
 
@@ -529,6 +529,14 @@ router.post('/company', ...createCompanyMiddleware, async (req, res) => {
       return maybeKey || value;
     };
 
+    // Handle existing profile image URL from form (if no new file was uploaded)
+    if (finalProfileImageUrl === 'No photo' && profileImageUrl && !profileImageUrl.startsWith('blob:')) {
+      const existingKey = normalizeToKey(profileImageUrl);
+      if (existingKey) {
+        finalProfileImageUrl = existingKey;
+      }
+    }
+
     const normalizedCarouselKeys = (finalProfileCarouselUrls || [])
       .map(normalizeToKey)
       .filter(Boolean);
@@ -548,7 +556,7 @@ router.post('/company', ...createCompanyMiddleware, async (req, res) => {
       benefits: Array.isArray(benefits) ? benefits : (benefits ? Object.keys(benefits).filter(key => benefits[key]) : []),
       locations: typeof locations === 'string' ? JSON.parse(locations) : (locations || []),
       jobOffers: jobOffers || [],
-      profileImageUrl: normalizeToKey(finalProfileImageUrl) || 'No photo',
+      profileImageUrl: finalProfileImageUrl,
       profileCarouselUrls: normalizedCarouselKeys,
       userId
     };
