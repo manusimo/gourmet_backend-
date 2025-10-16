@@ -523,6 +523,13 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     const locations = typeof locationsRaw === 'string' ? JSON.parse(locationsRaw) : locationsRaw;
     const profileCarouselUrls = typeof profileCarouselUrlsRaw === 'string' ? JSON.parse(profileCarouselUrlsRaw) : profileCarouselUrlsRaw;
 
+    // Debug logging
+    console.log('🔍 [Company Update API] Raw data received:');
+    console.log('  - locationsRaw:', locationsRaw, typeof locationsRaw);
+    console.log('  - locations after parsing:', locations, typeof locations);
+    console.log('  - benefits after parsing:', benefits, typeof benefits);
+    console.log('  - profileCarouselUrls after parsing:', profileCarouselUrls, typeof profileCarouselUrls);
+
     const { restaurantId: queryRestaurantId } = req.query;
     const { restaurantId: jwtRestaurantId } = req;
     
@@ -534,10 +541,13 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     console.log('  - JWT restaurantId:', jwtRestaurantId);
     console.log('  - Using restaurantId:', restaurantId);
 
-    const newLocations = filterNewLocations(locations);
-    const existingLocations = filterExistingLocations(locations);
+    // Ensure locations is an array (default to empty array if undefined/null)
+    const safeLocations = Array.isArray(locations) ? locations : [];
+    
+    const newLocations = filterNewLocations(safeLocations);
+    const existingLocations = filterExistingLocations(safeLocations);
     const currentLocations = await getCurrentLocations(restaurantId);
-    const locationsToDelete = findLocationsToDelete(currentLocations, locations);
+    const locationsToDelete = findLocationsToDelete(currentLocations, safeLocations);
 
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete);
