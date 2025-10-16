@@ -34,7 +34,7 @@ const {
   // generatePlanInfo, // Temporarily disabled
   // generateUpdatePlanInfo // Temporarily disabled
 } = require('../helpers/companyHelpers.js');
-const { convertCompaniesImageUrls, convertCompanyImageUrls, convertTalentsEmployeeImageUrls, convertImageKeyToSignedUrl } = require('../utils/imageUrlUtils.js');
+const { convertImageUrls, convertImageKeyToSignedUrl } = require('../utils/imageUrlUtils.js');
 
 const csrfProtection = csrf({ cookie: true });
 const router = express.Router();
@@ -329,7 +329,16 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
 
     console.log('🔍 [Talents Application API] Found applications:', talents.length);
 
-    const talentsWithSignedUrls = convertTalentsEmployeeImageUrls(talents);
+    // Convert employee profile image URLs to actual signed URLs
+    const talentsWithSignedUrls = await Promise.all(
+      talents.map(async (talent) => {
+        const convertedTalent = { ...talent };
+        if (talent.employee) {
+          convertedTalent.employee = await convertImageUrls(talent.employee, ['profileImageUrl']);
+        }
+        return convertedTalent;
+      })
+    );
 
     res.status(200).json({ 
       success: true,
@@ -591,12 +600,12 @@ router.get('/company/:id', async (req, res) => {
     if (restaurant) {
       console.log('this is the restaurant', restaurant.benefits);
       
-      // Convert image keys to signed URL endpoints
-      convertCompanyImageUrls(restaurant);
+      // Convert image keys to actual signed URLs
+      const restaurantWithSignedUrls = await convertImageUrls(restaurant, ['profileImageUrl', 'profileCarouselUrls']);
       
       res.status(200).json({ 
         success: true,
-        data: restaurant 
+        data: restaurantWithSignedUrls 
       });
     } else {
       res.status(404).json({ 

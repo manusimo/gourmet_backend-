@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { processMessageNotifications } = require('../services/messageNotificationService');
-const { convertEmployeeImageUrls, convertEmployeesImageUrls, convertCompanyImageUrls } = require('../utils/imageUrlUtils.js');
+const { convertImageUrls } = require('../utils/imageUrlUtils.js');
 // Message notifications are now handled by messageNotificationService.js
 
 const prisma = new PrismaClient();
@@ -602,13 +602,21 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
     if (req.employeeId) {
       const employeeConversations = await getEmployeeConversations(req.employeeId, type);
       
-      // Convert employee image URLs to signed URLs in conversations
-      const conversationsWithSignedUrls = employeeConversations.map(conversation => {
-        if (conversation.restaurantUser?.restaurant) {
-          convertCompanyImageUrls(conversation.restaurantUser.restaurant);
-        }
-        return conversation;
-      });
+      // Convert restaurant image URLs to actual signed URLs in conversations
+      const conversationsWithSignedUrls = await Promise.all(
+        employeeConversations.map(async (conversation) => {
+          try {
+            const convertedConversation = { ...conversation };
+            if (conversation.restaurantUser?.restaurant) {
+              convertedConversation.restaurantUser.restaurant = await convertImageUrls(conversation.restaurantUser.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+            }
+            return convertedConversation;
+          } catch (error) {
+            console.error('❌ Error converting employee conversation images:', error);
+            return conversation; // Return original conversation if conversion fails
+          }
+        })
+      );
       
       return res.status(200).json({ 
         success: true,
@@ -620,13 +628,21 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
       const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, type, restaurantId);
       console.log('🔍 [Conversations API] Found conversations:', restaurantConversations.length);
       
-      // Convert employee image URLs to signed URLs in conversations
-      const conversationsWithSignedUrls = restaurantConversations.map(conversation => {
-        if (conversation.employee) {
-          convertEmployeeImageUrls(conversation.employee);
-        }
-        return conversation;
-      });
+      // Convert employee image URLs to actual signed URLs in conversations
+      const conversationsWithSignedUrls = await Promise.all(
+        restaurantConversations.map(async (conversation) => {
+          try {
+            const convertedConversation = { ...conversation };
+            if (conversation.employee) {
+              convertedConversation.employee = await convertImageUrls(conversation.employee, ['profileImageUrl']);
+            }
+            return convertedConversation;
+          } catch (error) {
+            console.error('❌ Error converting restaurant conversation images:', error);
+            return conversation; // Return original conversation if conversion fails
+          }
+        })
+      );
       
       return res.status(200).json({ 
         success: true,

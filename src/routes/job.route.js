@@ -141,11 +141,22 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
 
     formattedJobs = await fetchTopRatedJobs(limit, finishedDateParsed);
     
-    console.log('🔍 Returning formatted jobs:', formattedJobs.length);
+    // Convert restaurant image URLs to actual signed URLs for each job
+    const jobsWithSignedUrls = await Promise.all(
+      formattedJobs.map(async (job) => {
+        const updatedJob = { ...job };
+        if (updatedJob.restaurant) {
+          updatedJob.restaurant = await convertImageUrls(updatedJob.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        }
+        return updatedJob;
+      })
+    );
+    
+    console.log('🔍 Returning formatted jobs:', jobsWithSignedUrls.length);
 
     res.json({
       success: true,
-      data: formattedJobs, // Use consistent 'data' property
+      data: jobsWithSignedUrls, // Use consistent 'data' property
     });
   } catch (error) {
     console.error('Error fetching top-rated jobs:', error);
@@ -192,8 +203,16 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
     const applications = await getEmployeeApplications(employeeId);
 
-    // Convert restaurant image keys to signed URL endpoints via helper
-    const applicationsWithSignedUrls = convertApplicationsRestaurantImageUrls(applications);
+    // Convert restaurant image URLs to actual signed URLs for each application
+    const applicationsWithSignedUrls = await Promise.all(
+      applications.map(async (application) => {
+        const convertedApplication = { ...application };
+        if (application.jobPost && application.jobPost.restaurant) {
+          convertedApplication.jobPost.restaurant = await convertImageUrls(application.jobPost.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        }
+        return convertedApplication;
+      })
+    );
 
     res.json({
       success: true,
@@ -383,13 +402,16 @@ router.get('/jobs/:jobId', async (req, res) => {
     console.log('this is the job offer', jobOffer);
 
     if (jobOffer) {
-      // Convert image keys to signed URL endpoints
-      convertJobImageUrls(jobOffer);
+      // Convert image keys to actual signed URLs for the job's restaurant
+      const convertedJob = { ...jobOffer };
+      if (jobOffer.restaurant) {
+        convertedJob.restaurant = await convertImageUrls(jobOffer.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+      }
       
       res.json({
         success: true,
         data: {
-          ...jobOffer,
+          ...convertedJob,
           applicationsCount: jobOffer.applications.length,
           createdAt: jobOffer.createdAt.toISOString().slice(0, 10),
         }

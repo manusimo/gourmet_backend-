@@ -5,7 +5,7 @@ const { checkEmployee, checkCompany, setUserRole } = require('../helpers/authent
 const { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } = require('../helpers/cookies.js');
 const { requirePlan } = require('../middleware/checkPlan.js');
 const { findApplicationDetails } = require('../helpers/employee/findApplication.js');
-const { convertEmployeeImageUrls, convertEmployeesImageUrls, convertFavoriteJobsImageUrls } = require('../utils/imageUrlUtils.js');
+const { convertImageUrls } = require('../utils/imageUrlUtils.js');
 const {
   getEmployeeById,
   getEmployeeByUserId,
@@ -65,12 +65,12 @@ router.get('/employee/:id', async (req, res) => {
 
     console.log('✅ Employee profile found, returning data');
     
-    // Convert image keys to signed URL endpoints
-    convertEmployeeImageUrls(employeeProfile);
+    // Convert image keys to actual signed URLs
+    const employeeWithSignedUrls = await convertImageUrls(employeeProfile, ['profileImageUrl']);
     
     res.status(200).json({ 
       success: true,
-      data: employeeProfile 
+      data: employeeWithSignedUrls 
     });
   } catch (error) {
     console.error('❌ Error fetching employee profile:', error.message);
@@ -187,10 +187,13 @@ router.post('/employee', ...createEmployeeMiddleware, async (req, res) => {
       secure: true,
     });
 
+    // Convert image keys to actual signed URLs
+    const employeeWithSignedUrls = await convertImageUrls(employeeProfile, ['profileImageUrl']);
+
     res.status(201).json({ 
       success: true,
       message: 'Employee created successfully', 
-      data: employeeProfile 
+      data: employeeWithSignedUrls 
     });
   } catch (error) {
     console.error('Error in employee route:', error);
@@ -220,12 +223,12 @@ router.get('/employee', getEmployeeIdFromCookie, async (req, res) => {
       });
     }
 
-    // Convert image keys to signed URL endpoints
-    convertEmployeeImageUrls(employeeProfile);
+    // Convert image keys to actual signed URLs
+    const employeeWithSignedUrls = await convertImageUrls(employeeProfile, ['profileImageUrl']);
 
     res.status(200).json({ 
       success: true,
-      data: employeeProfile 
+      data: employeeWithSignedUrls 
     });
   } catch (error) {
     console.error('Error fetching employee profile:', error.message);
@@ -344,11 +347,14 @@ router.patch('/employee', ...updateEmployeeMiddleware, async (req, res) => {
     }
 
     const thisNewEmployee = await getEmployeeWithDetails(employeeId);
+    
+    // Convert image keys to actual signed URLs
+    const employeeWithSignedUrls = await convertImageUrls(thisNewEmployee, ['profileImageUrl']);
 
     res.status(200).json({ 
       success: true,
       message: 'Employee profile updated successfully.', 
-      data: thisNewEmployee 
+      data: employeeWithSignedUrls 
     });
   } catch (error) {
     console.error('Error in employee patch route:', error);
@@ -454,8 +460,8 @@ router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurant
 
     console.log('These are the results', employees);
     
-    // Convert image keys to signed URL endpoints for each employee
-    const employeesWithSignedUrls = convertEmployeesImageUrls(employees);
+    // Convert image keys to actual signed URLs for each employee
+    const employeesWithSignedUrls = await convertImageUrls(employees, ['profileImageUrl']);
     
     res.status(200).json({ 
       success: true,
@@ -576,7 +582,16 @@ router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, a
     const favoriteJobs = await getFavoriteJobs(employeeId);
 
     // Normalize image URLs for favorites (jobPost/jobOffer -> restaurant images)
-    const favoriteJobsWithSignedUrls = convertFavoriteJobsImageUrls(favoriteJobs || []);
+    // Convert image keys to actual signed URLs for favorite jobs' restaurants
+    const favoriteJobsWithSignedUrls = await Promise.all(
+      (favoriteJobs || []).map(async (favoriteJob) => {
+        const convertedJob = { ...favoriteJob };
+        if (favoriteJob.jobOffer && favoriteJob.jobOffer.restaurant) {
+          convertedJob.jobOffer.restaurant = await convertImageUrls(favoriteJob.jobOffer.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        }
+        return convertedJob;
+      })
+    );
 
     if (favoriteJobsWithSignedUrls && favoriteJobsWithSignedUrls.length > 0) {
       return res.status(200).json({ 

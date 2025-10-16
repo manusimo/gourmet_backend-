@@ -12,6 +12,7 @@ const {
   getApplicationsForJobOffer
 } = require('../helpers/applicationHelpers.js');
 const { processApplicationNotifications } = require('../services/applicationNotificationService.js');
+const { convertImageUrls } = require('../utils/imageUrlUtils.js');
 
 const prisma = new PrismaClient();
 
@@ -176,10 +177,21 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
 
     console.log('🔍 [Job Applicants API] Found applications:', applications.length);
 
+    // Convert employee profile image URLs to actual signed URLs
+    const applicationsWithSignedUrls = await Promise.all(
+      applications.map(async (application) => {
+        const convertedApplication = { ...application };
+        if (application.employee) {
+          convertedApplication.employee = await convertImageUrls(application.employee, ['profileImageUrl']);
+        }
+        return convertedApplication;
+      })
+    );
+
     res.json({ 
       success: true,
-      data: applications,
-      count: applications.length
+      data: applicationsWithSignedUrls,
+      count: applicationsWithSignedUrls.length
     });
   } catch (error) {
     console.error('Error getting applicants:', error);

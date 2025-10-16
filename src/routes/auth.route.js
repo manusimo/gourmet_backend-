@@ -1077,7 +1077,10 @@ router.get('/user-info', async (req, res) => {
           restaurantUserId: ru.id,
           restaurantId: ru.restaurant.id,
           restaurantName: ru.restaurant.name,
-          restaurantImage: await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl),
+          restaurantImage: await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl).catch(error => {
+            console.error('❌ Error converting restaurant image URL:', ru.restaurant.profileImageUrl, error);
+            return '/default-restaurant.png';
+          }),
           restaurantDescription: ru.restaurant.description,
           specialty: ru.restaurant.specialty,
           format: ru.restaurant.format,
@@ -1096,7 +1099,10 @@ router.get('/user-info', async (req, res) => {
             restaurantUserId: null, // No RestaurantUser record for direct ownership
             restaurantId: restaurant.id,
             restaurantName: restaurant.name,
-            restaurantImage: await convertImageKeyToSignedUrl(restaurant.profileImageUrl),
+            restaurantImage: await convertImageKeyToSignedUrl(restaurant.profileImageUrl).catch(error => {
+              console.error('❌ Error converting owned restaurant image URL:', restaurant.profileImageUrl, error);
+              return '/default-restaurant.png';
+            }),
             restaurantDescription: restaurant.description,
             specialty: restaurant.specialty,
             format: restaurant.format,
