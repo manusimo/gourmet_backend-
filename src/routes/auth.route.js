@@ -1073,14 +1073,27 @@ router.get('/user-info', async (req, res) => {
       
       // Add restaurants from RestaurantUser table (staff access)
       for (const ru of restaurantUsers) {
+        console.log('🔍 user-info: Processing restaurant user:', {
+          restaurantId: ru.restaurant.id,
+          restaurantName: ru.restaurant.name,
+          originalImageUrl: ru.restaurant.profileImageUrl
+        });
+        
+        const convertedImageUrl = await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl).catch(error => {
+          console.error('❌ Error converting restaurant image URL:', ru.restaurant.profileImageUrl, error);
+          return '/default-restaurant.png';
+        });
+        
+        console.log('🔍 user-info: Converted image URL:', {
+          original: ru.restaurant.profileImageUrl,
+          converted: convertedImageUrl
+        });
+        
         allRestaurants.push({
           restaurantUserId: ru.id,
           restaurantId: ru.restaurant.id,
           restaurantName: ru.restaurant.name,
-          restaurantImage: await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl).catch(error => {
-            console.error('❌ Error converting restaurant image URL:', ru.restaurant.profileImageUrl, error);
-            return '/default-restaurant.png';
-          }),
+          restaurantImage: convertedImageUrl,
           restaurantDescription: ru.restaurant.description,
           specialty: ru.restaurant.specialty,
           format: ru.restaurant.format,
@@ -1095,14 +1108,27 @@ router.get('/user-info', async (req, res) => {
         // Check if this restaurant is already in the list (avoid duplicates)
         const exists = allRestaurants.some(r => r.restaurantId === restaurant.id);
         if (!exists) {
+          console.log('🔍 user-info: Processing owned restaurant:', {
+            restaurantId: restaurant.id,
+            restaurantName: restaurant.name,
+            originalImageUrl: restaurant.profileImageUrl
+          });
+          
+          const convertedImageUrl = await convertImageKeyToSignedUrl(restaurant.profileImageUrl).catch(error => {
+            console.error('❌ Error converting owned restaurant image URL:', restaurant.profileImageUrl, error);
+            return '/default-restaurant.png';
+          });
+          
+          console.log('🔍 user-info: Converted owned restaurant image URL:', {
+            original: restaurant.profileImageUrl,
+            converted: convertedImageUrl
+          });
+          
           allRestaurants.push({
             restaurantUserId: null, // No RestaurantUser record for direct ownership
             restaurantId: restaurant.id,
             restaurantName: restaurant.name,
-            restaurantImage: await convertImageKeyToSignedUrl(restaurant.profileImageUrl).catch(error => {
-              console.error('❌ Error converting owned restaurant image URL:', restaurant.profileImageUrl, error);
-              return '/default-restaurant.png';
-            }),
+            restaurantImage: convertedImageUrl,
             restaurantDescription: restaurant.description,
             specialty: restaurant.specialty,
             format: restaurant.format,

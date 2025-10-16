@@ -59,18 +59,31 @@ const convertEmployeeImageUrls = (employee) => {
  * @returns {string} - Actual signed URL or default image
  */
 const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-restaurant.png') => {
+  console.log('🔗 convertImageKeyToSignedUrl called with:', { imageUrl, defaultImage });
+  
   if (!imageUrl || imageUrl === 'No photo') {
+    console.log('🔗 No image URL provided, returning default:', defaultImage);
     return defaultImage;
   }
 
   // If it's already a blob URL or full URL, return as is
   if (imageUrl.startsWith('blob:') || imageUrl.startsWith('http')) {
+    console.log('🔗 Image URL is already a full URL, returning as is:', imageUrl);
     return imageUrl;
   }
 
   // If it's a Wasabi key, generate a signed URL
   if (!imageUrl.includes('http')) {
     try {
+      console.log('🔗 Generating signed URL for Wasabi key:', imageUrl);
+      console.log('🔗 Environment variables check:', {
+        WASABI_ENDPOINT: process.env.WASABI_ENDPOINT ? 'SET' : 'NOT SET',
+        WASABI_REGION: process.env.WASABI_REGION ? 'SET' : 'NOT SET',
+        WASABI_ACCESS_KEY_ID: process.env.WASABI_ACCESS_KEY_ID ? 'SET' : 'NOT SET',
+        WASABI_SECRET_KEY_ID: process.env.WASABI_SECRET_KEY_ID ? 'SET' : 'NOT SET',
+        WASABI_BUCKET_NAME: process.env.WASABI_BUCKET_NAME ? 'SET' : 'NOT SET'
+      });
+      
       const AWS = require('aws-sdk');
       
       const wasabiS3 = new AWS.S3({
@@ -93,11 +106,13 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
         Expires: 3600 // URL valid for 1 hour
       };
 
+      console.log('🔗 S3 params:', params);
       const signedUrl = wasabiS3.getSignedUrl('getObject', params);
-      console.log('🔗 Generated signed URL for key:', cleanKey);
+      console.log('🔗 Generated signed URL for key:', cleanKey, '->', signedUrl);
       return signedUrl;
     } catch (error) {
       console.error('❌ Error generating signed URL for:', imageUrl, error.message);
+      console.error('❌ Full error:', error);
       return defaultImage;
     }
   }
