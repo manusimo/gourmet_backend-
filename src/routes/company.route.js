@@ -512,11 +512,16 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       workers,
       weeklyAverageClients,
       description,
-      benefits,
-      locations,
+      benefits: benefitsRaw,
+      locations: locationsRaw,
       profileImageUrl,
-      profileCarouselUrls,
+      profileCarouselUrls: profileCarouselUrlsRaw,
     } = req.body;
+
+    // Parse JSON strings from FormData
+    const benefits = typeof benefitsRaw === 'string' ? JSON.parse(benefitsRaw) : benefitsRaw;
+    const locations = typeof locationsRaw === 'string' ? JSON.parse(locationsRaw) : locationsRaw;
+    const profileCarouselUrls = typeof profileCarouselUrlsRaw === 'string' ? JSON.parse(profileCarouselUrlsRaw) : profileCarouselUrlsRaw;
 
     const { restaurantId: queryRestaurantId } = req.query;
     const { restaurantId: jwtRestaurantId } = req;
