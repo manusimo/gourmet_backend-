@@ -1,9 +1,11 @@
 const express = require('express');
+const multer = require('multer');
 const { prisma } = require('../db.js');
 const { checkEmployee, checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie, getUserIdFromCookie } = require('../helpers/cookies.js');
 const { requirePlan } = require('../middleware/checkPlan.js');
 const { findApplicationDetails } = require('../helpers/employee/findApplication.js');
+const { convertEmployeeImageUrls, convertEmployeesImageUrls, convertFavoriteJobsImageUrls } = require('../utils/imageUrlUtils.js');
 const {
   getEmployeeById,
   getEmployeeByUserId,
@@ -27,6 +29,13 @@ const {
 } = require('../helpers/employeeHelpers.js');
 
 const router = express.Router();
+
+// Import upload service
+const { uploadFile, extractKeyFromUrl } = require('../services/uploadService.js');
+
+// Use shared normalization helper from uploadService
+
+// Multer is configured globally in index.js
 
 // GET /employee/:id - Get employee by ID
 router.get('/employee/:id', async (req, res) => {
@@ -55,6 +64,10 @@ router.get('/employee/:id', async (req, res) => {
     }
 
     console.log('✅ Employee profile found, returning data');
+    
+    // Convert image keys to signed URL endpoints
+    convertEmployeeImageUrls(employeeProfile);
+    
     res.status(200).json({ 
       success: true,
       data: employeeProfile 
@@ -68,16 +81,22 @@ router.get('/employee/:id', async (req, res) => {
   }
 });
 
+// Middleware for employee creation (multer is handled globally)
+const createEmployeeMiddleware = [
+  checkEmployee,
+  getUserIdFromCookie
+];
+
 // POST /employee - Create employee profile
-router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) => {
+router.post('/employee', ...createEmployeeMiddleware, async (req, res) => {
   try {
     const {
       name,
       position,
-      experiences,
+      experiences: experiencesRaw,
       surname,
-      skills,
-      educations,
+      skills: skillsRaw,
+      educations: educationsRaw,
       aboutMe,
       birthDate,
       country,
@@ -91,7 +110,41 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       profileImageUrl
     } = req.body;
 
+    // Parse JSON strings from FormData
+    const experiences = typeof experiencesRaw === 'string' ? JSON.parse(experiencesRaw) : experiencesRaw;
+    const educations = typeof educationsRaw === 'string' ? JSON.parse(educationsRaw) : educationsRaw;
+    const skills = typeof skillsRaw === 'string' ? JSON.parse(skillsRaw) : skillsRaw;
+
     const userId = req.userId;
+
+    // Handle file upload
+    let finalProfileImageUrl = (() => {
+      if (!profileImageUrl) return 'No photo';
+      if (typeof profileImageUrl === 'string' && profileImageUrl.includes('/api/company/signed-url/')) {
+        return profileImageUrl.split('/api/company/signed-url/')[1];
+      }
+      const maybeKey = extractKeyFromUrl(profileImageUrl);
+      return maybeKey || profileImageUrl;
+    })();
+    
+    // Find profile image from global multer files array
+    const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
+    if (profileImageFile) {
+      console.log('📤 Uploading employee profile image...');
+      const profileImageResult = await uploadFile(profileImageFile, 'employee-profiles');
+      if (profileImageResult.success) {
+        // Store the key (not full URL), same as company route
+        finalProfileImageUrl = profileImageResult.key;
+        console.log('✅ Employee profile image uploaded, key stored:', finalProfileImageUrl);
+      } else {
+        console.error('❌ Employee profile image upload failed:', profileImageResult.error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload profile image',
+          error: profileImageResult.error
+        });
+      }
+    }
 
     const existingEmployee = await getEmployeeByUserId(userId);
 
@@ -119,7 +172,7 @@ router.post('/employee', checkEmployee, getUserIdFromCookie, async (req, res) =>
       civilState,
       available,
       schedule,
-      profileImageUrl,
+      profileImageUrl: finalProfileImageUrl,
       userId
     });
 
@@ -167,6 +220,9 @@ router.get('/employee', getEmployeeIdFromCookie, async (req, res) => {
       });
     }
 
+    // Convert image keys to signed URL endpoints
+    convertEmployeeImageUrls(employeeProfile);
+
     res.status(200).json({ 
       success: true,
       data: employeeProfile 
@@ -180,18 +236,24 @@ router.get('/employee', getEmployeeIdFromCookie, async (req, res) => {
   }
 });
 
+// Middleware for employee update with file uploads
+const updateEmployeeMiddleware = [
+  checkEmployee,
+  getEmployeeIdFromCookie
+];
+
 // PATCH /employee - Update employee profile
-router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
+router.patch('/employee', ...updateEmployeeMiddleware, async (req, res) => {
   try {
     const {
       name,
       position,
-      experiences,
+      experiences: experiencesRaw,
       surname,
       period,
       yearsOfExperience,
-      educations,
-      skills,
+      educations: educationsRaw,
+      skills: skillsRaw,
       aboutMe,
       birthDate,
       region,
@@ -205,7 +267,41 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
       profileImageUrl
     } = req.body;
 
+    // Parse JSON strings from FormData
+    const experiences = typeof experiencesRaw === 'string' ? JSON.parse(experiencesRaw) : experiencesRaw;
+    const educations = typeof educationsRaw === 'string' ? JSON.parse(educationsRaw) : educationsRaw;
+    const skills = typeof skillsRaw === 'string' ? JSON.parse(skillsRaw) : skillsRaw;
+
     const employeeId = req.employeeId;
+
+    // Handle file upload
+    let finalProfileImageUrl = (() => {
+      if (!profileImageUrl) return profileImageUrl;
+      if (typeof profileImageUrl === 'string' && profileImageUrl.includes('/api/company/signed-url/')) {
+        return profileImageUrl.split('/api/company/signed-url/')[1];
+      }
+      const maybeKey = extractKeyFromUrl(profileImageUrl);
+      return maybeKey || profileImageUrl;
+    })();
+    
+    // Find profile image from global multer files array
+    const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
+    if (profileImageFile) {
+      console.log('📤 Uploading updated employee profile image...');
+      const profileImageResult = await uploadFile(profileImageFile, 'employee-profiles');
+      if (profileImageResult.success) {
+        // Store the key (not full URL), same as company route
+        finalProfileImageUrl = profileImageResult.key;
+        console.log('✅ Employee profile image updated, key stored:', finalProfileImageUrl);
+      } else {
+        console.error('❌ Employee profile image upload failed:', profileImageResult.error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload profile image',
+          error: profileImageResult.error
+        });
+      }
+    }
 
     const updatedEmployee = await updateEmployeeProfile(employeeId, {
       name,
@@ -226,7 +322,7 @@ router.patch('/employee', checkEmployee, getEmployeeIdFromCookie, async (req, re
       civilState,
       available,
       schedule,
-      profileImageUrl
+      profileImageUrl: finalProfileImageUrl
     });
 
     // Create new experiences
@@ -357,9 +453,13 @@ router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurant
     });
 
     console.log('These are the results', employees);
+    
+    // Convert image keys to signed URL endpoints for each employee
+    const employeesWithSignedUrls = convertEmployeesImageUrls(employees);
+    
     res.status(200).json({ 
       success: true,
-      data: employees 
+      data: employeesWithSignedUrls 
     });
   } catch (error) {
     console.error('Error in employee search:', error);
@@ -475,10 +575,13 @@ router.get('/employees/favorite-jobs', checkEmployee, getEmployeeIdFromCookie, a
 
     const favoriteJobs = await getFavoriteJobs(employeeId);
 
-    if (favoriteJobs) {
+    // Normalize image URLs for favorites (jobPost/jobOffer -> restaurant images)
+    const favoriteJobsWithSignedUrls = convertFavoriteJobsImageUrls(favoriteJobs || []);
+
+    if (favoriteJobsWithSignedUrls && favoriteJobsWithSignedUrls.length > 0) {
       return res.status(200).json({ 
         success: true,
-        data: favoriteJobs 
+        data: favoriteJobsWithSignedUrls 
       });
     }
 

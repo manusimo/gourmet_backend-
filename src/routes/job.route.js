@@ -4,6 +4,7 @@ const { checkCompany, checkEmployee } = require('../helpers/authenticateToken.js
 const { getUserIdFromCookie, getAuthFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } = require('../helpers/cookies.js');
 const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
 const { checkJobOfferLimit } = require('../middleware/checkPlan.js');
+const { convertJobsImageUrls, convertJobImageUrls, convertApplicationsRestaurantImageUrls } = require('../utils/imageUrlUtils.js');
 const {
   fetchTopRatedJobs,
   fetchJobsByNameAndLocation,
@@ -191,9 +192,12 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
 
     const applications = await getEmployeeApplications(employeeId);
 
+    // Convert restaurant image keys to signed URL endpoints via helper
+    const applicationsWithSignedUrls = convertApplicationsRestaurantImageUrls(applications);
+
     res.json({
       success: true,
-      data: applications
+      data: applicationsWithSignedUrls
     });
   } catch (error) {
     console.error('Error fetching applications:', error);
@@ -261,11 +265,14 @@ router.get('/jobs', async (req, res) => {
       getTotalJobsCount(restaurantFilter, searchConditions),
     ]);
 
+    // Convert image keys to signed URL endpoints for each job
+    const jobsWithSignedUrls = convertJobsImageUrls(jobs);
+
     const totalPages = Math.ceil(totalJobs / limitNumber);
 
     res.status(200).json({
       success: true,
-      data: jobs,
+      data: jobsWithSignedUrls,
       totalPages,
       totalJobs,
       currentPage: pageNumber,
@@ -334,9 +341,12 @@ router.get('/jobs/restaurant', checkCompany, getAuthFromCookie, async (req, res)
       },
     });
     
+    // Convert image keys to signed URL endpoints for each job
+    const jobOffersWithSignedUrls = convertJobsImageUrls(jobOffers);
+    
     res.status(200).json({
       success: true,
-      data: jobOffers
+      data: jobOffersWithSignedUrls
     });
   } catch (error) {
     console.error(error);
@@ -357,6 +367,9 @@ router.get('/jobs/:jobId', async (req, res) => {
     console.log('this is the job offer', jobOffer);
 
     if (jobOffer) {
+      // Convert image keys to signed URL endpoints
+      convertJobImageUrls(jobOffer);
+      
       res.json({
         success: true,
         data: {

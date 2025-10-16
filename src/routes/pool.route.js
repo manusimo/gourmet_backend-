@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { getUserIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
 const { getTalentPool } = require('../helpers/pool.js');
+const { convertTalentsEmployeeImageUrls } = require('../utils/imageUrlUtils.js');
 
 const prisma = new PrismaClient();
 const {
@@ -170,9 +171,11 @@ router.get('/talent-pool', setUserRole, getRestaurantIdFromCookie, getRestaurant
     console.log('🔍 [Talent Pool API] Found talents:', talentPool.length);
     console.log('🔍 [Talent Pool API] Talents data:', talentPool);
 
+    const talentsWithSignedUrls = convertTalentsEmployeeImageUrls(talentPool);
+
     res.status(200).json({
       success: true,
-      data: talentPool
+      data: talentsWithSignedUrls
     });
   } catch (error) {
     console.error('🔍 [Talent Pool API] Error:', error);

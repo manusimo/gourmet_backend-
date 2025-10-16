@@ -158,7 +158,7 @@ const upload = multer({
   }
 });
 
-// Apply multer middleware to handle multipart/form-data
+// Apply multer middleware to handle multipart/form-data globally
 app.use(upload.any());
 
 app.use(cookieParser());

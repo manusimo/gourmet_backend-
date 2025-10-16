@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
 const { processMessageNotifications } = require('../services/messageNotificationService');
+const { convertEmployeeImageUrls, convertEmployeesImageUrls, convertCompanyImageUrls } = require('../utils/imageUrlUtils.js');
 // Message notifications are now handled by messageNotificationService.js
 
 const prisma = new PrismaClient();
@@ -596,23 +597,44 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     const { type, restaurantId } = req.query;
     
+    console.log('🔍 [Conversations API] Fetching conversations with params:', { type, restaurantId });
+
     if (req.employeeId) {
       const employeeConversations = await getEmployeeConversations(req.employeeId, type);
+      
+      // Convert employee image URLs to signed URLs in conversations
+      const conversationsWithSignedUrls = employeeConversations.map(conversation => {
+        if (conversation.restaurantUser?.restaurant) {
+          convertCompanyImageUrls(conversation.restaurantUser.restaurant);
+        }
+        return conversation;
+      });
+      
       return res.status(200).json({ 
         success: true,
-        data: employeeConversations 
+        data: conversationsWithSignedUrls 
       });
     }
 
     if (req.restaurantUserId) {
       const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, type, restaurantId);
       console.log('🔍 [Conversations API] Found conversations:', restaurantConversations.length);
+      
+      // Convert employee image URLs to signed URLs in conversations
+      const conversationsWithSignedUrls = restaurantConversations.map(conversation => {
+        if (conversation.employee) {
+          convertEmployeeImageUrls(conversation.employee);
+        }
+        return conversation;
+      });
+      
       return res.status(200).json({ 
         success: true,
-        data: restaurantConversations 
+        data: conversationsWithSignedUrls 
       });
     }
 
+    console.log('No valid user type found in the request. Unable to fetch conversations.');
     return res.status(400).json({ 
       success: false,
       message: 'Invalid user type or ID' 
@@ -634,6 +656,8 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
     const userId = req.userId;
     const userType = req.userType;
     const role = req.role;
+
+    console.log('🗑️ Delete conversation request:', { conversationId, userId, userType, role });
 
     // For admin/staff users, we need to check if they have access to this conversation
     if (userType === 'empresas' && (role === 'admin' || role === 'staff')) {
@@ -673,6 +697,7 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
         });
       }
 
+      console.log('🗑️ Admin/Staff user has access, proceeding with deletion');
     } else {
       // For regular users, use the existing logic
     const employeeId = req.employeeId;
@@ -696,7 +721,8 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
     }
 
     const conversationDeleted = await deleteConversation(conversationId);
-  
+    console.log('conversation deleted', conversationDeleted);
+
     res.status(200).json({ 
       success: true,
       message: 'Conversation deleted successfully.' 

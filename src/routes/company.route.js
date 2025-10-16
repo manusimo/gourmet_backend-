@@ -1,5 +1,6 @@
 const express = require('express');
 const csrf = require('csurf');
+const multer = require('multer');
 const { prisma } = require('../db.js');
 
 console.log('🔍 Company route - Prisma imported:', typeof prisma, prisma ? 'defined' : 'undefined');
@@ -33,9 +34,16 @@ const {
   // generatePlanInfo, // Temporarily disabled
   // generateUpdatePlanInfo // Temporarily disabled
 } = require('../helpers/companyHelpers.js');
+const { convertCompaniesImageUrls, convertCompanyImageUrls, convertTalentsEmployeeImageUrls } = require('../utils/imageUrlUtils.js');
 
 const csrfProtection = csrf({ cookie: true });
 const router = express.Router();
+
+// Import upload service
+const { uploadFile, uploadMultipleFiles, extractKeyFromUrl } = require('../services/uploadService.js');
+
+// Multer is configured globally in index.js
+
 
 // Test endpoint to check database connection
 router.get('/test-db', async (req, res) => {
@@ -80,9 +88,12 @@ router.get('/companies', async (req, res) => {
     const companies = await getCompanies(filters, searchConditions, limitInt, (pageInt - 1) * limitInt);
     const totalCompanies = await getTotalCompanies(filters, searchConditions);
 
+    // Convert image keys to signed URL endpoints for each company
+    const companiesWithSignedUrls = convertCompaniesImageUrls(companies);
+
     res.json({
       success: true,
-      data: companies,
+      data: companiesWithSignedUrls,
       totalCompanies,
       currentPage: pageInt,
       totalPages: Math.ceil(totalCompanies / limitInt),
@@ -300,10 +311,12 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
 
     console.log('🔍 [Talents Application API] Found applications:', talents.length);
 
+    const talentsWithSignedUrls = convertTalentsEmployeeImageUrls(talents);
+
     res.status(200).json({ 
       success: true,
       message: 'Some talents want to be part of this company', 
-      data: talents 
+      data: talentsWithSignedUrls 
     });
   } catch (error) {
     console.error('🔍 [Talents Application API] Error:', error);
@@ -314,16 +327,44 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
   }
 });
 
+// Middleware for company creation (multer is handled globally)
+
+const createCompanyMiddleware = [
+  (req, res, next) => {
+    console.log('🚨 POST /company route HIT - Request received!');
+    console.log('🚨 Method:', req.method);
+    console.log('🚨 URL:', req.url);
+    console.log('🚨 Headers:', req.headers);
+    next();
+  },
+  getUserIdFromCookie,
+  setUserRole,
+  requirePermission('create_company'),
+  (req, res, next) => {
+    // Log what global multer parsed into body/files
+    try {
+      console.log('🧩 Global multer parsing complete for POST /company');
+      console.log('🧩 req.body keys:', Object.keys(req.body || {}));
+      if (req.files) {
+        console.log('🧩 req.files count:', req.files.length);
+        console.log('🧩 req.files details:', req.files.map(f => ({ 
+          fieldname: f.fieldname, 
+          originalname: f.originalname, 
+          mimetype: f.mimetype, 
+          size: f.size 
+        })));
+      } else {
+        console.log('🧩 req.files is undefined/null');
+      }
+    } catch (e) {
+      console.log('🧩 Error while logging multer results:', e.message);
+    }
+    next();
+  }
+];
+
 // POST /company - Create company (require admin or manager role)
-router.post('/company', (req, res, next) => {
-  console.log('🚨 POST /company route HIT - Request received!');
-  console.log('🚨 Method:', req.method);
-  console.log('🚨 URL:', req.url);
-  console.log('🚨 Headers:', req.headers);
-  console.log('🚨 Content-Type:', req.headers['content-type']);
-  console.log('🚨 Content-Length:', req.headers['content-length']);
-  next();
-}, getUserIdFromCookie, setUserRole, requirePermission('create_company'), async (req, res) => {
+router.post('/company', ...createCompanyMiddleware, async (req, res) => {
   
   try {
     console.log('🏢 POST /company - Creating company profile');
@@ -332,17 +373,12 @@ router.post('/company', (req, res, next) => {
     console.log('🏢 User type from middleware:', req.userType);
     console.log('🏢 User role from middleware:', req.userRole);
     console.log('🏢 Request body keys:', Object.keys(req.body));
-    console.log('🏢 Full request body:', req.body);
-    console.log('🏢 Request body type:', typeof req.body);
-    console.log('🏢 Request body length:', JSON.stringify(req.body).length);
-    console.log('🏢 Files received:', req.files ? req.files.length : 0);
-    if (req.files && req.files.length > 0) {
-      console.log('🏢 File details:', req.files.map(f => ({
-        fieldname: f.fieldname,
-        originalname: f.originalname,
-        mimetype: f.mimetype,
-        size: f.size
-      })));
+    console.log('🏢 Files present?', !!req.files, 'Keys:', req.files ? Object.keys(req.files) : null);
+    if (req.files && req.files.profileImage && req.files.profileImage[0]) {
+      console.log('🏢 profileImage[0] buffer bytes:', req.files.profileImage[0].buffer ? req.files.profileImage[0].buffer.length : 'no buffer');
+    }
+    if (req.files && req.files.galleryImages && req.files.galleryImages.length) {
+      console.log('🏢 galleryImages buffers:', req.files.galleryImages.map(f => f.buffer ? f.buffer.length : 'no buffer'));
     }
 
     const {
@@ -357,15 +393,79 @@ router.post('/company', (req, res, next) => {
       numberOfRestaurants,
       workers,
       weeklyAverageClients,
-      benefits,
-      locations,
+      benefits: benefitsRaw,
+      locations: locationsRaw,
       jobOffers,
       profileImageUrl,
-      profileCarouselUrls
+      profileCarouselUrls: profileCarouselUrlsRaw
     } = req.body;
+
+    // Parse JSON strings from FormData
+    const benefits = typeof benefitsRaw === 'string' ? JSON.parse(benefitsRaw) : benefitsRaw;
+    const locations = typeof locationsRaw === 'string' ? JSON.parse(locationsRaw) : locationsRaw;
+    const profileCarouselUrls = typeof profileCarouselUrlsRaw === 'string' ? JSON.parse(profileCarouselUrlsRaw) : profileCarouselUrlsRaw;
 
     const userId = req.userId;
     const role = req.role;
+
+    // Handle file uploads
+    let finalProfileImageUrl = profileImageUrl || 'No photo';
+    let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
+
+
+    
+
+    // Process files from global multer (all files in req.files array)
+    if (req.files && req.files.length > 0) {
+      console.log('📤 Processing files from global multer:', req.files.length);
+      
+      // Separate profile image from gallery images
+      const profileImageFile = req.files.find(file => file.fieldname === 'profileImage');
+      const galleryImageFiles = req.files.filter(file => file.fieldname === 'galleryImages');
+      
+      console.log('📤 Profile image found:', !!profileImageFile);
+      console.log('📤 Gallery images found:', galleryImageFiles.length);
+      
+      // Upload profile image if provided
+      if (profileImageFile) {
+        console.log('📤 Uploading profile image...');
+        const profileImageResult = await uploadFile(profileImageFile, 'company-profiles');
+        if (profileImageResult.success) {
+          finalProfileImageUrl = profileImageResult.key;
+          console.log('✅ Profile image uploaded, key stored:', finalProfileImageUrl);
+        } else {
+          console.error('❌ Profile image upload failed:', profileImageResult.error);
+          return res.status(400).json({
+            success: false,
+            message: 'Failed to upload profile image',
+            error: profileImageResult.error
+          });
+        }
+      }
+      
+      // Upload gallery images if provided
+      if (galleryImageFiles.length > 0) {
+        console.log('📤 Uploading gallery images...', galleryImageFiles.length);
+        const galleryResult = await uploadMultipleFiles(galleryImageFiles, 'company-gallery');
+        console.log('📤 Gallery upload result:', galleryResult);
+        
+        if (galleryResult.success) {
+          const galleryKeys = galleryResult.files.map(file => file.key);
+          console.log('📤 Gallery keys generated:', galleryKeys);
+          finalProfileCarouselUrls = [...finalProfileCarouselUrls, ...galleryKeys];
+          console.log('✅ Gallery images uploaded, keys stored:', galleryKeys.length);
+        } else {
+          console.error('❌ Gallery images upload failed:', galleryResult.error);
+          return res.status(400).json({
+            success: false,
+            message: 'Failed to upload gallery images',
+            error: galleryResult.error
+          });
+        }
+      }
+    } else {
+      console.log('📤 No files provided in request');
+    }
 
     console.log('🏢 About to create company profile for userId:', userId);
     console.log('🏢 Request body data:', {
@@ -386,53 +486,25 @@ router.post('/company', (req, res, next) => {
       profileImageUrl,
       profileCarouselUrls
     });
+    
+    console.log('🏢 Final processed data before database save:');
+    console.log('  - finalProfileImageUrl:', finalProfileImageUrl);
+    console.log('  - finalProfileCarouselUrls:', finalProfileCarouselUrls);
+    console.log('  - finalProfileCarouselUrls length:', finalProfileCarouselUrls.length);
 
     // Data validation and conversion
-    console.log('🏢 Raw data types:', {
-      locations: typeof locations,
-      benefits: typeof benefits,
-      profileCarouselUrls: typeof profileCarouselUrls
-    });
+    // Normalize image fields: drop blob: URLs and convert full URLs to keys
+    const normalizeToKey = (value) => {
+      if (!value) return value;
+      if (typeof value !== 'string') return value;
+      if (value.startsWith('blob:')) return null; // ignore preview blobs
+      const maybeKey = extractKeyFromUrl(value);
+      return maybeKey || value;
+    };
 
-    // Parse JSON strings from FormData
-    let parsedLocations = [];
-    if (locations) {
-      try {
-        parsedLocations = typeof locations === 'string' ? JSON.parse(locations) : locations;
-        console.log('🏢 Parsed locations:', parsedLocations);
-      } catch (error) {
-        console.error('🏢 Error parsing locations:', error);
-        parsedLocations = [];
-      }
-    }
-
-    let parsedBenefits = [];
-    if (benefits) {
-      try {
-        if (typeof benefits === 'string') {
-          parsedBenefits = JSON.parse(benefits);
-        } else if (Array.isArray(benefits)) {
-          parsedBenefits = benefits;
-        } else {
-          parsedBenefits = Object.keys(benefits).filter(key => benefits[key]);
-        }
-        console.log('🏢 Parsed benefits:', parsedBenefits);
-      } catch (error) {
-        console.error('🏢 Error parsing benefits:', error);
-        parsedBenefits = [];
-      }
-    }
-
-    let parsedProfileCarouselUrls = [];
-    if (profileCarouselUrls) {
-      try {
-        parsedProfileCarouselUrls = typeof profileCarouselUrls === 'string' ? JSON.parse(profileCarouselUrls) : profileCarouselUrls;
-        console.log('🏢 Parsed profileCarouselUrls:', parsedProfileCarouselUrls);
-      } catch (error) {
-        console.error('🏢 Error parsing profileCarouselUrls:', error);
-        parsedProfileCarouselUrls = [];
-      }
-    }
+    const normalizedCarouselKeys = (finalProfileCarouselUrls || [])
+      .map(normalizeToKey)
+      .filter(Boolean);
 
     const processedData = {
       name: name || '',
@@ -446,11 +518,11 @@ router.post('/company', (req, res, next) => {
       numberOfRestaurants: numberOfRestaurants ? parseInt(numberOfRestaurants, 10) : 1,
       workers: workers || '',
       weeklyAverageClients: weeklyAverageClients || '',
-      benefits: parsedBenefits,
-      locations: parsedLocations,
+      benefits: Array.isArray(benefits) ? benefits : (benefits ? Object.keys(benefits).filter(key => benefits[key]) : []),
+      locations: typeof locations === 'string' ? JSON.parse(locations) : (locations || []),
       jobOffers: jobOffers || [],
-      profileImageUrl: profileImageUrl || 'No photo',
-      profileCarouselUrls: parsedProfileCarouselUrls,
+      profileImageUrl: normalizeToKey(finalProfileImageUrl) || 'No photo',
+      profileCarouselUrls: normalizedCarouselKeys,
       userId
     };
 
@@ -496,48 +568,26 @@ router.post('/company', (req, res, next) => {
 router.get('/company/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('🔍 [Company Profile API] Fetching company profile:');
-    console.log('  - Company ID:', id);
-    
     const restaurant = await getCompanyById(id);
-    console.log('🔍 [Company Profile API] Found company:', restaurant ? 'Yes' : 'No');
 
     if (restaurant) {
-      console.log('🔍 [Company Profile API] Raw restaurant data:', {
-        id: restaurant.id,
-        name: restaurant.name,
-        profileImageUrl: restaurant.profileImageUrl,
-        profileCarouselUrls: restaurant.profileCarouselUrls,
-        benefits: restaurant.benefits,
-        locations: restaurant.locations
-      });
+      console.log('this is the restaurant', restaurant.benefits);
       
       // Convert image keys to signed URL endpoints
-      const { convertCompanyImageUrls } = require('../utils/imageUrlUtils.js');
-      const restaurantWithSignedUrls = convertCompanyImageUrls(restaurant);
-      
-      console.log('🔍 [Company Profile API] Restaurant with signed URLs:', {
-        id: restaurantWithSignedUrls.id,
-        name: restaurantWithSignedUrls.name,
-        profileImageUrl: restaurantWithSignedUrls.profileImageUrl,
-        profileCarouselUrls: restaurantWithSignedUrls.profileCarouselUrls,
-        benefits: restaurantWithSignedUrls.benefits,
-        locations: restaurantWithSignedUrls.locations
-      });
+      convertCompanyImageUrls(restaurant);
       
       res.status(200).json({ 
         success: true,
-        data: restaurantWithSignedUrls 
+        data: restaurant 
       });
     } else {
-      console.log('❌ [Company Profile API] Restaurant not found for ID:', id);
       res.status(404).json({ 
         success: false,
         error: 'Restaurant not found' 
       });
     }
   } catch (error) {
-    console.error('❌ [Company Profile API] Error:', error);
+    console.error(error);
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -583,8 +633,14 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
   }
 });
 
+// Middleware for company update (multer is handled globally)
+const updateCompanyMiddleware = [
+  getAuthFromCookie,
+  requirePermission('edit_company')
+];
+
 // PATCH /company - Update company (require permission to edit company)
-router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), async (req, res) => {
+router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
   try {
     const {
       legalName,
@@ -604,31 +660,10 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       profileCarouselUrls: profileCarouselUrlsRaw,
     } = req.body;
 
-    // Handle undefined values for optional fields
-    const safeLegalName = legalName || undefined;
-    const safeRut = rut || undefined;
-    const safeName = name || undefined;
-    const safeFormat = format || undefined;
-    const safeSpecialty = specialty || undefined;
-    const safeRegion = region || undefined;
-    const safeComuna = comuna || undefined;
-    const safeNumberOfRestaurants = numberOfRestaurants || undefined;
-    const safeWorkers = workers || undefined;
-    const safeWeeklyAverageClients = weeklyAverageClients || undefined;
-    const safeDescription = description || undefined;
-    const safeProfileImageUrl = profileImageUrl || undefined;
-
-    // Parse JSON strings from FormData and handle undefined values
-    const benefits = benefitsRaw ? (typeof benefitsRaw === 'string' ? JSON.parse(benefitsRaw) : benefitsRaw) : [];
-    const locations = locationsRaw ? (typeof locationsRaw === 'string' ? JSON.parse(locationsRaw) : locationsRaw) : [];
-    const profileCarouselUrls = profileCarouselUrlsRaw ? (typeof profileCarouselUrlsRaw === 'string' ? JSON.parse(profileCarouselUrlsRaw) : profileCarouselUrlsRaw) : [];
-
-    // Debug logging
-    console.log('🔍 [Company Update API] Raw data received:');
-    console.log('  - locationsRaw:', locationsRaw, typeof locationsRaw);
-    console.log('  - locations after parsing:', locations, typeof locations);
-    console.log('  - benefits after parsing:', benefits, typeof benefits);
-    console.log('  - profileCarouselUrls after parsing:', profileCarouselUrls, typeof profileCarouselUrls);
+    // Parse JSON strings from FormData
+    const benefits = typeof benefitsRaw === 'string' ? JSON.parse(benefitsRaw) : benefitsRaw;
+    const locations = typeof locationsRaw === 'string' ? JSON.parse(locationsRaw) : locationsRaw;
+    const profileCarouselUrls = typeof profileCarouselUrlsRaw === 'string' ? JSON.parse(profileCarouselUrlsRaw) : profileCarouselUrlsRaw;
 
     const { restaurantId: queryRestaurantId } = req.query;
     const { restaurantId: jwtRestaurantId } = req;
@@ -641,29 +676,26 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     console.log('  - JWT restaurantId:', jwtRestaurantId);
     console.log('  - Using restaurantId:', restaurantId);
 
-    // Ensure locations is an array (default to empty array if undefined/null)
-    const safeLocations = Array.isArray(locations) ? locations : [];
-    
-    const newLocations = filterNewLocations(safeLocations);
-    const existingLocations = filterExistingLocations(safeLocations);
+    const newLocations = filterNewLocations(locations);
+    const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
-    const locationsToDelete = findLocationsToDelete(currentLocations, safeLocations);
+    const locationsToDelete = findLocationsToDelete(currentLocations, locations);
 
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete);
       await updateCompanyProfile(restaurantId, {
-        legalName: safeLegalName,
-        rut: safeRut,
-        name: safeName,
-        format: safeFormat,
-        specialty: safeSpecialty,
-        numberOfRestaurants: safeNumberOfRestaurants,
-        workers: safeWorkers,
-        profileImageUrl: safeProfileImageUrl,
-        weeklyAverageClients: safeWeeklyAverageClients,
-        description: safeDescription,
-        region: safeRegion,
-        comuna: safeComuna,
+        legalName,
+        rut,
+        name,
+        format,
+        specialty,
+        numberOfRestaurants,
+        workers,
+        profileImageUrl,
+        weeklyAverageClients,
+        description,
+        region,
+        comuna,
         benefits,
         existingLocations,
         profileCarouselUrls,
