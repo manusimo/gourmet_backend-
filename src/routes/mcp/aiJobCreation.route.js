@@ -111,6 +111,7 @@ router.post('/create-job', getUserIdFromCookie, getRestaurantUserIdFromCookie, a
  */
 router.get('/health', async (req, res) => {
   try {
+    //this is it
     const client = aiJobCreationService.mcpClient;
     const isConnected = client?.isConnected || false;
     const status = client?.getStatus ? client.getStatus() : { isConnected };
