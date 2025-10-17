@@ -689,6 +689,13 @@ const updateCompanyMiddleware = [
 // PATCH /company - Update company (require permission to edit company)
 router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
   try {
+    console.log('🔍 [Company Update API] Request received');
+    console.log('🔍 Request body keys:', Object.keys(req.body));
+    console.log('🔍 Files present?', !!req.files, 'Count:', req.files ? req.files.length : 0);
+    if (req.files && req.files.length > 0) {
+      console.log('🔍 Files details:', req.files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, size: f.size })));
+    }
+
     const {
       legalName,
       rut,
@@ -723,6 +730,67 @@ router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
     console.log('  - JWT restaurantId:', jwtRestaurantId);
     console.log('  - Using restaurantId:', restaurantId);
 
+    // Handle file uploads - similar to POST route
+    let finalProfileImageUrl = profileImageUrl; // Start with existing URL
+    let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
+
+    // Process files from global multer (all files in req.files array)
+    if (req.files && req.files.length > 0) {
+      console.log('📤 [Company Update] Processing files from global multer:', req.files.length);
+      
+      // Separate profile image from gallery images
+      const profileImageFile = req.files.find(file => file.fieldname === 'profileImage');
+      const galleryImageFiles = req.files.filter(file => file.fieldname === 'galleryImages');
+      
+      console.log('📤 [Company Update] Profile image found:', !!profileImageFile);
+      console.log('📤 [Company Update] Gallery images found:', galleryImageFiles.length);
+      
+      // Upload profile image if provided
+      if (profileImageFile) {
+        console.log('📤 [Company Update] Uploading profile image...');
+        const profileImageResult = await uploadFile(profileImageFile, 'company-profiles');
+        if (profileImageResult.success) {
+          finalProfileImageUrl = profileImageResult.key;
+          console.log('✅ [Company Update] Profile image uploaded, key stored:', finalProfileImageUrl);
+        } else {
+          console.error('❌ [Company Update] Profile image upload failed:', profileImageResult.error);
+          return res.status(400).json({
+            success: false,
+            message: 'Failed to upload profile image',
+            error: profileImageResult.error
+          });
+        }
+      }
+      
+      // Upload gallery images if provided
+      if (galleryImageFiles.length > 0) {
+        console.log('📤 [Company Update] Uploading gallery images...');
+        const galleryUploadPromises = galleryImageFiles.map(async (file) => {
+          const result = await uploadFile(file, 'company-profiles');
+          if (result.success) {
+            console.log('✅ [Company Update] Gallery image uploaded:', result.key);
+            return result.key;
+          } else {
+            console.error('❌ [Company Update] Gallery image upload failed:', result.error);
+            throw new Error(`Failed to upload gallery image: ${result.error}`);
+          }
+        });
+        
+        try {
+          const newGalleryKeys = await Promise.all(galleryUploadPromises);
+          finalProfileCarouselUrls = [...finalProfileCarouselUrls, ...newGalleryKeys];
+          console.log('✅ [Company Update] All gallery images uploaded successfully');
+        } catch (galleryError) {
+          console.error('❌ [Company Update] Gallery upload error:', galleryError);
+          return res.status(400).json({
+            success: false,
+            message: 'Failed to upload gallery images',
+            error: galleryError.message
+          });
+        }
+      }
+    }
+
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
@@ -738,24 +806,25 @@ router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
         specialty,
         numberOfRestaurants,
         workers,
-        profileImageUrl,
+        profileImageUrl: finalProfileImageUrl, // Use processed image URL
         weeklyAverageClients,
         description,
         region,
         comuna,
         benefits,
         existingLocations,
-        profileCarouselUrls,
+        profileCarouselUrls: finalProfileCarouselUrls, // Use processed gallery URLs
       });
       await createNewLocations(newLocations, restaurantId);
     });
 
+    console.log('✅ [Company Update] Company profile updated successfully');
     res.status(200).json({ 
       success: true,
       message: 'Company profile updated successfully'
     });
   } catch (error) {
-    console.error('Error updating company profile:', error.message, error.stack);
+    console.error('❌ [Company Update] Error updating company profile:', error.message, error.stack);
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
