@@ -38,7 +38,7 @@ async function updateCompanyProfile(
       comuna,
       numberOfRestaurants: parseInt(numberOfRestaurants, 10),
       workers,
-      profileImageUrl,
+      profileImageUrl: Array.isArray(profileImageUrl) ? profileImageUrl[0] || null : profileImageUrl,
       weeklyAverageClients,
       description,
       benefits: {
