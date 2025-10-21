@@ -146,6 +146,9 @@ model Restaurant {
   // AI Agent relations
   aiAgents            AiAgent[]
   scheduledCalls      ScheduledCall[]
+  
+  // Soft delete
+  deletedAt            DateTime?
 }
 
 model Location {

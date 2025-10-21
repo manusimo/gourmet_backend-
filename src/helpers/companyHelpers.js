@@ -14,6 +14,7 @@ const getCompanies = async (filters, searchConditions, limit, skip) => {
     where: {
       ...searchConditions,
       ...filters,
+      deletedAt: null, // Filter out soft-deleted restaurants
     },
     include: {
       locations: true,
@@ -42,6 +43,7 @@ const getTotalCompanies = async (filters, searchConditions) => {
     where: {
       ...searchConditions,
       ...filters,
+      deletedAt: null, // Filter out soft-deleted restaurants
     },
   });
 };
@@ -315,8 +317,11 @@ const getCompanyById = async (companyId) => {
   console.log('🔍 [getCompanyById] Converted to number:', Number(companyId));
   
   try {
-    const result = await prisma.restaurant.findUnique({
-      where: { id: Number(companyId) },
+    const result = await prisma.restaurant.findFirst({
+      where: { 
+        id: Number(companyId),
+        deletedAt: null // Filter out soft-deleted restaurants
+      },
       include: {
         locations: true,
         jobOffers: {
@@ -354,8 +359,11 @@ const getCompanyById = async (companyId) => {
  * @returns {Object|null} Company or null if not found
  */
 const getCompanyByRestaurantId = async (restaurantId) => {
-  return await prisma.restaurant.findUnique({
-    where: { id: Number(restaurantId) },
+  return await prisma.restaurant.findFirst({
+    where: { 
+      id: Number(restaurantId),
+      deletedAt: null // Filter out soft-deleted restaurants
+    },
     include: {
       locations: true,
       jobOffers: {

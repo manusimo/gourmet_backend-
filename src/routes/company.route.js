@@ -832,4 +832,62 @@ router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
   }
 });
 
+// DELETE /company/:id - Soft delete restaurant
+router.delete('/company/:id', getAuthFromCookie, requirePermission('delete_company'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = parseInt(id);
+    
+    console.log('🗑️ [Delete Restaurant API] Soft deleting restaurant:', restaurantId);
+    console.log('🗑️ Request user info:', { 
+      userId: req.userId, 
+      userType: req.userType, 
+      role: req.role,
+      restaurantId: req.restaurantId 
+    });
+
+    if (!restaurantId || isNaN(restaurantId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid restaurant ID'
+      });
+    }
+
+    // Check if the restaurant exists and belongs to the user
+    const restaurant = await prisma.restaurant.findFirst({
+      where: {
+        id: restaurantId,
+        userId: req.userId,
+        deletedAt: null // Only find non-deleted restaurants
+      }
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        error: 'Restaurant not found or you do not have permission to delete it'
+      });
+    }
+
+    // Soft delete the restaurant by setting deletedAt
+    await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: { deletedAt: new Date() }
+    });
+
+    console.log('✅ [Delete Restaurant API] Restaurant soft deleted successfully:', restaurantId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Restaurant deleted successfully'
+    });
+  } catch (error) {
+    console.error('❌ [Delete Restaurant API] Error deleting restaurant:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error'
+    });
+  }
+});
+
 module.exports = router;

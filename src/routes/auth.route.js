@@ -278,7 +278,7 @@ router.post('/signin', validateSignin, async (req, res) => {
         console.log(`🏢 Found restaurant for user ${user.email}:`, { restaurantId, restaurantUserId });
       } else {
         // Fallback: try to find restaurant directly (for admin users)
-        const restaurant = await prisma.restaurant.findUnique({
+        const restaurant = await prisma.restaurant.findFirst({
           where: { userId: user.id },
           select: { id: true }
         });
@@ -1031,7 +1031,12 @@ router.get('/user-info', async (req, res) => {
 
       // Get all restaurants this user has access to (both as owner and as staff)
       const restaurantUsers = await prisma.restaurantUser.findMany({
-        where: { userId: userId },
+        where: { 
+          userId: userId,
+          restaurant: {
+            deletedAt: null // Filter out soft-deleted restaurants
+          }
+        },
         include: {
           restaurant: {
             select: {
@@ -1051,7 +1056,10 @@ router.get('/user-info', async (req, res) => {
 
       // Also get restaurants where the user is the direct owner
       const ownedRestaurants = await prisma.restaurant.findMany({
-        where: { userId: userId },
+        where: { 
+          userId: userId,
+          deletedAt: null // Filter out soft-deleted restaurants
+        },
         select: {
           id: true,
           name: true,
