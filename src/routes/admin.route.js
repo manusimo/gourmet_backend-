@@ -6,6 +6,7 @@ const { getErrorStats, searchErrors } = require('../middleware/errorTracking.js'
 const { checkCompany } = require('../helpers/authenticateToken.js');
 const { requireRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
+const { isAccountLocked, resetAccountLockout } = require('../middleware/security.js');
 const { sendEmail } = require('../helpers/email.js');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
@@ -728,6 +729,124 @@ router.get('/system/logs', (req, res) => {
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
+    });
+  }
+});
+
+// ============================================================================
+// FLAGGED USERS MANAGEMENT ENDPOINTS
+// ============================================================================
+
+/**
+ * Get all flagged/locked users
+ * GET /api/admin/flagged-users
+ */
+router.get('/flagged-users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+  try {
+    console.log('🔍 Admin fetching flagged users');
+    
+    // Get all users with lockout information
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        userType: true,
+        role: true,
+        lastLoginAt: true,
+        createdAt: true
+      }
+    });
+
+    // Check which users are currently locked
+    const flaggedUsers = [];
+    
+    for (const user of users) {
+      const lockoutStatus = isAccountLocked(user.id);
+      if (lockoutStatus) {
+        flaggedUsers.push({
+          ...user,
+          attempts: lockoutStatus.attempts,
+          lockUntil: lockoutStatus.lockUntil,
+          remainingTime: lockoutStatus.remainingTime
+        });
+      }
+    }
+
+    console.log(`🔍 Found ${flaggedUsers.length} flagged users`);
+
+    res.status(200).json({
+      success: true,
+      flaggedUsers: flaggedUsers,
+      total: flaggedUsers.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching flagged users:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching flagged users'
+    });
+  }
+});
+
+/**
+ * Unflag/unlock a user
+ * POST /api/admin/unflag-user
+ */
+router.post('/unflag-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    console.log(`🔍 Admin attempting to unflag user: ${userId}`);
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(userId) },
+      select: { id: true, email: true, name: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Reset the account lockout
+    const resetResult = resetAccountLockout(userId);
+    
+    if (resetResult.success) {
+      console.log(`✅ Admin unflag: User ${user.email} (ID: ${userId}) has been unlocked`);
+      
+      res.status(200).json({
+        success: true,
+        message: `User ${user.email} has been successfully unlocked`,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'User was not locked or could not be unlocked'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error unflagging user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error unflagging user'
     });
   }
 });
