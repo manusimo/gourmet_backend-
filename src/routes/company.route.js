@@ -782,7 +782,7 @@ router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
       if (galleryImageFiles.length > 0) {
         console.log('📤 [Company Update] Uploading gallery images...');
         const galleryUploadPromises = galleryImageFiles.map(async (file) => {
-          const result = await uploadFile(file, 'company-profiles');
+          const result = await uploadFile(file, 'company-gallery');
           if (result.success) {
             console.log('✅ [Company Update] Gallery image uploaded:', result.key);
             return result.key;
