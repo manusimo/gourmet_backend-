@@ -75,11 +75,11 @@ const accountLockouts = new Map(); // userId -> { attempts, lockUntil, lastAttem
 const LOCKOUT_CONFIG = {
   maxAttempts: 6,
   lockoutDurations: [
-    1 * 60 * 1000,   // 1 minute after 6 attempts
-    5 * 60 * 1000,   // 5 minutes after 7 attempts  
-    15 * 60 * 1000,  // 15 minutes after 8 attempts
-    30 * 60 * 1000,  // 30 minutes after 9 attempts
-    60 * 60 * 1000   // 1 hour for subsequent attempts
+    60 * 60 * 1000,   // 1 hour after 6 attempts
+    2 * 60 * 60 * 1000,   // 2 hours after 7 attempts  
+    4 * 60 * 60 * 1000,  // 4 hours after 8 attempts
+    8 * 60 * 60 * 1000,  // 8 hours after 9 attempts
+    24 * 60 * 60 * 1000   // 24 hours for subsequent attempts
   ]
 };
 
