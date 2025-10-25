@@ -606,10 +606,26 @@ router.get('/company/:id', async (req, res) => {
     const restaurant = await getCompanyById(id);
 
     if (restaurant) {
-      console.log('this is the restaurant', restaurant.benefits);
+      console.log('🏢 [Company GET] Restaurant data before conversion:', {
+        id: restaurant.id,
+        name: restaurant.name,
+        profileImageUrl: restaurant.profileImageUrl,
+        profileCarouselUrls: restaurant.profileCarouselUrls,
+        profileCarouselUrlsType: typeof restaurant.profileCarouselUrls,
+        profileCarouselUrlsIsArray: Array.isArray(restaurant.profileCarouselUrls)
+      });
       
       // Convert image keys to actual signed URLs
       const restaurantWithSignedUrls = await convertImageUrls(restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+      
+      console.log('🏢 [Company GET] Restaurant data after conversion:', {
+        id: restaurantWithSignedUrls.id,
+        name: restaurantWithSignedUrls.name,
+        profileImageUrl: restaurantWithSignedUrls.profileImageUrl,
+        profileCarouselUrls: restaurantWithSignedUrls.profileCarouselUrls,
+        profileCarouselUrlsType: typeof restaurantWithSignedUrls.profileCarouselUrls,
+        profileCarouselUrlsIsArray: Array.isArray(restaurantWithSignedUrls.profileCarouselUrls)
+      });
       
       res.status(200).json({ 
         success: true,
