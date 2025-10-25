@@ -73,12 +73,12 @@ if (process.env.NODE_ENV !== 'test') {
 const accountLockouts = new Map(); // userId -> { attempts, lockUntil, lastAttempt }
 
 const LOCKOUT_CONFIG = {
-  maxAttempts: 5,
+  maxAttempts: 6,
   lockoutDurations: [
-    1 * 60 * 1000,   // 1 minute after 3 attempts
-    5 * 60 * 1000,   // 5 minutes after 4 attempts  
-    15 * 60 * 1000,  // 15 minutes after 5 attempts
-    30 * 60 * 1000,  // 30 minutes after 6 attempts
+    1 * 60 * 1000,   // 1 minute after 6 attempts
+    5 * 60 * 1000,   // 5 minutes after 7 attempts  
+    15 * 60 * 1000,  // 15 minutes after 8 attempts
+    30 * 60 * 1000,  // 30 minutes after 9 attempts
     60 * 60 * 1000   // 1 hour for subsequent attempts
   ]
 };
@@ -99,8 +99,8 @@ const recordFailedAttempt = (userId) => {
   lockoutData.lastAttempt = now;
   
   // Calculate lockout duration
-  if (lockoutData.attempts >= 3) {
-    const durationIndex = Math.min(lockoutData.attempts - 3, LOCKOUT_CONFIG.lockoutDurations.length - 1);
+  if (lockoutData.attempts >= 6) {
+    const durationIndex = Math.min(lockoutData.attempts - 6, LOCKOUT_CONFIG.lockoutDurations.length - 1);
     const lockoutDuration = LOCKOUT_CONFIG.lockoutDurations[durationIndex];
     lockoutData.lockUntil = now + lockoutDuration;
     

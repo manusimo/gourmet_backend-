@@ -3,15 +3,20 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
 const { sendEmail } = require('../helpers/email.js');
-const { convertImageKeyToSignedUrl } = require('../utils/imageUrlUtils.js');
+const { 
+  convertImageKeyToSignedUrl 
+} = require('../utils/imageUrlUtils.js');
+
 const {
   validateGoogleOAuthRequest,
   handleGoogleOAuthError
 } = require('../helpers/validationHelpers.js');
+
 const {
   authenticateWithGoogle,
   createAuthResponse
 } = require('../helpers/googleAuthHelpers.js');
+
 const {
   checkEmployee,
   checkCompany,
@@ -20,6 +25,7 @@ const {
   validateTokenAndIdentifyUser,
   optionalAuth
 } = require('../middleware/auth.js');
+
 const {
   validateSignup,
   validateSignin,
@@ -27,6 +33,7 @@ const {
   validatePasswordReset,
   validatePasswordResetConfirm
 } = require('../middleware/validation.js');
+
 const {
   recordFailedAttempt,
   isAccountLocked,
