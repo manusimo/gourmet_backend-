@@ -851,4 +851,162 @@ router.post('/unflag-user', checkCompany, getUserIdFromCookie, getRestaurantUser
   }
 });
 
+/**
+ * Get all users
+ * GET /api/admin/all-users
+ */
+router.get('/all-users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+  try {
+    console.log('🔍 [Admin All Users] Request received');
+    console.log('🔍 [Admin All Users] User ID:', req.userId);
+    console.log('🔍 [Admin All Users] User Role:', req.role);
+    
+    // Get all users with basic information
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        userType: true,
+        role: true,
+        createdAt: true,
+        lastLoginAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    console.log(`🔍 [Admin All Users] Found ${users.length} total users`);
+    console.log('🔍 [Admin All Users] Users:', users.map(u => ({ id: u.id, email: u.email, userType: u.userType })));
+
+    res.status(200).json({
+      success: true,
+      users: users,
+      total: users.length
+    });
+
+  } catch (error) {
+    console.error('❌ [Admin All Users] Error fetching all users:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching all users'
+    });
+  }
+});
+
+/**
+ * Delete a user and all related data
+ * DELETE /api/admin/delete-user
+ */
+router.delete('/delete-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    console.log(`🔍 Admin attempting to delete user: ${userId}`);
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: parseInt(userId) },
+      select: { id: true, email: true, name: true, userType: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Prevent deleting the current admin user
+    if (parseInt(userId) === req.userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete your own account'
+      });
+    }
+
+    // Start a transaction to delete all related data
+    await prisma.$transaction(async (tx) => {
+      // Delete related data based on user type
+      if (user.userType === 'empresas') {
+        // For empresas: Check if user owns restaurants directly
+        const userRestaurants = await tx.restaurant.findMany({
+          where: { userId: parseInt(userId) }
+        });
+
+        // Delete restaurants owned by this user
+        for (const restaurant of userRestaurants) {
+          // Get job offers for this restaurant
+          const jobOffers = await tx.jobOffer.findMany({ where: { restaurantId: restaurant.id } });
+          
+          // Delete applications for these job offers
+          for (const jobOffer of jobOffers) {
+            await tx.application.deleteMany({ where: { jobPostId: jobOffer.id } });
+          }
+          
+          // Delete locations first (they reference restaurant)
+          await tx.location.deleteMany({ where: { restaurantId: restaurant.id } });
+          
+          // Delete job offers and conversations
+          await tx.jobOffer.deleteMany({ where: { restaurantId: restaurant.id } });
+          await tx.conversation.deleteMany({ where: { restaurantId: restaurant.id } });
+          await tx.restaurant.delete({ where: { id: restaurant.id } });
+        }
+
+        // Delete restaurant user relationships
+        const restaurantUsers = await tx.restaurantUser.findMany({
+          where: { userId: parseInt(userId) }
+        });
+
+        for (const restaurantUser of restaurantUsers) {
+          // Delete user's conversations and job posts
+          await tx.jobOffer.deleteMany({ where: { restaurantUserId: restaurantUser.id } });
+          await tx.conversation.deleteMany({ where: { restaurantUserId: restaurantUser.id } });
+          // Delete the restaurant user relationship
+          await tx.restaurantUser.delete({ where: { id: restaurantUser.id } });
+        }
+      } else if (user.userType === 'profesionales') {
+        // For profesionales: Delete everything (employee profile, applications, conversations)
+        const employee = await tx.employee.findUnique({ where: { userId: parseInt(userId) } });
+        if (employee) {
+          await tx.application.deleteMany({ where: { employeeId: employee.id } });
+          await tx.conversation.deleteMany({ where: { employeeId: employee.id } });
+          await tx.employee.delete({ where: { id: employee.id } });
+        }
+      }
+
+      // Finally, delete the user
+      await tx.user.delete({ where: { id: parseInt(userId) } });
+    });
+
+    console.log(`✅ Admin delete: User ${user.email} (ID: ${userId}) and all related data deleted successfully`);
+    
+    res.status(200).json({
+      success: true,
+      message: `User ${user.email} and all related data deleted successfully`,
+      deletedUser: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        userType: user.userType
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error deleting user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user and related data'
+    });
+  }
+});
+
 module.exports = router;
