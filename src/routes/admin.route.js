@@ -974,6 +974,12 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
             // Delete questions linked to this job offer
             await tx.question.deleteMany({ where: { jobOfferId: jobOffer.id } });
           }
+
+          // Remove favourite jobs that reference any of these job offers
+          const jobOfferIds = jobOffers.map((jo) => jo.id);
+          if (jobOfferIds.length > 0) {
+            await tx.favouriteJob.deleteMany({ where: { jobOfferId: { in: jobOfferIds } } });
+          }
           
           // Delete locations first (they reference restaurant)
           await tx.location.deleteMany({ where: { restaurantId: restaurant.id } });
@@ -984,6 +990,9 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
             await tx.message.deleteMany({ where: { conversationId: conv.id } });
           }
           await tx.conversation.deleteMany({ where: { restaurantId: restaurant.id } });
+
+          // Delete talent pool entries for this restaurant
+          await tx.talentPool.deleteMany({ where: { restaurantId: restaurant.id } });
 
           // Delete restaurantUser links pointing to this restaurant (FK constraint)
           await tx.restaurantUser.deleteMany({ where: { restaurantId: restaurant.id } });
