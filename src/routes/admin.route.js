@@ -15,9 +15,6 @@ const { setUserRole } = require('../middleware/auth.js');
 
 const router = express.Router();
 
-// ============================================================================
-// USER MANAGEMENT ENDPOINTS
-// ============================================================================
 
 // GET /admin/users - Get all users for the company
 router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
