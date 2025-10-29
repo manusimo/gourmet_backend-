@@ -977,10 +977,19 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
           
           // Delete locations first (they reference restaurant)
           await tx.location.deleteMany({ where: { restaurantId: restaurant.id } });
-          
-          // Delete job offers and conversations
-          await tx.jobOffer.deleteMany({ where: { restaurantId: restaurant.id } });
+
+          // Delete messages for conversations tied to this restaurant, then conversations
+          const conversationsForRestaurant = await tx.conversation.findMany({ where: { restaurantId: restaurant.id } });
+          for (const conv of conversationsForRestaurant) {
+            await tx.message.deleteMany({ where: { conversationId: conv.id } });
+          }
           await tx.conversation.deleteMany({ where: { restaurantId: restaurant.id } });
+
+          // Delete restaurantUser links pointing to this restaurant (FK constraint)
+          await tx.restaurantUser.deleteMany({ where: { restaurantId: restaurant.id } });
+
+          // Finally delete remaining job offers for this restaurant and the restaurant itself
+          await tx.jobOffer.deleteMany({ where: { restaurantId: restaurant.id } });
           await tx.restaurant.delete({ where: { id: restaurant.id } });
         }
 
