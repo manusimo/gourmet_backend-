@@ -3,7 +3,7 @@ const { prisma } = require('../db.js');
 const { getMonitoringStats, resetMonitoring } = require('../middleware/ddosMonitoring.js');
 const { getPerformanceStats, getHealthStatus } = require('../middleware/performanceMonitoring.js');
 const { getErrorStats, searchErrors } = require('../middleware/errorTracking.js');
-const { checkCompany } = require('../helpers/authenticateToken.js');
+const { checkAdmin } = require('../helpers/authenticateToken.js');
 const { requireRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../helpers/cookies.js');
 const { isAccountLocked, resetAccountLockout } = require('../middleware/security.js');
@@ -855,30 +855,46 @@ router.post('/unflag-user', checkCompany, getUserIdFromCookie, getRestaurantUser
  * Get all users
  * GET /api/admin/all-users
  */
-router.get('/all-users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     console.log('🔍 [Admin All Users] Request received');
     console.log('🔍 [Admin All Users] User ID:', req.userId);
     console.log('🔍 [Admin All Users] User Role:', req.role);
     
-    // Get all users with basic information
+    // Get users with specific criteria:
+    // 1. All users with userType: 'profesionales' (all professionals)
+    // 2. Only users with userType: 'empresas' AND role: 'admin' (only admin companies)
     const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { userType: 'profesionales' },
+          { 
+            AND: [
+              { userType: 'empresas' },
+              { role: 'admin' }
+            ]
+          }
+        ]
+      },
       select: {
         id: true,
         name: true,
+        surname: true,
         email: true,
         userType: true,
         role: true,
         createdAt: true,
-        lastLoginAt: true
+        lastLoginAt: true,
+        accountLocked: true,
+        mfaEnabled: true
       },
       orderBy: {
         createdAt: 'desc'
       }
     });
 
-    console.log(`🔍 [Admin All Users] Found ${users.length} total users`);
-    console.log('🔍 [Admin All Users] Users:', users.map(u => ({ id: u.id, email: u.email, userType: u.userType })));
+    console.log(`🔍 [Admin All Users] Found ${users.length} filtered users`);
+    console.log('🔍 [Admin All Users] Users:', users.map(u => ({ id: u.id, email: u.email, userType: u.userType, role: u.role })));
 
     res.status(200).json({
       success: true,

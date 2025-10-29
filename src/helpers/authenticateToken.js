@@ -63,6 +63,7 @@ const checkUserRole = () => (req, res, next) => {
 
 const checkEmployee = checkUserType('profesionales');
 const checkCompany = checkUserType('empresas');
+const checkAdmin = checkUserType('admin');
 const setUserRole = checkUserRole()
 
-module.exports = { checkEmployee, checkCompany, setUserRole };
+module.exports = { checkEmployee, checkCompany, checkAdmin, setUserRole };
