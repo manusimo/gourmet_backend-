@@ -960,9 +960,19 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
           // Get job offers for this restaurant
           const jobOffers = await tx.jobOffer.findMany({ where: { restaurantId: restaurant.id } });
           
-          // Delete applications for these job offers
+          // For each job offer: delete dependent entities in correct order
           for (const jobOffer of jobOffers) {
+            // Delete answers for applications linked to this job offer
+            const applicationsForOffer = await tx.application.findMany({ where: { jobPostId: jobOffer.id } });
+            for (const application of applicationsForOffer) {
+              await tx.answer.deleteMany({ where: { applicationId: application.id } });
+            }
+
+            // Delete applications linked to this job offer
             await tx.application.deleteMany({ where: { jobPostId: jobOffer.id } });
+
+            // Delete questions linked to this job offer
+            await tx.question.deleteMany({ where: { jobOfferId: jobOffer.id } });
           }
           
           // Delete locations first (they reference restaurant)
@@ -980,7 +990,25 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
         });
 
         for (const restaurantUser of restaurantUsers) {
-          // Delete user's job posts
+          // Get job offers created by this restaurant user
+          const jobOffersByUser = await tx.jobOffer.findMany({ where: { restaurantUserId: restaurantUser.id } });
+
+          // For each job offer: delete dependent entities in correct order
+          for (const jobOffer of jobOffersByUser) {
+            // Delete answers for applications linked to this job offer
+            const applicationsForOffer = await tx.application.findMany({ where: { jobPostId: jobOffer.id } });
+            for (const application of applicationsForOffer) {
+              await tx.answer.deleteMany({ where: { applicationId: application.id } });
+            }
+
+            // Delete applications linked to this job offer
+            await tx.application.deleteMany({ where: { jobPostId: jobOffer.id } });
+
+            // Delete questions linked to this job offer
+            await tx.question.deleteMany({ where: { jobOfferId: jobOffer.id } });
+          }
+
+          // Delete user's job posts after dependents are removed
           await tx.jobOffer.deleteMany({ where: { restaurantUserId: restaurantUser.id } });
           
           // Get conversations first, then delete messages, then conversations
