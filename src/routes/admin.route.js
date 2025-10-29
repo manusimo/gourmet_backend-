@@ -912,7 +912,7 @@ router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRo
  * Delete a user and all related data
  * DELETE /api/admin/delete-user
  */
-router.delete('/delete-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
+router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     const { userId } = req.body;
 
