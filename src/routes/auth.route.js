@@ -51,9 +51,6 @@ const router = express.Router();
 // Apply enhanced security middleware to all auth routes
 router.use(enhancedSecurityMiddleware);
 
-// ============================================================================
-// AUTHENTICATION ROUTES WITH ENHANCED SECURITY
-// ============================================================================
 
 // POST /signup - User registration with enhanced validation
 router.post('/signup', validateSignup, async (req, res) => {
@@ -593,10 +590,6 @@ router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
   }
 });
 
-// ============================================================================
-// SESSION MANAGEMENT ROUTES
-// ============================================================================
-
 // POST /logout - Enhanced logout with token blacklisting
 router.post('/logout', async (req, res) => {
   try {
@@ -678,10 +671,6 @@ router.post('/logout-all', validateTokenAndIdentifyUser, async (req, res) => {
     });
   }
 });
-
-// ============================================================================
-// EXISTING ROUTES (ENHANCED)
-// ============================================================================
 
 // POST /password-reset-request - Password reset request
 router.post('/password-reset-request', validatePasswordReset, async (req, res) => {

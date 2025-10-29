@@ -967,9 +967,24 @@ router.delete('/delete-user', checkCompany, getUserIdFromCookie, getRestaurantUs
         });
 
         for (const restaurantUser of restaurantUsers) {
-          // Delete user's conversations and job posts
+          // Delete user's job posts
           await tx.jobOffer.deleteMany({ where: { restaurantUserId: restaurantUser.id } });
+          
+          // Get conversations first, then delete messages, then conversations
+          const conversations = await tx.conversation.findMany({ 
+            where: { restaurantUserId: restaurantUser.id } 
+          });
+          
+          // Delete all messages for these conversations first
+          for (const conversation of conversations) {
+            await tx.message.deleteMany({ 
+              where: { conversationId: conversation.id } 
+            });
+          }
+          
+          // Now delete the conversations
           await tx.conversation.deleteMany({ where: { restaurantUserId: restaurantUser.id } });
+          
           // Delete the restaurant user relationship
           await tx.restaurantUser.delete({ where: { id: restaurantUser.id } });
         }
@@ -977,12 +992,54 @@ router.delete('/delete-user', checkCompany, getUserIdFromCookie, getRestaurantUs
         // For profesionales: Delete everything (employee profile, applications, conversations)
         const employee = await tx.employee.findUnique({ where: { userId: parseInt(userId) } });
         if (employee) {
+          // First, get all applications for this employee
+          const applications = await tx.application.findMany({ 
+            where: { employeeId: employee.id } 
+          });
+          
+          // Delete all answers for these applications first (foreign key constraint)
+          for (const application of applications) {
+            await tx.answer.deleteMany({ 
+              where: { applicationId: application.id } 
+            });
+          }
+          
+          // Now delete the applications
           await tx.application.deleteMany({ where: { employeeId: employee.id } });
+          
+          // Delete other related data
+          await tx.favouriteJob.deleteMany({ where: { employeeId: employee.id } });
+          await tx.talentPool.deleteMany({ where: { employeeId: employee.id } });
+          await tx.experience.deleteMany({ where: { employeeId: employee.id } });
+          await tx.education.deleteMany({ where: { employeeId: employee.id } });
+          
+          // Get conversations first, then delete messages, then conversations
+          const conversations = await tx.conversation.findMany({ 
+            where: { employeeId: employee.id } 
+          });
+          
+          // Delete all messages for these conversations first
+          for (const conversation of conversations) {
+            await tx.message.deleteMany({ 
+              where: { conversationId: conversation.id } 
+            });
+          }
+          
+          // Now delete the conversations
           await tx.conversation.deleteMany({ where: { employeeId: employee.id } });
+          
+          // Finally delete the employee
           await tx.employee.delete({ where: { id: employee.id } });
         }
       }
 
+      // Delete AI agent related data
+      await tx.agentConversation.deleteMany({ where: { userId: parseInt(userId) } });
+      await tx.aiAgent.deleteMany({ where: { createdByUserId: parseInt(userId) } });
+      
+      // Delete notifications
+      await tx.notification.deleteMany({ where: { userId: parseInt(userId) } });
+      
       // Finally, delete the user
       await tx.user.delete({ where: { id: parseInt(userId) } });
     });
