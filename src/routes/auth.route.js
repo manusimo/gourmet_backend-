@@ -445,7 +445,7 @@ router.post('/signin', validateSignin, async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Login successful',
+      message: 'Inicio de sesión exitoso',
       data: {
         user: {
           id: user.id,
@@ -469,7 +469,7 @@ router.post('/signin', validateSignin, async (req, res) => {
     
     res.status(500).json({
       success: false,
-      message: 'An unexpected error occurred during login. Please try again later.',
+      message: 'Ocurrió un error inesperado durante el inicio de sesión. Por favor, intenta nuevamente más tarde.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
