@@ -66,16 +66,46 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
     return defaultImage;
   }
 
-  // If it's already a blob URL or full URL, return as is
-  if (imageUrl.startsWith('blob:') || imageUrl.startsWith('http')) {
-    console.log('🔗 Image URL is already a full URL, returning as is:', imageUrl);
+  // If it's a blob URL, return as is (for local previews)
+  if (imageUrl.startsWith('blob:')) {
+    console.log('🔗 Image URL is a blob URL, returning as is:', imageUrl);
     return imageUrl;
   }
 
-  // If it's a Wasabi key, generate a signed URL
-  if (!imageUrl.includes('http')) {
+  // Extract key from Wasabi signed URL if it's already a full Wasabi URL
+  let imageKey = imageUrl;
+  
+  if (imageUrl.includes('wasabisys.com')) {
     try {
-      console.log('🔗 Generating signed URL for Wasabi key:', imageUrl);
+      // Parse the Wasabi URL to extract the key
+      // Format: https://s3.us-east-1.wasabisys.com/gourmet-staging/path/to/image.png?params
+      const url = new URL(imageUrl);
+      // Remove leading slash and bucket name from pathname
+      const pathParts = url.pathname.split('/').filter(part => part.length > 0);
+      // Remove bucket name (first part after domain)
+      pathParts.shift(); // Remove 'gourmet-staging'
+      imageKey = pathParts.join('/');
+      
+      console.log('🔗 Extracted key from Wasabi URL:', imageKey);
+      console.log('🔗 Regenerating signed URL to ensure it\'s not expired');
+    } catch (error) {
+      console.error('❌ Error parsing Wasabi URL, trying to use as key:', error.message);
+      // If parsing fails, try to extract key from path directly
+      const match = imageUrl.match(/wasabisys\.com\/[^\/]+\/(.+?)(?:\?|$)/);
+      if (match && match[1]) {
+        imageKey = match[1];
+      }
+    }
+  } else if (imageUrl.startsWith('http')) {
+    // If it's a non-Wasabi HTTP URL, return as is
+    console.log('🔗 Image URL is a full non-Wasabi URL, returning as is:', imageUrl);
+    return imageUrl;
+  }
+
+  // Generate a fresh signed URL for the key
+  if (!imageKey.includes('http')) {
+    try {
+      console.log('🔗 Generating signed URL for Wasabi key:', imageKey);
       console.log('🔗 Environment variables check:', {
         WASABI_ENDPOINT: process.env.WASABI_ENDPOINT ? 'SET' : 'NOT SET',
         WASABI_REGION: process.env.WASABI_REGION ? 'SET' : 'NOT SET',
@@ -95,9 +125,9 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
       });
 
       // Clean the key (remove bucket prefix if present)
-      let cleanKey = imageUrl;
-      if (imageUrl.startsWith('gourmet-staging/')) {
-        cleanKey = imageUrl.replace('gourmet-staging/', '');
+      let cleanKey = imageKey;
+      if (imageKey.startsWith('gourmet-staging/')) {
+        cleanKey = imageKey.replace('gourmet-staging/', '');
       }
 
       const params = {
@@ -111,13 +141,14 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
       console.log('🔗 Generated signed URL for key:', cleanKey, '->', signedUrl);
       return signedUrl;
     } catch (error) {
-      console.error('❌ Error generating signed URL for:', imageUrl, error.message);
+      console.error('❌ Error generating signed URL for:', imageKey, error.message);
       console.error('❌ Full error:', error);
       return defaultImage;
     }
   }
 
-  // Already a full URL, return as is
+  // Fallback: return as is if we couldn't process it
+  console.log('🔗 Could not process image URL, returning as is:', imageUrl);
   return imageUrl;
 };
 

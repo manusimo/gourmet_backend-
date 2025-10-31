@@ -2,8 +2,6 @@ const express = require('express');
 const csrf = require('csurf');
 const multer = require('multer');
 const { prisma } = require('../db.js');
-
-console.log('🔍 Company route - Prisma imported:', typeof prisma, prisma ? 'defined' : 'undefined');
 const { checkCompany } = require('../helpers/authenticateToken.js');
 const { requireRole, requirePermission, setUserRole } = require('../middleware/auth.js');
 const { getUserIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
@@ -321,10 +319,7 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
     
     // Use restaurantId from query parameter if provided, otherwise use from JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : req.restaurantId;
-    
-    console.log('🔍 [Talents Application API] Fetching applications for restaurantId:', restaurantId);
-    console.log('🔍 [Talents Application API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
-    
+        
     const talents = await getTalentsApplications(restaurantId);
 
     console.log('🔍 [Talents Application API] Found applications:', talents.length);
@@ -654,17 +649,10 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
     
     // Use query parameter if provided, otherwise fall back to JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
-    
-    console.log('🔍 [Company Profile API] Fetching company profile:');
-    console.log('  - Query restaurantId:', queryRestaurantId);
-    console.log('  - JWT restaurantId:', jwtRestaurantId);
-    console.log('  - Using restaurantId:', restaurantId);
-    
+      
     const company = await getCompanyByRestaurantId(restaurantId);
 
     if (company) {
-      console.log('🔍 [Company Profile API] Found company:', company.name);
-      
       // Convert image keys to actual signed URLs
       if (company.profileImageUrl) {
         company.profileImageUrl = await convertImageKeyToSignedUrl(company.profileImageUrl);
@@ -747,8 +735,30 @@ router.patch('/company', ...updateCompanyMiddleware, async (req, res) => {
     console.log('  - Using restaurantId:', restaurantId);
 
     // Handle file uploads - similar to POST route
+    // Extract key from signed URL if it's a Wasabi URL (don't store signed URLs in DB)
     let finalProfileImageUrl = profileImageUrl; // Start with existing URL
+    if (profileImageUrl && profileImageUrl.includes('wasabisys.com')) {
+      const extractedKey = extractKeyFromUrl(profileImageUrl);
+      if (extractedKey) {
+        // Remove bucket name prefix if present (gourmet-staging/)
+        finalProfileImageUrl = extractedKey.replace(/^gourmet-staging\//, '');
+        console.log('🔍 [Company Update] Extracted key from signed URL:', finalProfileImageUrl);
+      }
+    }
+    // Filter out blob URLs and process gallery URLs
     let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
+    finalProfileCarouselUrls = finalProfileCarouselUrls
+      .filter(url => url && !url.startsWith('blob:'))
+      .map(url => {
+        // Extract key from signed URLs
+        if (url.includes('wasabisys.com')) {
+          const extractedKey = extractKeyFromUrl(url);
+          if (extractedKey) {
+            return extractedKey.replace(/^gourmet-staging\//, '');
+          }
+        }
+        return url;
+      });
 
     // Process files from global multer (all files in req.files array)
     if (req.files && req.files.length > 0) {
@@ -854,14 +864,6 @@ router.delete('/company/:id', getAuthFromCookie, requirePermission('delete_compa
     const { id } = req.params;
     const restaurantId = parseInt(id);
     
-    console.log('🗑️ [Delete Restaurant API] Soft deleting restaurant:', restaurantId);
-    console.log('🗑️ Request user info:', { 
-      userId: req.userId, 
-      userType: req.userType, 
-      role: req.role,
-      restaurantId: req.restaurantId 
-    });
-
     if (!restaurantId || isNaN(restaurantId)) {
       return res.status(400).json({
         success: false,
@@ -891,7 +893,6 @@ router.delete('/company/:id', getAuthFromCookie, requirePermission('delete_compa
       data: { deletedAt: new Date() }
     });
 
-    console.log('✅ [Delete Restaurant API] Restaurant soft deleted successfully:', restaurantId);
 
     res.status(200).json({
       success: true,
