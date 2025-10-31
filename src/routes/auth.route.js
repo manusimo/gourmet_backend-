@@ -177,41 +177,74 @@ router.post('/signup', validateSignup, async (req, res) => {
 // POST /signin - User login with enhanced validation and security
 router.post('/signin', validateSignin, async (req, res) => {
   try {
+    console.log('🔐 [Signin] Login attempt started');
     const { email, password, mfaToken } = req.body;
-    const userEmail = email.toLowerCase();
+    
+    // Validate required fields
+    if (!email || !password) {
+      console.error('❌ [Signin] Missing required fields:', { hasEmail: !!email, hasPassword: !!password });
+      return res.status(400).json({
+        success: false,
+        message: 'Email y contraseña son requeridos'
+      });
+    }
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email: userEmail },
-      select: {
-        id: true,
-        email: true,
-        password: true,
-        userType: true,
-        name: true,
-        surname: true,
-        phoneNumber: true,
-        mfaEnabled: false,
-        mfaSecret: true,
-        accountLocked: true,
-        lastLoginAt: true,
-        role: true
-      }
-    });
+    const userEmail = email.toLowerCase();
+    console.log('🔐 [Signin] Attempting login for email:', userEmail);
+
+    // Find user with error handling
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: userEmail },
+        select: {
+          id: true,
+          email: true,
+          password: true,
+          userType: true,
+          name: true,
+          surname: true,
+          phoneNumber: true,
+          mfaEnabled: false,
+          mfaSecret: true,
+          accountLocked: true,
+          lastLoginAt: true,
+          role: true
+        }
+      });
+    } catch (dbError) {
+      console.error('❌ [Signin] Database error finding user:', dbError.message);
+      console.error('❌ [Signin] Full error:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: 'Error de conexión con la base de datos. Por favor, intenta nuevamente en unos momentos.'
+      });
+    }
 
     if (!user) {
+      console.log('❌ [Signin] User not found:', userEmail);
       return res.status(401).json({
         success: false,
         message: 'Credenciales invalidos'
       });
     }
 
+    console.log('✅ [Signin] User found:', { id: user.id, email: user.email, userType: user.userType });
+
     // Check account lockout
-    const lockoutStatus = isAccountLocked(user.id);
+    let lockoutStatus;
+    try {
+      lockoutStatus = isAccountLocked(user.id);
+    } catch (lockoutError) {
+      console.error('❌ [Signin] Error checking account lockout:', lockoutError.message);
+      // Continue with login attempt even if lockout check fails
+    }
+
     if (lockoutStatus) {
+      console.log('⚠️ [Signin] Account locked for user:', userEmail, lockoutStatus);
       return res.status(423).json({
         success: false,
-        message: `Account temporarily locked due to multiple failed attempts`,
+        message: `Cuenta temporalmente bloqueada debido a múltiples intentos fallidos`,
         data: {
           remainingTime: lockoutStatus.remainingTime,
           attempts: lockoutStatus.attempts
@@ -219,106 +252,196 @@ router.post('/signin', validateSignin, async (req, res) => {
       });
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // Verify password with error handling
+    let isPasswordValid = false;
+    try {
+      if (!user.password) {
+        console.error('❌ [Signin] User has no password hash:', user.id);
+        return res.status(500).json({
+          success: false,
+          message: 'Error en la configuración de tu cuenta. Por favor, contacta al soporte.'
+        });
+      }
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    } catch (bcryptError) {
+      console.error('❌ [Signin] Error comparing password:', bcryptError.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al verificar tu contraseña. Por favor, intenta nuevamente.'
+      });
+    }
 
     if (!isPasswordValid) {
-      // Record failed attempt
-      const lockoutData = recordFailedAttempt(user.id);
+      console.log('❌ [Signin] Invalid password for user:', userEmail);
+      // Record failed attempt with error handling
+      try {
+        const lockoutData = recordFailedAttempt(user.id);
+        console.log('⚠️ [Signin] Failed attempt recorded:', { attempts: lockoutData.attempts });
+      } catch (recordError) {
+        console.error('❌ [Signin] Error recording failed attempt:', recordError.message);
+      }
 
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials',
+        message: 'Credenciales inválidas',
         data: {
-          attemptsRemaining: Math.max(0, 5 - lockoutData.attempts)
+          attemptsRemaining: Math.max(0, 5 - (lockoutStatus?.attempts || 0))
         }
       });
     }
 
+    console.log('✅ [Signin] Password verified for user:', userEmail);
+
     // If MFA is enabled, verify MFA token
     if (user.mfaEnabled) {
+      console.log('🔐 [Signin] MFA enabled for user:', userEmail);
       if (!mfaToken) {
+        console.log('❌ [Signin] MFA token missing for user:', userEmail);
         return res.status(403).json({
           success: false,
-          message: 'Multi-factor authentication required',
+          message: 'Autenticación de dos factores requerida',
           requiresMFA: true
         });
       }
 
-      const isMFAValid = verifyMFAToken(user.mfaSecret, mfaToken);
+      let isMFAValid = false;
+      try {
+        if (!user.mfaSecret) {
+          console.error('❌ [Signin] MFA enabled but no secret found for user:', user.id);
+          return res.status(500).json({
+            success: false,
+            message: 'Error en la configuración de tu cuenta. Por favor, contacta al soporte.'
+          });
+        }
+        isMFAValid = verifyMFAToken(user.mfaSecret, mfaToken);
+      } catch (mfaError) {
+        console.error('❌ [Signin] Error verifying MFA token:', mfaError.message);
+        return res.status(500).json({
+          success: false,
+          message: 'Error al verificar el código de autenticación. Por favor, intenta nuevamente.'
+        });
+      }
+
       if (!isMFAValid) {
+        console.log('❌ [Signin] Invalid MFA token for user:', userEmail);
         // Record failed attempt for invalid MFA
-        recordFailedAttempt(user.id);
+        try {
+          recordFailedAttempt(user.id);
+        } catch (recordError) {
+          console.error('❌ [Signin] Error recording failed MFA attempt:', recordError.message);
+        }
 
         return res.status(403).json({
           success: false,
-          message: 'Invalid MFA token'
+          message: 'Código de autenticación inválido'
         });
       }
+      console.log('✅ [Signin] MFA token verified for user:', userEmail);
     }
 
     // Reset account lockout on successful login
-    resetAccountLockout(user.id);
+    try {
+      resetAccountLockout(user.id);
+      console.log('✅ [Signin] Account lockout reset for user:', userEmail);
+    } catch (resetError) {
+      console.error('⚠️ [Signin] Error resetting account lockout:', resetError.message);
+      // Continue with login even if reset fails
+    }
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() }
-    });
+    // Update last login with error handling
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() }
+      });
+      console.log('✅ [Signin] Last login updated for user:', userEmail);
+    } catch (updateError) {
+      console.error('⚠️ [Signin] Error updating last login:', updateError.message);
+      // Continue with login even if update fails
+    }
 
     // Check if user has a restaurant (for company users)
     let restaurantId = null;
     let restaurantUserId = null;
     if (user.userType === 'empresas') {
-      // For staff users, we need to get restaurantId and restaurantUserId from RestaurantUser table
-      const restaurantUser = await prisma.restaurantUser.findFirst({
-        where: { userId: user.id },
-        select: { id: true, restaurantId: true }
-      });
-      
-      if (restaurantUser) {
-        restaurantId = restaurantUser.restaurantId;
-        restaurantUserId = restaurantUser.id;
-        console.log(`🏢 Found restaurant for user ${user.email}:`, { restaurantId, restaurantUserId });
-      } else {
-        // Fallback: try to find restaurant directly (for admin users)
-        const restaurant = await prisma.restaurant.findFirst({
+      try {
+        // For staff users, we need to get restaurantId and restaurantUserId from RestaurantUser table
+        const restaurantUser = await prisma.restaurantUser.findFirst({
           where: { userId: user.id },
-          select: { id: true }
+          select: { id: true, restaurantId: true }
         });
-        if (restaurant) {
-          restaurantId = restaurant.id;
-          console.log(`🏢 Found restaurant for admin user ${user.email}:`, restaurantId);
+        
+        if (restaurantUser) {
+          restaurantId = restaurantUser.restaurantId;
+          restaurantUserId = restaurantUser.id;
+          console.log(`🏢 [Signin] Found restaurant for user ${user.email}:`, { restaurantId, restaurantUserId });
         } else {
-          console.log(`🏢 No restaurant found for user ${user.email}`);
+          // Fallback: try to find restaurant directly (for admin users)
+          const restaurant = await prisma.restaurant.findFirst({
+            where: { userId: user.id },
+            select: { id: true }
+          });
+          if (restaurant) {
+            restaurantId = restaurant.id;
+            console.log(`🏢 [Signin] Found restaurant for admin user ${user.email}:`, restaurantId);
+          } else {
+            console.log(`⚠️ [Signin] No restaurant found for user ${user.email}`);
+          }
         }
+      } catch (restaurantError) {
+        console.error('⚠️ [Signin] Error fetching restaurant data:', restaurantError.message);
+        // Continue with login even if restaurant lookup fails
       }
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        userType: user.userType,
-        role: user.role,
-        restaurantId: restaurantId,
-        restaurantUserId: restaurantUserId
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    // Generate JWT token with error handling
+    let token;
+    try {
+      if (!process.env.JWT_SECRET) {
+        console.error('❌ [Signin] JWT_SECRET not configured');
+        return res.status(500).json({
+          success: false,
+          message: 'Error en la configuración del servidor. Por favor, contacta al soporte.'
+        });
+      }
 
-    console.log(`✅ User login successful: ${user.email}`);
+      token = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email,
+          userType: user.userType,
+          role: user.role,
+          restaurantId: restaurantId,
+          restaurantUserId: restaurantUserId
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+      console.log('✅ [Signin] JWT token generated for user:', userEmail);
+    } catch (jwtError) {
+      console.error('❌ [Signin] Error generating JWT token:', jwtError.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al generar el token de acceso. Por favor, intenta nuevamente.'
+      });
+    }
 
-    // Set authentication cookie
-    res.cookie('manu', token, {
-      httpOnly: false, // Allow JavaScript access for development
-      secure: false, // Allow over HTTP for development
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    });
+    // Set authentication cookie with error handling
+    try {
+      res.cookie('manu', token, {
+        httpOnly: false, // Allow JavaScript access for development
+        secure: false, // Allow over HTTP for development
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      });
+      console.log('✅ [Signin] Authentication cookie set for user:', userEmail);
+    } catch (cookieError) {
+      console.error('⚠️ [Signin] Error setting cookie:', cookieError.message);
+      // Continue even if cookie fails - token is in response body
+    }
+
+    console.log(`✅ [Signin] User login successful: ${user.email}`);
 
     res.status(200).json({
       success: true,
@@ -340,10 +463,14 @@ router.post('/signin', validateSignin, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Signin error:', error);
+    console.error('❌ [Signin] Unexpected error:', error.message);
+    console.error('❌ [Signin] Error stack:', error.stack);
+    console.error('❌ [Signin] Request body:', { email: req.body?.email ? 'provided' : 'missing' });
+    
     res.status(500).json({
       success: false,
-      message: 'Internal Server Error'
+      message: 'An unexpected error occurred during login. Please try again later.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
