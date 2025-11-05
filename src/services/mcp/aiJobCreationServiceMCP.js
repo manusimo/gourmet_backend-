@@ -27,10 +27,6 @@ class AIJobCreationServiceMCP {
     dbg('Service constructed. MCP_CLIENT_ENABLED:', MCP_CLIENT_ENABLED);
   }
 
-  // ============================================================================
-  // INITIALIZATION
-  // ============================================================================
-
   initializeMCPClient() {
     if (!MCP_CLIENT_ENABLED) {
       console.log('ℹ️  [AI JOB CREATION MCP] MCP client disabled (MCP_CLIENT_ENABLED=false). Using fallback.');
@@ -62,10 +58,7 @@ class AIJobCreationServiceMCP {
     }
   }
 
-  // ============================================================================
-  // PUBLIC API METHODS
-  // ============================================================================
-
+ 
   /**
    * Process job creation request from route handler
    */
@@ -164,9 +157,6 @@ class AIJobCreationServiceMCP {
     }
   }
 
-  // ============================================================================
-  // CORE PROCESSING METHODS
-  // ============================================================================
 
   /**
    * Process user message using MCP tools
@@ -196,6 +186,18 @@ class AIJobCreationServiceMCP {
               contentLength: mcpResult.content?.length,
               firstContent: mcpResult.content?.[0]
             });
+            // Fall through to fallback handler
+            throw new Error(mcpResult.error || 'MCP tool returned error');
+          }
+          
+          // Check if result has success: false
+          if (mcpResult && mcpResult.success === false) {
+            console.error('🚨 [AI JOB CREATION MCP] MCP tool returned success: false:', {
+              error: mcpResult.error,
+              message: mcpResult.message
+            });
+            // Fall through to fallback handler
+            throw new Error(mcpResult.error || 'MCP tool returned success: false');
           }
           
           return mcpResult;
@@ -231,10 +233,6 @@ class AIJobCreationServiceMCP {
       return this.createErrorAIResponse();
     }
   }
-
-  // ============================================================================
-  // HELPER METHODS
-  // ============================================================================
 
   validateRequestInput(message, restaurantId) {
     if (!message?.trim()) {
@@ -284,21 +282,61 @@ class AIJobCreationServiceMCP {
     try {
       if (response?.isError) {
         const txt = response?.content?.[0]?.text || 'Tool error';
-        throw new Error(txt);
+        // Try to parse the error message if it's JSON
+        try {
+          const parsedError = JSON.parse(txt);
+          if (parsedError.success === false) {
+            return {
+              status: "error",
+              message: parsedError.error || parsedError.message || "Lo siento, estoy teniendo dificultades técnicas. ¿Podrías intentar de nuevo?",
+              extractedData: parsedError.extractedData || {},
+              missingFields: parsedError.missingFields || [],
+              suggestions: parsedError.suggestions || []
+            };
+          }
+        } catch {
+          // If not JSON, use as plain error message
+        }
+        throw new Error(typeof txt === 'string' ? txt : 'Tool error');
       }
       const txt = response?.content?.[0]?.text;
       if (!txt) return this.createErrorAIResponse();
       
       // Handle both stringified JSON and direct object responses
+      let parsed;
       if (typeof txt === 'string') {
-        return JSON.parse(txt);
+        try {
+          parsed = JSON.parse(txt);
+        } catch (parseError) {
+          console.error('❌ [AI JOB CREATION MCP] Failed to parse JSON response:', parseError.message);
+          console.error('❌ [AI JOB CREATION MCP] Raw response text:', txt.substring(0, 500));
+          return this.createErrorAIResponse();
+        }
       } else if (typeof txt === 'object') {
-        return txt;
+        parsed = txt;
       } else {
         return this.createErrorAIResponse();
       }
+      
+      // Check if parsed response has success: false
+      if (parsed && parsed.success === false) {
+        console.error('❌ [AI JOB CREATION MCP] Parsed response has success: false:', {
+          error: parsed.error,
+          message: parsed.message
+        });
+        // Return error response but with proper structure
+        return {
+          status: "error",
+          message: parsed.error || parsed.message || "Lo siento, estoy teniendo dificultades técnicas. ¿Podrías intentar de nuevo?",
+          extractedData: parsed.extractedData || {},
+          missingFields: parsed.missingFields || [],
+          suggestions: parsed.suggestions || []
+        };
+      }
+      
+      return parsed;
     } catch (e) {
-      console.error('❌ [AI JOB CREATION MCP] Failed to parse tool response:', e);
+      console.error('❌ [AI JOB CREATION MCP] Failed to parse tool response:', e.message || e);
       return this.createErrorAIResponse();
     }
   }

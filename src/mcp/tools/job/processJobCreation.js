@@ -52,14 +52,73 @@ class ProcessJobCreationTool extends BaseTool {
       // Validate API key
       ProcessJobCreationHelpers.validateOpenAIApiKey();
       
-      // Get RAG context (optional)
-      // const ragContext = await ProcessJobCreationHelpers.getRAGContextSafely(this.ragService, userMessage, restaurantContext);
+      // Get RAG context from similar jobs and best practices
+      const ragContext = await ProcessJobCreationHelpers.getRAGContextSafely(this.ragService, userMessage, restaurantContext);
       
       // Process with OpenAI
       const aiResponse = await ProcessJobCreationHelpers.processWithOpenAI(this.openaiService, userMessage, conversationHistory, restaurantContext, ragContext);
       
       // Clean and validate response
       const cleanedResponse = ProcessJobCreationHelpers.cleanAndValidateResponse(aiResponse, JobDataCleaner);
+      
+      // Check if user is asking about candidates
+      const isAskingForCandidates = this.isCandidateRequest(userMessage, conversationHistory);
+      
+      // Get similar jobs for replication/reference (if we have enough data)
+      if (cleanedResponse.extractedData && cleanedResponse.extractedData.position) {
+        try {
+          const similarJobs = await this.ragService.searchSimilarJobs(cleanedResponse.extractedData, 3);
+          if (similarJobs.length > 0) {
+            cleanedResponse.similarJobs = similarJobs;
+            console.log(`📋 [MCP] Found ${similarJobs.length} similar jobs for reference`);
+            
+            // Add message about similar jobs
+            if (cleanedResponse.status === 'complete' || cleanedResponse.status === 'incomplete') {
+              cleanedResponse.message += `\n\n📋 **TRABAJOS SIMILARES:**\nHe encontrado ${similarJobs.length} trabajo(s) similar(es) que puedes usar como referencia. Puedes replicar cualquiera de estos para crear tu oferta más rápido.`;
+            }
+          }
+        } catch (error) {
+          console.error('❌ [MCP] Error fetching similar jobs:', error);
+          // Don't fail the whole process if similar jobs search fails
+        }
+
+        // Search for recommended candidates if user asked or if job is complete
+        if (isAskingForCandidates || cleanedResponse.status === 'complete') {
+          try {
+            const recommendedCandidates = await this.ragService.searchSimilarApplicants(cleanedResponse.extractedData, 5);
+            if (recommendedCandidates.length > 0) {
+            // Format candidates for response
+            cleanedResponse.recommendedCandidates = recommendedCandidates.map(rec => ({
+              name: `${rec.employee.user?.name || ''} ${rec.employee.user?.surname || ''}`.trim(),
+              email: rec.employee.user?.email || 'No email',
+              similarity: Math.round(rec.similarity * 100), // Percentage
+              matchReasons: rec.matchReasons || [],
+              employeeId: rec.employee.id,
+              hasExperience: rec.employee.experiences?.length > 0,
+              hasEducation: rec.employee.educations?.length > 0,
+              canContact: true, // Can initiate chat
+              contactMethod: 'chat', // Direct chat available
+              contactEndpoint: '/api/contact-recommended-candidate', // API endpoint to initiate chat
+              jobPostId: cleanedResponse.jobId || null // Include job ID if job was already created
+            }));
+
+              console.log(`👥 [MCP] Found ${recommendedCandidates.length} recommended candidates`);
+              
+              // Add message about candidates with contact info
+              const candidatesMessage = `\n\n👥 **CANDIDATOS RECOMENDADOS:**\nHe encontrado ${recommendedCandidates.length} candidato(s) que coinciden con los requisitos del puesto "${cleanedResponse.extractedData.position}". Puedes contactarlos directamente mediante chat para iniciar una conversación sobre el puesto.`;
+              cleanedResponse.message += candidatesMessage;
+            } else if (isAskingForCandidates) {
+              cleanedResponse.message += `\n\n👥 **CANDIDATOS:**\nNo he encontrado candidatos recomendados que coincidan exactamente con los requisitos del puesto "${cleanedResponse.extractedData.position}". Puedes esperar a que candidatos apliquen o ajustar los requisitos del trabajo.`;
+            }
+          } catch (error) {
+            console.error('❌ [MCP] Error fetching recommended candidates:', error);
+            // Don't fail the whole process if candidate search fails
+          }
+        }
+      } else if (isAskingForCandidates) {
+        // User asked for candidates but we don't have position yet
+        cleanedResponse.message += `\n\n👥 Para buscar candidatos recomendados, primero necesito saber la posición del trabajo. Por favor, indica qué tipo de puesto necesitas.`;
+      }
       
       // Add debugging info to indicate this came from LLM
       cleanedResponse.debugInfo = {
@@ -88,32 +147,55 @@ class ProcessJobCreationTool extends BaseTool {
     } catch (error) {
       ProcessJobCreationHelpers.logError(error, userMessage, conversationHistory, restaurantContext);
       
-      // If it's an OpenAI quota/API error, use fallback instead of failing
-      if (error.message.includes('quota') || error.message.includes('429') || error.message.includes('insufficient_quota')) {
-        console.log('🔄 [MCP] OpenAI quota exceeded, using fallback response');
-        console.log('💡 [MCP] OpenAI Error Details:', {
+      // Check if it's an OpenAI-related error (missing key, quota, API error)
+      const isOpenAIError = error.message.includes('quota') || 
+                            error.message.includes('429') || 
+                            error.message.includes('insufficient_quota') ||
+                            error.message.includes('API key not found') ||
+                            error.message.includes('OpenAI API key') ||
+                            error.message.includes('OpenAI');
+      
+      if (isOpenAIError) {
+        const reason = error.message.includes('API key not found') || error.message.includes('OpenAI API key') 
+          ? 'api_key_missing' 
+          : 'quota_exceeded';
+        
+        console.log('🔄 [MCP] OpenAI error detected, using fallback response:', {
+          reason,
           error: error.message,
           code: error.code,
-          status: error.status,
-          explanation: 'OpenAI API quota exceeded - using regex fallback system'
+          status: error.status
         });
         
-        const fallbackResponse = this.createFallbackResponse(userMessage, conversationHistory, restaurantContext);
+        const fallbackResponse = await this.createFallbackResponse(userMessage, conversationHistory, restaurantContext);
         
-        // Add explanation to the response
-        if (fallbackResponse.content) {
-          fallbackResponse.content.openaiStatus = {
-            available: false,
-            reason: 'quota_exceeded',
-            model: 'gpt-3.5-turbo',
-            fallbackUsed: true,
-            explanation: 'OpenAI API quota exceeded - using regex pattern matching instead'
-          };
-        }
-        
-        // Create job if user confirmed in fallback
-        if (fallbackResponse.content && fallbackResponse.content.status === 'ready_to_publish') {
-          await this.createJobIfComplete(fallbackResponse.content, restaurantContext);
+        // fallbackResponse is already wrapped by createSuccessResponse, so we need to parse it to update openaiStatus
+        // The content[0].text contains JSON string with the actual response
+        if (fallbackResponse.content && fallbackResponse.content[0] && fallbackResponse.content[0].text) {
+          try {
+            const parsedContent = JSON.parse(fallbackResponse.content[0].text);
+            if (parsedContent.openaiStatus) {
+              parsedContent.openaiStatus = {
+                available: false,
+                reason: reason,
+                model: 'gpt-3.5-turbo',
+                fallbackUsed: true,
+                explanation: reason === 'api_key_missing' 
+                  ? 'OpenAI API key not configured - using regex pattern matching instead'
+                  : 'OpenAI API quota exceeded - using regex pattern matching instead'
+              };
+            }
+            
+            // Create job if user confirmed in fallback
+            if (parsedContent.status === 'ready_to_publish') {
+              await this.createJobIfComplete(parsedContent, restaurantContext);
+            }
+            
+            // Re-wrap the updated content
+            return this.createSuccessResponse(parsedContent);
+          } catch (parseError) {
+            console.error('❌ [MCP] Error parsing fallback response to update openaiStatus:', parseError);
+          }
         }
         
         return fallbackResponse;
@@ -247,8 +329,11 @@ class ProcessJobCreationTool extends BaseTool {
     }
   }
 
-  createFallbackResponse(userMessage, conversationHistory = [], restaurantContext) {
+  async createFallbackResponse(userMessage, conversationHistory = [], restaurantContext) {
     console.log('🔄 [MCP] Creating fallback response for:', userMessage);
+    
+    // Check if user is asking for candidates
+    const isAskingForCandidates = this.isCandidateRequest(userMessage, conversationHistory);
     
     // Check if user is confirming to publish
     const lowerMessage = userMessage.toLowerCase();
@@ -403,7 +488,7 @@ class ProcessJobCreationTool extends BaseTool {
       
       // Add specific guidance for common missing fields
       if (!finalData.position || finalData.position === 'Posición no especificada') {
-        message += `\n\n👨‍💼 **POSICIÓN** - Elige una opción:\n• Garzón\n• Runner\n• Chef\n• Ayudante de Cocina\n• Anfitrión\n• Delivery\n• Cajero\n• Copero\n• Barista\n• Bartender\n• Sommelier\n• Maitre\n• Jefe de salón\n• Limpieza`;
+        message += `\n\n👨‍💼 **POSICIÓN** - Elige una opción:\n• Chef Ejecutivo\n• Sous Chef\n• Jefe de Cocina\n• Maestro de Cocina\n• Maestro Pastelero\n• Pastelero\n• Panadero\n• Repostero\n• Charcutero\n• Pizzero\n• Itamae\n• Sushiman\n• Ayudante de Sushi\n• Parrillero\n• Cocinero Frío\n• Cocinero Caliente\n• Manipulador de Alimentos\n• Encargado de Producción\n• Operador de Cocina\n• Operador de Planta\n• Operador Multifuncional\n• Encargado de Reservas\n• Recepcionista de Restaurante\n• Supervisor de Salón\n• Personal de Banquetería\n• Encargado de Bodega\n• Repositor\n• Personal de Mantenimiento\n• Jefe de Local\n• Administrador de Local\n• Jefe de Sucursales\n• Administrador de Restaurante\n• Encargado de Compras\n• Control de Calidad\n• Catador de Vinos\n• Coordinador de Banquetes\n• Montajista\n• Mixólogo`;
       }
       if (!finalData.schedule) {
         message += `\n\n📅 **HORARIO** - Elige una opción:\n• Full-time (tiempo completo)\n• Part-time (medio tiempo)\n• Otro`;
@@ -515,6 +600,62 @@ class ProcessJobCreationTool extends BaseTool {
         explanation: 'OpenAI API quota exceeded - using regex pattern matching instead'
       }
     };
+
+    // Get similar jobs for replication/reference (if we have enough data)
+    if (finalData.position && finalData.position !== 'Posición no especificada') {
+      try {
+        const similarJobs = await this.ragService.searchSimilarJobs(finalData, 3);
+        if (similarJobs.length > 0) {
+          fallbackResponse.similarJobs = similarJobs;
+          console.log(`📋 [MCP] Found ${similarJobs.length} similar jobs for reference in fallback`);
+          
+          // Add message about similar jobs
+          if (status === 'complete' || status === 'incomplete') {
+            fallbackResponse.message += `\n\n📋 **TRABAJOS SIMILARES:**\nHe encontrado ${similarJobs.length} trabajo(s) similar(es) que puedes usar como referencia. Puedes replicar cualquiera de estos para crear tu oferta más rápido.`;
+          }
+        }
+      } catch (error) {
+        console.error('❌ [MCP] Error fetching similar jobs in fallback:', error);
+        // Don't fail the whole process if similar jobs search fails
+      }
+
+      // Search for recommended candidates if user asked or if job is complete
+      if (isAskingForCandidates || status === 'complete') {
+        try {
+          const recommendedCandidates = await this.ragService.searchSimilarApplicants(finalData, 5);
+          if (recommendedCandidates.length > 0) {
+            // Format candidates for response
+            fallbackResponse.recommendedCandidates = recommendedCandidates.map(rec => ({
+              name: `${rec.employee.user?.name || ''} ${rec.employee.user?.surname || ''}`.trim(),
+              email: rec.employee.user?.email || 'No email',
+              similarity: Math.round(rec.similarity * 100),
+              matchReasons: rec.matchReasons || [],
+              employeeId: rec.employee.id,
+              hasExperience: rec.employee.experiences?.length > 0,
+              hasEducation: rec.employee.educations?.length > 0,
+              canContact: true, // Can initiate chat
+              contactMethod: 'chat', // Direct chat available
+              contactEndpoint: '/api/contact-recommended-candidate', // API endpoint to initiate chat
+              jobPostId: null // Job not created yet in fallback mode
+            }));
+
+            console.log(`👥 [MCP] Found ${recommendedCandidates.length} recommended candidates in fallback`);
+            
+            // Add message about candidates with contact info
+            const candidatesMessage = `\n\n👥 **CANDIDATOS RECOMENDADOS:**\nHe encontrado ${recommendedCandidates.length} candidato(s) que coinciden con los requisitos del puesto "${finalData.position}". Puedes contactarlos directamente mediante chat para iniciar una conversación sobre el puesto.`;
+            fallbackResponse.message += candidatesMessage;
+          } else if (isAskingForCandidates) {
+            fallbackResponse.message += `\n\n👥 **CANDIDATOS:**\nNo he encontrado candidatos recomendados que coincidan exactamente con los requisitos del puesto "${finalData.position}". Puedes esperar a que candidatos apliquen o ajustar los requisitos del trabajo.`;
+          }
+        } catch (error) {
+          console.error('❌ [MCP] Error fetching recommended candidates in fallback:', error);
+          // Don't fail the whole process if candidate search fails
+        }
+      }
+    } else if (isAskingForCandidates) {
+      // User asked for candidates but we don't have position yet
+      fallbackResponse.message += `\n\n👥 Para buscar candidatos recomendados, primero necesito saber la posición del trabajo. Por favor, indica qué tipo de puesto necesitas.`;
+    }
     
     console.log('🔧 [MCP] Response generated by REGEX FALLBACK system');
     console.log('🔄 [MCP] Fallback response created:', fallbackResponse);
@@ -774,6 +915,40 @@ class ProcessJobCreationTool extends BaseTool {
     return '';
   }
 
+  /**
+   * Check if user is asking for candidates/recommendations
+   */
+  isCandidateRequest(userMessage, conversationHistory = []) {
+    const lowerMessage = userMessage.toLowerCase();
+    const candidateKeywords = [
+      'candidatos',
+      'candidato',
+      'recomend',
+      'tienes candidatos',
+      'busca candidatos',
+      'hay candidatos',
+      'candidatos para',
+      'personas para',
+      'gente para',
+      'trabajadores',
+      'empleados',
+      'aplicantes',
+      'postulantes'
+    ];
+    
+    // Check current message
+    if (candidateKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      return true;
+    }
+    
+    // Check conversation history
+    const historyMessages = conversationHistory.map(msg => 
+      typeof msg === 'string' ? msg : msg.content || ''
+    ).join(' ').toLowerCase();
+    
+    return candidateKeywords.some(keyword => historyMessages.includes(keyword));
+  }
+
   extractQuestionsFromMessage(message) {
     // Look for questions patterns
     const questionPatterns = [
@@ -820,6 +995,9 @@ class ProcessJobCreationTool extends BaseTool {
       const jobData = JobDataCleaner.prepareJobData(aiResponse.extractedData, restaurantContext);
       const jobOffer = await createJobOffer(jobData);
       
+      // Store job in vector database for future RAG context
+      await this.storeJobInVectorDB(jobOffer, aiResponse.extractedData, restaurantContext);
+      
       aiResponse.message = `¡Perfecto! He creado la oferta de trabajo para ${aiResponse.extractedData.position}. La oferta ha sido publicada exitosamente.`;
       aiResponse.jobCreated = true;
       aiResponse.jobId = jobOffer.id;
@@ -827,6 +1005,45 @@ class ProcessJobCreationTool extends BaseTool {
       console.error('❌ Error creating job:', jobError);
       aiResponse.message = 'Hubo un error al crear la oferta de trabajo. Por favor, intenta de nuevo.';
       aiResponse.status = 'error';
+    }
+  }
+
+  /**
+   * Store job offer in vector database for RAG retrieval
+   */
+  async storeJobInVectorDB(jobOffer, extractedData, restaurantContext) {
+    try {
+      // Build comprehensive job document content
+      const jobContent = `
+        Job Position: ${extractedData.position || jobOffer.position}
+        Restaurant: ${restaurantContext.name || 'Unknown'}
+        Schedule: ${extractedData.schedule || jobOffer.schedule || 'Not specified'}
+        Contract Type: ${extractedData.contract || jobOffer.contract || 'Not specified'}
+        Salary: ${extractedData.salary || jobOffer.salary || 'Not specified'}
+        Vacancies: ${extractedData.vacancies || jobOffer.vacancies || 1}
+        Years of Experience Required: ${extractedData.yearsOfExperience || jobOffer.yearsOfExperience || 0}
+        Period: ${extractedData.period || 'Permanente'}
+        Description: ${extractedData.description || jobOffer.description || ''}
+        Requirements: ${extractedData.requirements || jobOffer.requirements || ''}
+        Functions: ${extractedData.functions || jobOffer.functions || ''}
+        Tips Included: ${extractedData.tips ? 'Yes' : 'No'}
+        Interview Questions: ${extractedData.questions?.map(q => q.question || q).join(', ') || 'None'}
+      `.trim();
+
+      // Store in vector database with metadata
+      await this.ragService.storeJobDocument(jobContent, {
+        type: 'job_offer',
+        jobId: jobOffer.id,
+        restaurantId: restaurantContext.id || jobOffer.restaurantId,
+        position: extractedData.position || jobOffer.position,
+        createdAt: jobOffer.createdAt.toISOString(),
+        source: 'ai_job_creation'
+      });
+
+      console.log(`✅ [MCP] Job ${jobOffer.id} stored in vector database for RAG`);
+    } catch (error) {
+      console.error('❌ [MCP] Error storing job in vector database:', error);
+      // Don't fail job creation if vector storage fails
     }
   }
 }

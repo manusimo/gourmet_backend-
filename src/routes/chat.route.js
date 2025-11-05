@@ -571,6 +571,81 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
   }
 });
 
+// POST /contact-recommended-candidate - Create conversation with recommended candidate (from AI recommendations)
+router.post('/contact-recommended-candidate', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  try {
+    const { employeeId, jobPostId, restaurantId } = req.body;
+    const userId = req.userId;
+    const restaurantUserId = req.restaurantUserId;
+
+    if (!employeeId) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Employee ID is required' 
+      });
+    }
+
+    if (!restaurantId) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Restaurant ID is required' 
+      });
+    }
+
+    console.log('💬 [Contact Recommended] Creating conversation with recommended candidate:', {
+      employeeId,
+      jobPostId,
+      restaurantId,
+      restaurantUserId,
+      userId
+    });
+
+    // Check if conversation already exists
+    let conversation = null;
+    if (jobPostId) {
+      conversation = await findConversationByJobPost(
+        parseInt(employeeId),
+        parseInt(jobPostId),
+        restaurantUserId,
+        'applicant'
+      );
+    }
+
+    // If no conversation exists, create one
+    if (!conversation) {
+      // For recommended candidates, we can use 'talent' type or create without jobPostId
+      conversation = await createConversation({
+        employeeId: parseInt(employeeId),
+        jobPostId: jobPostId ? parseInt(jobPostId) : null,
+        talentPoolId: null,
+        restaurantUserId,
+        restaurantId: parseInt(restaurantId),
+        type: jobPostId ? 'applicant' : 'talent' // Use applicant if job exists, otherwise talent
+      });
+
+      console.log('✅ [Contact Recommended] Created conversation:', conversation.id);
+    } else {
+      console.log('✅ [Contact Recommended] Found existing conversation:', conversation.id);
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Conversation created successfully. You can now chat with this candidate.',
+      data: {
+        conversationId: conversation.id,
+        employeeId: parseInt(employeeId),
+        chatUrl: `/panel-empresa/inbox-empresa/${conversation.id}/${employeeId}`
+      }
+    });
+  } catch (error) {
+    console.error('❌ [Contact Recommended] Error creating conversation:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to create conversation with candidate.' 
+    });
+  }
+});
+
 // GET /conversations/:employeeId/:type - Get conversations for specific employee and type
 router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie, async (req, res) => {
   try {

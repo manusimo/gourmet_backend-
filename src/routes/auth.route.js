@@ -225,7 +225,7 @@ router.post('/signin', validateSignin, async (req, res) => {
       console.log('❌ [Signin] User not found:', userEmail);
       return res.status(401).json({
         success: false,
-        message: 'Credenciales invalidos'
+        message: 'El usuario no existe. Verifica tu email e intenta nuevamente.'
       });
     }
 
@@ -1075,8 +1075,6 @@ router.post('/set-password', async (req, res) => {
   }
 });
 
-// POST /confirm-email - Confirm email and create user
-
 // GET /user/:id - Get user information
 router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req, res) => {
   try {
@@ -1333,7 +1331,6 @@ router.get('/user-info', async (req, res) => {
 // POST /switch-restaurant - Switch to a different restaurant
 router.post('/switch-restaurant', async (req, res) => {
   try {
-    console.log('🔍 switch-restaurant: Request received');
     
     const token = req.cookies.manu;
     

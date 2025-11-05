@@ -3,19 +3,17 @@
  * Centralized exports for all MCP-related services
  */
 
-const AIJobCreationService = require('./AIJobCreationService');
 const RestaurantContextService = require('./RestaurantContextService');
 const JobCreationProcessor = require('./JobCreationProcessor');
 
-// Legacy export for backward compatibility
+// Main service (current implementation)
 const AIJobCreationServiceMCP = require('./aiJobCreationServiceMCP');
 
 module.exports = {
-  // New clean services
-  AIJobCreationService,
+  // Main services
   RestaurantContextService,
   JobCreationProcessor,
   
-  // Legacy service (deprecated)
+  // AI Job Creation Service (main export)
   AIJobCreationServiceMCP
 };

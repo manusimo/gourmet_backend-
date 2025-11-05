@@ -55,7 +55,10 @@ const createEmployeeProfile = async (employeeData) => {
     userId
   } = employeeData;
 
-  const skillsArray = Object.keys(skills).filter(skill => skills[skill]);
+  // Handle skills - can be array (from frontend) or object
+  const skillsArray = Array.isArray(skills)
+    ? skills.filter(skill => skill && !/^\d+$/.test(skill.toString())) // Filter out numeric strings
+    : Object.keys(skills).filter(skill => skills[skill] && !/^\d+$/.test(skill));
 
   return await prisma.employee.create({
     data: {
@@ -226,7 +229,10 @@ const updateEmployeeProfile = async (employeeId, updateData) => {
           },
         })),
       },
-      skills: Object.keys(skills).filter(skill => skills[skill]),
+      // Handle skills - can be array (from frontend) or object
+      skills: Array.isArray(skills) 
+        ? skills.filter(skill => skill && !/^\d+$/.test(skill.toString())) // Filter out numeric strings
+        : Object.keys(skills).filter(skill => skills[skill] && !/^\d+$/.test(skill)),
     },
   });
 };

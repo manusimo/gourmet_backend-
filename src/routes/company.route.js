@@ -29,8 +29,6 @@ const {
   filterNewLocations,
   filterExistingLocations,
   findLocationsToDelete,
-  // generatePlanInfo, // Temporarily disabled
-  // generateUpdatePlanInfo // Temporarily disabled
 } = require('../helpers/companyHelpers.js');
 const { convertImageUrls, convertImageKeyToSignedUrl } = require('../utils/imageUrlUtils.js');
 
@@ -293,12 +291,20 @@ router.get('/company/top-rated-companies', async (req, res) => {
     const companies = await getTopRatedCompanies(limit, skip);
     const totalCompanies = await getTotalCompaniesCount();
 
+    // Convert image keys to actual signed URLs for each company, same as /company/:id endpoint
+    const companiesWithSignedUrls = await Promise.all(
+      companies.map(async (company) => {
+        const updatedCompany = await convertImageUrls(company, ['profileImageUrl', 'profileCarouselUrls']);
+        return {
+          ...updatedCompany,
+          jobOffersCount: company._count.jobOffers,
+        };
+      })
+    );
+
     res.json({
       success: true,
-      data: companies.map(company => ({ // Use consistent 'data' property
-        ...company,
-        jobOffersCount: company._count.jobOffers,
-      })),
+      data: companiesWithSignedUrls,
       totalCompanies,
       currentPage: page,
       totalPages: Math.ceil(totalCompanies / limit),

@@ -1,4 +1,5 @@
 const { prisma } = require("../db.js");
+const { JobRAGService } = require("../services/rag");
 
 /**
  * Validate application input data
@@ -98,7 +99,7 @@ const getExistingApplication = async (jobPostId, employeeId) => {
  */
 const createApplication = async (jobPostId, employeeId, answers) => {
   try {
-    return await prisma.application.create({
+    const application = await prisma.application.create({
       data: {
         jobPost: { connect: { id: parseInt(jobPostId) } },
         employee: { connect: { id: parseInt(employeeId) } },
@@ -108,11 +109,33 @@ const createApplication = async (jobPostId, employeeId, answers) => {
         jobPost: {
           include: {
             restaurant: true,
+            questions: true,
           },
         },
         employee: true,
+        answers: {
+          include: {
+            question: true,
+          },
+        },
       },
     });
+
+    // Store applicant in vector database for RAG matching
+    try {
+      const ragService = new JobRAGService();
+      await ragService.storeApplicantDocument(
+        application,
+        application.employee,
+        application.jobPost
+      );
+      console.log(`✅ [Application] Applicant ${employeeId} stored in vector database for job ${jobPostId}`);
+    } catch (ragError) {
+      console.error('❌ [Application] Error storing applicant in vector database:', ragError);
+      // Don't fail application creation if vector storage fails
+    }
+
+    return application;
   } catch (err) {
     throw err;
   }

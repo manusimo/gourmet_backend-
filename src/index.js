@@ -1,5 +1,17 @@
 // Load environment variables
-require('dotenv').config();
+// Use path relative to this file to ensure .env is found regardless of working directory
+const path = require('path');
+const envPath = path.join(__dirname, '../.env');
+const envResult = require('dotenv').config({ path: envPath });
+
+// Log environment variable loading status
+if (envResult.error) {
+  console.warn('⚠️  [ENV] Warning: Could not load .env file:', envResult.error.message);
+  console.log('📁 [ENV] Looking for .env at:', envPath);
+} else {
+  console.log('✅ [ENV] Environment variables loaded from:', envPath);
+  console.log('🔑 [ENV] OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? `SET (length: ${process.env.OPENAI_API_KEY.length})` : 'NOT SET');
+}
 
 // Ensure WHATWG ReadableStream exists (used by MCP SDK SSE client)
 try {
@@ -55,10 +67,6 @@ app.set('trust proxy', 1);
 // Remove x-powered-by header
 app.disable('x-powered-by');
 
-// ============================================================================
-// ENHANCED SECURITY CONFIGURATION
-// ============================================================================
-
 // Add comprehensive security headers
 app.use(helmet({
   contentSecurityPolicy: {
@@ -83,10 +91,6 @@ app.use(performanceMonitoring);
 
 // Apply enhanced security middleware to all routes
 app.use(enhancedSecurityMiddleware);
-
-// Initialize MCP server BEFORE JSON parsing middleware
-// This ensures MCP routes can handle raw request bodies
-// MCP server is standalone - no embedded server needed
 
 // Enhanced XSS Protection middleware
 const xssMiddleware = (req, res, next) => {
@@ -167,10 +171,6 @@ app.use(cookieParser());
 // Apply XSS protection after body parsing
 app.use(xssMiddleware);
 
-// ============================================================================
-// ENHANCED CORS CONFIGURATION
-// ============================================================================
-
 const allowedOrigins = [
   process.env.FRONTEND_URL, 
   process.env.CHAT_SERVICE_URL,
@@ -202,9 +202,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// ============================================================================
-// ENHANCED RATE LIMITING
-// ============================================================================
 
 // General rate limiting for all routes
 const generalLimiter = rateLimit({
@@ -275,11 +272,6 @@ app.use('/api/password-reset-confirm', authLimiter);
 app.use('/api/set-password', authLimiter);
 app.use('/api/contact', contactLimiter);
 app.use('/api/mfa', mfaLimiter);
-
-// ============================================================================
-// HEALTH CHECK ENDPOINT (BEFORE AUTHENTICATION)
-// ============================================================================
-
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
@@ -295,10 +287,6 @@ app.get('/health', (req, res) => {
     }
   });
 });
-
-// ============================================================================
-// API ROUTE HANDLERS
-// ============================================================================
 
 app.use('/api', authRoutes);
 app.use('/api', contactRoutes);
@@ -323,16 +311,6 @@ try {
 } catch (e) {
   console.error('❌ Failed to mount AI Job Creation routes:', e);
 }
-
-// ============================================================================
-// EMBEDDED MCP SERVER INTEGRATION
-// ============================================================================
-
-// MCP server already initialized above (before JSON parsing)
-
-// ============================================================================
-// SECURITY ENDPOINT
-// ============================================================================
 
 // Security status endpoint
 app.get('/api/security/status', (req, res) => {
@@ -361,10 +339,6 @@ app.get('/api/security/status', (req, res) => {
     }
   });
 });
-
-// ============================================================================
-// ERROR HANDLING MIDDLEWARE
-// ============================================================================
 
 // Error tracking middleware (before global error handler)
 app.use(errorTrackingMiddleware);
@@ -429,9 +403,6 @@ app.use('*', (req, res) => {
   });
 });
 
-// ============================================================================
-// SERVER STARTUP AND GRACEFUL SHUTDOWN
-// ============================================================================
 
 const server = app.listen(PORT, async () => {
   Logger.info('🚀 Server started successfully', {

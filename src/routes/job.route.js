@@ -238,6 +238,7 @@ router.get('/jobs', async (req, res) => {
       contract,
       region,
       comuna,
+      position,
       q,
       page,
       limit = 10,
@@ -261,7 +262,14 @@ router.get('/jobs', async (req, res) => {
       'comuna',
     ];
     const restaurantFilter = buildFilters(req.query, restaurantFilterFields);
-    const searchConditions = buildSearchConditions(q, 'position');
+    
+    // Build search conditions - prioritize position filter if provided, otherwise use search term
+    let searchConditions = {};
+    if (position) {
+      searchConditions = buildSearchConditions(position, 'position');
+    } else if (q) {
+      searchConditions = buildSearchConditions(q, 'position');
+    }
 
     let orderByCriteria = { createdAt: 'desc' };
 
