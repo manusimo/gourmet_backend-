@@ -276,12 +276,20 @@ router.get('/company/top-rated-companies', async (req, res) => {
     const companies = await getTopRatedCompanies(limit, skip);
     const totalCompanies = await getTotalCompaniesCount();
 
+    // Convert image keys to signed URLs for each company
+    const companiesWithSignedUrls = await Promise.all(
+      companies.map(async (company) => {
+        const companyWithUrls = await convertImageUrls(company, ['profileImageUrl', 'profileCarouselUrls']);
+        return {
+          ...companyWithUrls,
+          jobOffersCount: company._count.jobOffers,
+        };
+      })
+    );
+
     res.json({
       success: true,
-      data: companies.map(company => ({ // Use consistent 'data' property
-        ...company,
-        jobOffersCount: company._count.jobOffers,
-      })),
+      data: companiesWithSignedUrls,
       totalCompanies,
       currentPage: page,
       totalPages: Math.ceil(totalCompanies / limit),
@@ -705,18 +713,6 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
 // PATCH /company - Update company (require permission to edit company)
 router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), async (req, res) => {
   try {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔄 PATCH /company - Updating company profile');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔄 [PATCH /company] Request body keys:', Object.keys(req.body));
-    console.log('🔄 [PATCH /company] Request files count:', req.files ? req.files.length : 0);
-    console.log('🔄 [PATCH /company] Request files:', req.files ? req.files.map(f => ({ 
-      fieldname: f.fieldname, 
-      originalname: f.originalname, 
-      mimetype: f.mimetype,
-      size: f.size,
-      bufferSize: f.buffer ? f.buffer.length : 'no buffer'
-    })) : 'No files');
     
     let {
       legalName,
@@ -735,11 +731,6 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       profileImageUrl,
       profileCarouselUrls,
     } = req.body;
-
-    // Log initial locations type and value
-    console.log('🔄 [PATCH /company] Initial locations type:', typeof locations);
-    console.log('🔄 [PATCH /company] Initial locations value:', locations);
-    console.log('🔄 [PATCH /company] Is locations an array?', Array.isArray(locations));
 
     // Parse JSON strings from FormData (locations, benefits, profileCarouselUrls)
     if (typeof locations === 'string') {
