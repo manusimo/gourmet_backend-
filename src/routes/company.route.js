@@ -13,6 +13,7 @@ const { getOrderByCriteriaCompanies } = require('../helpers/orderBy.js');
 const { verifyCSRFToken } = require('../helpers/csrf.js');
 const { setSecureAuthCookie } = require('../helpers/secureCookie.js');
 const { convertImageUrls } = require('../utils/imageUrlUtils.js');
+const { uploadFile, uploadMultipleFiles, extractKeyFromUrl } = require('../services/uploadService.js');
 const {
   getCompanies,
   getTotalCompanies,
@@ -339,6 +340,7 @@ router.post('/company', (req, res, next) => {
     console.log('🏢 User type from middleware:', req.userType);
     console.log('🏢 User role from middleware:', req.userRole);
     console.log('🏢 Request body keys:', Object.keys(req.body));
+    console.log('🏢 Request files:', req.files ? req.files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, size: f.size })) : 'No files');
 
     const {
       name,
@@ -358,6 +360,86 @@ router.post('/company', (req, res, next) => {
       profileImageUrl,
       profileCarouselUrls
     } = req.body;
+
+    // Handle file upload for profile image
+    let finalProfileImageUrl = (() => {
+      if (!profileImageUrl) return profileImageUrl;
+      if (typeof profileImageUrl === 'string' && profileImageUrl.includes('/api/company/signed-url/')) {
+        return profileImageUrl.split('/api/company/signed-url/')[1];
+      }
+      const maybeKey = extractKeyFromUrl(profileImageUrl);
+      return maybeKey || profileImageUrl;
+    })();
+
+    const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
+    if (profileImageFile) {
+      console.log('📤 [POST /company] Uploading profile image...');
+      console.log('📤 [POST /company] File details:', {
+        originalname: profileImageFile.originalname,
+        mimetype: profileImageFile.mimetype,
+        size: profileImageFile.size,
+        bufferSize: profileImageFile.buffer ? profileImageFile.buffer.length : 'no buffer'
+      });
+      
+      const profileImageResult = await uploadFile(profileImageFile, 'company-profiles');
+      if (profileImageResult.success) {
+        finalProfileImageUrl = profileImageResult.key;
+        console.log('✅ [POST /company] Profile image uploaded successfully, key stored:', finalProfileImageUrl);
+      } else {
+        console.error('❌ [POST /company] Profile image upload failed:', profileImageResult.error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload profile image',
+          error: profileImageResult.error
+        });
+      }
+    } else {
+      console.log('📤 [POST /company] No profile image file uploaded, using existing URL or default');
+    }
+
+    // Handle gallery/carousel images upload
+    const galleryImageFiles = req.files && req.files.filter(file => file.fieldname === 'galleryImages');
+    let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
+    
+    if (galleryImageFiles && galleryImageFiles.length > 0) {
+      console.log('📤 [POST /company] Uploading gallery images...');
+      console.log('📤 [POST /company] Gallery files count:', galleryImageFiles.length);
+      console.log('📤 [POST /company] Gallery files details:', galleryImageFiles.map(f => ({
+        originalname: f.originalname,
+        mimetype: f.mimetype,
+        size: f.size
+      })));
+      
+      const galleryUploadResult = await uploadMultipleFiles(galleryImageFiles, 'company-gallery');
+      if (galleryUploadResult.success) {
+        const newGalleryKeys = galleryUploadResult.files.map(file => file.key);
+        // Combine existing URLs (if any) with new uploaded keys
+        // Filter out blob URLs (previews) and keep only existing keys/URLs
+        const existingUrls = finalProfileCarouselUrls.filter(url => 
+          !url.startsWith('blob:') && !url.includes('signed-url')
+        );
+        finalProfileCarouselUrls = [...existingUrls, ...newGalleryKeys];
+        console.log('✅ [POST /company] Gallery images uploaded successfully, total URLs:', finalProfileCarouselUrls.length);
+        console.log('✅ [POST /company] Gallery keys:', newGalleryKeys);
+      } else {
+        console.error('❌ [POST /company] Gallery images upload failed:', galleryUploadResult.error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload gallery images',
+          error: galleryUploadResult.error
+        });
+      }
+    } else {
+      console.log('📤 [POST /company] No gallery images uploaded, using existing URLs');
+      // Process existing carousel URLs to extract keys if needed
+      finalProfileCarouselUrls = finalProfileCarouselUrls.map(url => {
+        if (url.includes('/api/company/signed-url/')) {
+          return url.split('/api/company/signed-url/')[1];
+        }
+        const maybeKey = extractKeyFromUrl(url);
+        return maybeKey || url;
+      });
+    }
 
     const userId = req.userId;
     const role = req.role;
@@ -398,21 +480,26 @@ router.post('/company', (req, res, next) => {
       benefits: Array.isArray(benefits) ? benefits : (benefits ? Object.keys(benefits).filter(key => benefits[key]) : []),
       locations: locations || [],
       jobOffers: jobOffers || [],
-      profileImageUrl: profileImageUrl || 'No photo',
-      profileCarouselUrls: Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [],
+      profileImageUrl: finalProfileImageUrl || 'No photo',
+      profileCarouselUrls: finalProfileCarouselUrls,
       userId
     };
 
     console.log('🏢 Processed data for Prisma:', processedData);
+    console.log('🏢 Final profileImageUrl:', processedData.profileImageUrl);
+    console.log('🏢 Final profileCarouselUrls:', processedData.profileCarouselUrls.length, 'images');
 
     // Allow multiple restaurants per user - no need to check for existing company
     console.log('🏢 Creating restaurant for user (multiple restaurants allowed)');
 
+    console.log('🏢 Creating company profile in database...');
     const companyProfile = await createCompanyProfile(processedData);
+    console.log('✅ [POST /company] Company profile created successfully, ID:', companyProfile.id);
 
     // Admin users don't need RestaurantUser record - they remain as admin users
     const restaurantUserId = null;
 
+    console.log('🏢 Generating company token...');
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
@@ -420,10 +507,13 @@ router.post('/company', (req, res, next) => {
       restaurantId: companyProfile.id,
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
+    console.log('✅ [POST /company] Token generated successfully');
 
     // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, newToken);
+    console.log('✅ [POST /company] Authentication cookie set');
 
+    console.log('✅ [POST /company] Company creation completed successfully');
     res.status(201).json({ 
       success: true,
       message: 'Company created successfully', 
@@ -510,6 +600,10 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
 // PATCH /company - Update company (require permission to edit company)
 router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), async (req, res) => {
   try {
+    console.log('🔄 PATCH /company - Updating company profile');
+    console.log('🔄 Request body keys:', Object.keys(req.body));
+    console.log('🔄 Request files:', req.files ? req.files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, size: f.size })) : 'No files');
+    
     const {
       legalName,
       rut,
@@ -534,18 +628,112 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     // Use query parameter if provided, otherwise fall back to JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
     
-    console.log('🔍 [Company Update API] Updating company profile:');
+    console.log('🔄 [PATCH /company] Updating company profile:');
     console.log('  - Query restaurantId:', queryRestaurantId);
     console.log('  - JWT restaurantId:', jwtRestaurantId);
     console.log('  - Using restaurantId:', restaurantId);
+    console.log('  - Company name:', name);
+    console.log('  - Current profileImageUrl from body:', profileImageUrl);
 
+    // Handle file upload for profile image
+    let finalProfileImageUrl = (() => {
+      if (!profileImageUrl) return profileImageUrl;
+      if (typeof profileImageUrl === 'string' && profileImageUrl.includes('/api/company/signed-url/')) {
+        return profileImageUrl.split('/api/company/signed-url/')[1];
+      }
+      const maybeKey = extractKeyFromUrl(profileImageUrl);
+      return maybeKey || profileImageUrl;
+    })();
+
+    const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
+    if (profileImageFile) {
+      console.log('📤 [PATCH /company] Uploading updated profile image...');
+      console.log('📤 [PATCH /company] File details:', {
+        originalname: profileImageFile.originalname,
+        mimetype: profileImageFile.mimetype,
+        size: profileImageFile.size,
+        bufferSize: profileImageFile.buffer ? profileImageFile.buffer.length : 'no buffer'
+      });
+      
+      const profileImageResult = await uploadFile(profileImageFile, 'company-profiles');
+      if (profileImageResult.success) {
+        finalProfileImageUrl = profileImageResult.key;
+        console.log('✅ [PATCH /company] Profile image updated successfully, key stored:', finalProfileImageUrl);
+      } else {
+        console.error('❌ [PATCH /company] Profile image upload failed:', profileImageResult.error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload profile image',
+          error: profileImageResult.error
+        });
+      }
+    } else {
+      console.log('📤 [PATCH /company] No profile image file uploaded, keeping existing:', finalProfileImageUrl);
+    }
+
+    // Handle gallery/carousel images upload
+    const galleryImageFiles = req.files && req.files.filter(file => file.fieldname === 'galleryImages');
+    let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
+    
+    if (galleryImageFiles && galleryImageFiles.length > 0) {
+      console.log('📤 [PATCH /company] Uploading gallery images...');
+      console.log('📤 [PATCH /company] Gallery files count:', galleryImageFiles.length);
+      console.log('📤 [PATCH /company] Gallery files details:', galleryImageFiles.map(f => ({
+        originalname: f.originalname,
+        mimetype: f.mimetype,
+        size: f.size
+      })));
+      
+      const galleryUploadResult = await uploadMultipleFiles(galleryImageFiles, 'company-gallery');
+      if (galleryUploadResult.success) {
+        const newGalleryKeys = galleryUploadResult.files.map(file => file.key);
+        // Combine existing URLs (if any) with new uploaded keys
+        // Filter out blob URLs (previews) and keep only existing keys/URLs
+        const existingUrls = finalProfileCarouselUrls.filter(url => 
+          !url.startsWith('blob:') && !url.includes('signed-url')
+        );
+        finalProfileCarouselUrls = [...existingUrls, ...newGalleryKeys];
+        console.log('✅ [PATCH /company] Gallery images uploaded successfully, total URLs:', finalProfileCarouselUrls.length);
+        console.log('✅ [PATCH /company] Gallery keys:', newGalleryKeys);
+      } else {
+        console.error('❌ [PATCH /company] Gallery images upload failed:', galleryUploadResult.error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload gallery images',
+          error: galleryUploadResult.error
+        });
+      }
+    } else {
+      console.log('📤 [PATCH /company] No gallery images uploaded, using existing URLs');
+      // Process existing carousel URLs to extract keys if needed
+      finalProfileCarouselUrls = finalProfileCarouselUrls.map(url => {
+        if (url.includes('/api/company/signed-url/')) {
+          return url.split('/api/company/signed-url/')[1];
+        }
+        const maybeKey = extractKeyFromUrl(url);
+        return maybeKey || url;
+      });
+    }
+
+    console.log('🔄 [PATCH /company] Processing locations...');
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
     const locationsToDelete = findLocationsToDelete(currentLocations, locations);
+    console.log('🔄 [PATCH /company] Locations:', {
+      new: newLocations.length,
+      existing: existingLocations.length,
+      toDelete: locationsToDelete.length
+    });
 
+    console.log('🔄 [PATCH /company] Starting database transaction...');
+    console.log('🔄 [PATCH /company] Final profileImageUrl to save:', finalProfileImageUrl);
+    console.log('🔄 [PATCH /company] Final profileCarouselUrls to save:', finalProfileCarouselUrls.length, 'images');
+    
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete);
+      console.log('✅ [PATCH /company] Deleted locations');
+      
       await updateCompanyProfile(restaurantId, {
         legalName,
         rut,
@@ -554,18 +742,22 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
         specialty,
         numberOfRestaurants,
         workers,
-        profileImageUrl,
+        profileImageUrl: finalProfileImageUrl,
         weeklyAverageClients,
         description,
         region,
         comuna,
         benefits,
         existingLocations,
-        profileCarouselUrls,
+        profileCarouselUrls: finalProfileCarouselUrls,
       });
+      console.log('✅ [PATCH /company] Updated company profile');
+      
       await createNewLocations(newLocations, restaurantId);
+      console.log('✅ [PATCH /company] Created new locations');
     });
 
+    console.log('✅ [PATCH /company] Company profile updated successfully');
     res.status(200).json({ 
       success: true,
       message: 'Company profile updated successfully'
