@@ -370,6 +370,58 @@ router.post('/company', (req, res, next) => {
       profileCarouselUrls
     } = req.body;
 
+    // Log initial locations type and value
+    console.log('🏢 [POST /company] Initial locations type:', typeof locations);
+    console.log('🏢 [POST /company] Initial locations value:', locations);
+    console.log('🏢 [POST /company] Is locations an array?', Array.isArray(locations));
+
+    // Parse JSON strings from FormData (locations, benefits, profileCarouselUrls)
+    if (typeof locations === 'string') {
+      try {
+        locations = JSON.parse(locations);
+        console.log('🏢 [POST /company] Parsed locations from JSON string');
+        console.log('🏢 [POST /company] Parsed locations type:', typeof locations);
+        console.log('🏢 [POST /company] Parsed locations is array?', Array.isArray(locations));
+      } catch (error) {
+        console.error('🏢 [POST /company] Error parsing locations:', error.message);
+        locations = [];
+      }
+    }
+    
+    // Ensure locations is always an array (handle null, undefined, objects, etc.)
+    if (!Array.isArray(locations)) {
+      console.log('🏢 [POST /company] Locations is not an array after parsing, converting. Type:', typeof locations);
+      if (locations === null || locations === undefined) {
+        locations = [];
+      } else if (typeof locations === 'object') {
+        // If it's an object, try to convert to array
+        locations = Object.keys(locations).length > 0 ? [locations] : [];
+      } else {
+        locations = [];
+      }
+      console.log('🏢 [POST /company] Locations after conversion:', locations);
+    }
+    
+    if (typeof benefits === 'string') {
+      try {
+        benefits = JSON.parse(benefits);
+        console.log('🏢 [POST /company] Parsed benefits from JSON string');
+      } catch (error) {
+        console.error('🏢 [POST /company] Error parsing benefits:', error.message);
+        benefits = {};
+      }
+    }
+    
+    if (typeof profileCarouselUrls === 'string') {
+      try {
+        profileCarouselUrls = JSON.parse(profileCarouselUrls);
+        console.log('🏢 [POST /company] Parsed profileCarouselUrls from JSON string');
+      } catch (error) {
+        console.error('🏢 [POST /company] Error parsing profileCarouselUrls:', error.message);
+        profileCarouselUrls = [];
+      }
+    }
+
     // Handle file upload for profile image
     let finalProfileImageUrl = (() => {
       if (!profileImageUrl) return profileImageUrl;
@@ -475,6 +527,24 @@ router.post('/company', (req, res, next) => {
 
     // Data validation and conversion
     console.log('🏢 [POST /company] Processing and validating data...');
+    
+    // Final safety check: ensure locations is an array
+    if (!Array.isArray(locations)) {
+      console.warn('⚠️ [POST /company] WARNING: locations is not an array before processedData. Type:', typeof locations, 'Value:', locations);
+      if (typeof locations === 'string') {
+        try {
+          locations = JSON.parse(locations);
+          console.log('🔄 [POST /company] Re-parsed locations from string in final check');
+        } catch (e) {
+          console.error('❌ [POST /company] Failed to parse locations in final check:', e.message);
+          locations = [];
+        }
+      } else {
+        locations = [];
+      }
+    }
+    console.log('🏢 [POST /company] Final locations check - is array:', Array.isArray(locations), 'count:', locations.length);
+    
     const processedData = {
       name: name || '',
       specialty: specialty || '',
@@ -488,8 +558,8 @@ router.post('/company', (req, res, next) => {
       workers: workers || '',
       weeklyAverageClients: weeklyAverageClients || '',
       benefits: Array.isArray(benefits) ? benefits : (benefits ? Object.keys(benefits).filter(key => benefits[key]) : []),
-      locations: locations || [],
-      jobOffers: jobOffers || [],
+      locations: Array.isArray(locations) ? locations : [],
+      jobOffers: Array.isArray(jobOffers) ? jobOffers : [],
       profileImageUrl: finalProfileImageUrl || 'No photo',
       profileCarouselUrls: finalProfileCarouselUrls,
       userId
@@ -542,8 +612,7 @@ router.post('/company', (req, res, next) => {
       data: {
         ...companyProfile,
         token: newToken // Include token for mobile browsers that can't use cookies
-      },
-      planInfo: planInfo
+      }
     });
   } catch (error) {
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -657,15 +726,36 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       profileCarouselUrls,
     } = req.body;
 
+    // Log initial locations type and value
+    console.log('🔄 [PATCH /company] Initial locations type:', typeof locations);
+    console.log('🔄 [PATCH /company] Initial locations value:', locations);
+    console.log('🔄 [PATCH /company] Is locations an array?', Array.isArray(locations));
+
     // Parse JSON strings from FormData (locations, benefits, profileCarouselUrls)
     if (typeof locations === 'string') {
       try {
         locations = JSON.parse(locations);
         console.log('🔄 [PATCH /company] Parsed locations from JSON string');
+        console.log('🔄 [PATCH /company] Parsed locations type:', typeof locations);
+        console.log('🔄 [PATCH /company] Parsed locations is array?', Array.isArray(locations));
       } catch (error) {
         console.error('🔄 [PATCH /company] Error parsing locations:', error.message);
         locations = [];
       }
+    }
+    
+    // Ensure locations is always an array (handle null, undefined, objects, etc.)
+    if (!Array.isArray(locations)) {
+      console.log('🔄 [PATCH /company] Locations is not an array after parsing, converting. Type:', typeof locations);
+      if (locations === null || locations === undefined) {
+        locations = [];
+      } else if (typeof locations === 'object') {
+        // If it's an object, try to convert to array
+        locations = Object.keys(locations).length > 0 ? [locations] : [];
+      } else {
+        locations = [];
+      }
+      console.log('🔄 [PATCH /company] Locations after conversion:', locations);
     }
     
     if (typeof benefits === 'string') {
@@ -787,14 +877,10 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     }
 
     console.log('🔄 [PATCH /company] Processing locations...');
-    
-    // Ensure locations is an array (already parsed above if it was a string)
-    if (!Array.isArray(locations)) {
-      console.log('  - Locations is not an array, defaulting to empty array. Type:', typeof locations);
-      locations = [];
-    }
-    
+    console.log('  - Locations type:', typeof locations);
+    console.log('  - Locations is array?', Array.isArray(locations));
     console.log('  - Locations count:', locations.length);
+    console.log('  - Locations value:', JSON.stringify(locations, null, 2));
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
