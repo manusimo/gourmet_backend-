@@ -18,6 +18,11 @@ const {
 } = require('../helpers/googleAuthHelpers.js');
 
 const {
+  setSecureAuthCookie,
+  clearAuthCookie
+} = require('../helpers/secureCookie.js');
+
+const {
   checkEmployee,
   checkCompany,
   setUserRole,
@@ -137,12 +142,8 @@ router.post('/signup', validateSignup, async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Set authentication cookie
-    res.cookie('manu', token, {
-      httpOnly: false, // Allow JavaScript access for development
-      secure: false, // Allow over HTTP for development
-      sameSite: 'lax',
-      path: '/',
+    // Set secure authentication cookie (cross-domain support)
+    setSecureAuthCookie(res, token, {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
@@ -426,13 +427,9 @@ router.post('/signin', validateSignin, async (req, res) => {
       });
     }
 
-    // Set authentication cookie with error handling
+    // Set secure authentication cookie with error handling (cross-domain support)
     try {
-      res.cookie('manu', token, {
-        httpOnly: false, // Allow JavaScript access for development
-        secure: false, // Allow over HTTP for development
-        sameSite: 'lax',
-        path: '/',
+      setSecureAuthCookie(res, token, {
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       });
       console.log('✅ [Signin] Authentication cookie set for user:', userEmail);
@@ -489,12 +486,8 @@ router.post('/google-signin', async (req, res) => {
     // Authenticate with Google
     const authResult = await authenticateWithGoogle(credential, userType);
     
-    // Set authentication cookie
-    res.cookie('manu', authResult.token, {
-      httpOnly: false, // Allow JavaScript access for development
-      secure: false, // Allow over HTTP for development
-      sameSite: 'lax',
-      path: '/',
+    // Set secure authentication cookie (cross-domain support)
+    setSecureAuthCookie(res, authResult.token, {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
@@ -738,11 +731,8 @@ router.post('/logout', async (req, res) => {
       }
     }
 
-    // Clear the cookie
-    res.clearCookie('manu', {
-      path: '/',
-      sameSite: 'lax'
-    });
+    // Clear the cookie securely (cross-domain support)
+    clearAuthCookie(res);
 
     console.log('✅ Logout successful, cookie cleared');
 
@@ -1044,12 +1034,8 @@ router.post('/set-password', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Set authentication cookie
-    res.cookie('manu', newToken, {
-      httpOnly: false, // Allow JavaScript access for development
-      secure: false, // Allow over HTTP for development
-      sameSite: 'lax',
-      path: '/',
+    // Set secure authentication cookie (cross-domain support)
+    setSecureAuthCookie(res, newToken, {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
@@ -1395,11 +1381,8 @@ router.post('/switch-restaurant', async (req, res) => {
         employeeId: decodedToken.employeeId
       }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-      // Set the new token in a cookie
-      res.cookie('manu', newToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+      // Set the new token in a secure cookie (cross-domain support)
+      setSecureAuthCookie(res, newToken, {
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 

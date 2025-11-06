@@ -175,7 +175,12 @@ const allowedOrigins = [
   process.env.FRONTEND_URL, 
   process.env.CHAT_SERVICE_URL,
   'http://localhost:3001', // Frontend development server
-  'http://localhost:3000'  // Backend development server
+  'http://localhost:3000',  // Backend development server
+  'https://gourmetjobs.cl',
+  'https://www.gourmetjobs.cl',
+  'https://api.makisoftwareagency.cl',
+  'https://api.makisoftwareagency.com', // Backend API domain
+  'https://makisoftwareagency.com' // Previous frontend domain (for backwards compatibility)
 ].filter(Boolean); // Remove undefined values
 
 const corsOptions = {

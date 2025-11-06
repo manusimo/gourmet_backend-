@@ -14,7 +14,21 @@ const AdvancedJobCreationAgent = require('../../services/agents/jobCreationAgent
 
 // Initialize services
 const aiJobCreationService = new AIJobCreationServiceMCP();
-const advancedAgent = new AdvancedJobCreationAgent();
+
+// Initialize advanced agent lazily (only when needed)
+let advancedAgent = null;
+function getAdvancedAgent() {
+  if (!advancedAgent) {
+    try {
+      advancedAgent = new AdvancedJobCreationAgent();
+      console.log('✅ [AI JOB CREATION] Advanced agent initialized successfully');
+    } catch (error) {
+      console.error('❌ [AI JOB CREATION] Failed to initialize advanced agent:', error);
+      throw error;
+    }
+  }
+  return advancedAgent;
+}
 
 // Note: client initialization is handled internally by the service constructor
 
@@ -95,8 +109,9 @@ router.post('/process-advanced', getUserIdFromCookie, getRestaurantUserIdFromCoo
       locationId: locationId ? parseInt(locationId) : 1
     };
     
-    // Process with advanced agent
-    const result = await advancedAgent.processRequest(
+    // Process with advanced agent (lazy initialization)
+    const agent = getAdvancedAgent();
+    const result = await agent.processRequest(
       message,
       conversationHistory,
       restaurantContext

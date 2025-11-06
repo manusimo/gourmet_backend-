@@ -1,6 +1,7 @@
 const { OAuth2Client } = require('google-auth-library');
 const { prisma } = require('../db.js');
 const jwt = require('jsonwebtoken');
+const { setSecureAuthCookie } = require('./secureCookie.js');
 
 /**
  * Verify Google OAuth token and extract user information
@@ -159,16 +160,13 @@ const generateAuthToken = (user, restaurantAccess) => {
 };
 
 /**
- * Set authentication cookie
+ * Set authentication cookie (uses secure cookie helper for cross-domain support)
  * @param {Object} res - Express response object
  * @param {string} token - JWT token
  */
 const setAuthCookie = (res, token) => {
-  res.cookie('manu', token, {
-    httpOnly: false, // Allow JavaScript access for development
-    secure: false, // Allow over HTTP for development
-    sameSite: 'lax',
-    path: '/',
+  // Use secure cookie helper for cross-domain support (gourmetjobs.cl <-> api.makisoftwareagency.com)
+  setSecureAuthCookie(res, token, {
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   });
 };

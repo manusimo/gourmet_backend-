@@ -3,7 +3,7 @@
  * Implements auto-reasoning using LangGraph to orchestrate MCP tools
  */
 
-const { StateGraph, END } = require('@langchain/langgraph');
+const { StateGraph, END, Annotation } = require('@langchain/langgraph');
 const OpenAI = require('openai');
 const { getToolHandler } = require('../../mcp/tools');
 const { JobRAGService } = require('../rag');
@@ -12,87 +12,87 @@ const { prisma } = require('../../db');
 
 /**
  * State that flows through the agent graph
- * LangGraph uses a state schema with reducer functions
+ * LangGraph uses Annotation.Root() for state schema definition
  */
-const stateSchema = {
+const stateSchema = Annotation.Root({
   // User input
-  userMessage: {
+  userMessage: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => ''
-  },
-  conversationHistory: {
+  }),
+  conversationHistory: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => []
-  },
-  restaurantContext: {
+  }),
+  restaurantContext: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => ({})
-  },
+  }),
   
   // Agent's reasoning
-  reasoning: {
+  reasoning: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => ''
-  },
-  nextAction: {
+  }),
+  nextAction: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => null
-  },
-  confidence: {
+  }),
+  confidence: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => 0
-  },
-  plan: {
+  }),
+  plan: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => []
-  },
-  completedActions: {
+  }),
+  completedActions: Annotation({
     reducer: (x, y) => {
       const current = x || [];
       const newActions = y ? (Array.isArray(y) ? y : [y]) : [];
       return [...current, ...newActions];
     },
     default: () => []
-  },
+  }),
   
   // Extracted data
-  extractedJobData: {
+  extractedJobData: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => null
-  },
-  status: {
+  }),
+  status: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => null
-  },
+  }),
   
   // Results from tools
-  similarJobs: {
+  similarJobs: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => []
-  },
-  recommendedCandidates: {
+  }),
+  recommendedCandidates: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => []
-  },
-  createdJobId: {
+  }),
+  createdJobId: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => null
-  },
-  contactedCandidates: {
+  }),
+  contactedCandidates: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => []
-  },
+  }),
   
   // Final response
-  response: {
+  response: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => null
-  },
-  error: {
+  }),
+  error: Annotation({
     reducer: (x, y) => y ?? x,
     default: () => null
-  },
-};
+  }),
+});
 
 /**
  * The agent REASONS about what to do next using LLM
