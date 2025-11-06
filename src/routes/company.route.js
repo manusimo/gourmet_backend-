@@ -334,13 +334,22 @@ router.post('/company', (req, res, next) => {
 }, getUserIdFromCookie, setUserRole, requirePermission('create_company'), async (req, res) => {
   
   try {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🏢 POST /company - Creating company profile');
-    console.log('🏢 Request cookies:', req.cookies);
-    console.log('🏢 User ID from middleware:', req.userId);
-    console.log('🏢 User type from middleware:', req.userType);
-    console.log('🏢 User role from middleware:', req.userRole);
-    console.log('🏢 Request body keys:', Object.keys(req.body));
-    console.log('🏢 Request files:', req.files ? req.files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, size: f.size })) : 'No files');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🏢 [POST /company] Request cookies:', req.cookies);
+    console.log('🏢 [POST /company] User ID from middleware:', req.userId);
+    console.log('🏢 [POST /company] User type from middleware:', req.userType);
+    console.log('🏢 [POST /company] User role from middleware:', req.userRole);
+    console.log('🏢 [POST /company] Request body keys:', Object.keys(req.body));
+    console.log('🏢 [POST /company] Request files count:', req.files ? req.files.length : 0);
+    console.log('🏢 [POST /company] Request files:', req.files ? req.files.map(f => ({ 
+      fieldname: f.fieldname, 
+      originalname: f.originalname, 
+      mimetype: f.mimetype,
+      size: f.size,
+      bufferSize: f.buffer ? f.buffer.length : 'no buffer'
+    })) : 'No files');
 
     const {
       name,
@@ -444,8 +453,8 @@ router.post('/company', (req, res, next) => {
     const userId = req.userId;
     const role = req.role;
 
-    console.log('🏢 About to create company profile for userId:', userId);
-    console.log('🏢 Request body data:', {
+    console.log('🏢 [POST /company] About to create company profile for userId:', userId);
+    console.log('🏢 [POST /company] Request body data:', {
       name,
       specialty,
       format,
@@ -457,14 +466,15 @@ router.post('/company', (req, res, next) => {
       numberOfRestaurants,
       workers,
       weeklyAverageClients,
-      benefits,
-      locations,
-      jobOffers,
-      profileImageUrl,
-      profileCarouselUrls
+      benefits: Array.isArray(benefits) ? benefits.length : 'not array',
+      locations: Array.isArray(locations) ? locations.length : 'not array',
+      jobOffers: Array.isArray(jobOffers) ? jobOffers.length : 'not array',
+      profileImageUrl: profileImageUrl ? 'provided' : 'not provided',
+      profileCarouselUrls: Array.isArray(profileCarouselUrls) ? profileCarouselUrls.length : 'not array'
     });
 
     // Data validation and conversion
+    console.log('🏢 [POST /company] Processing and validating data...');
     const processedData = {
       name: name || '',
       specialty: specialty || '',
@@ -485,16 +495,26 @@ router.post('/company', (req, res, next) => {
       userId
     };
 
-    console.log('🏢 Processed data for Prisma:', processedData);
-    console.log('🏢 Final profileImageUrl:', processedData.profileImageUrl);
-    console.log('🏢 Final profileCarouselUrls:', processedData.profileCarouselUrls.length, 'images');
+    console.log('🏢 [POST /company] Processed data summary:');
+    console.log('  - Name:', processedData.name);
+    console.log('  - Format:', processedData.format);
+    console.log('  - Specialty:', processedData.specialty);
+    console.log('  - Region:', processedData.region);
+    console.log('  - Comuna:', processedData.comuna);
+    console.log('  - Locations count:', processedData.locations.length);
+    console.log('  - Benefits count:', processedData.benefits.length);
+    console.log('  - Final profileImageUrl:', processedData.profileImageUrl);
+    console.log('  - Final profileCarouselUrls count:', processedData.profileCarouselUrls.length);
 
     // Allow multiple restaurants per user - no need to check for existing company
-    console.log('🏢 Creating restaurant for user (multiple restaurants allowed)');
-
-    console.log('🏢 Creating company profile in database...');
+    console.log('🏢 [POST /company] Creating restaurant for user (multiple restaurants allowed)');
+    console.log('🏢 [POST /company] Calling createCompanyProfile...');
+    
     const companyProfile = await createCompanyProfile(processedData);
-    console.log('✅ [POST /company] Company profile created successfully, ID:', companyProfile.id);
+    console.log('✅ [POST /company] Company profile created successfully!');
+    console.log('  - Company ID:', companyProfile.id);
+    console.log('  - Company Name:', companyProfile.name);
+    console.log('  - Created At:', companyProfile.createdAt);
 
     // Admin users don't need RestaurantUser record - they remain as admin users
     const restaurantUserId = null;
@@ -514,6 +534,8 @@ router.post('/company', (req, res, next) => {
     console.log('✅ [POST /company] Authentication cookie set');
 
     console.log('✅ [POST /company] Company creation completed successfully');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     res.status(201).json({ 
       success: true,
       message: 'Company created successfully', 
@@ -524,7 +546,11 @@ router.post('/company', (req, res, next) => {
       planInfo: planInfo
     });
   } catch (error) {
-    console.error('Error creating company:', error.message, error.stack);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ [POST /company] ERROR creating company:');
+    console.error('  - Error message:', error.message);
+    console.error('  - Error stack:', error.stack);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -600,9 +626,18 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
 // PATCH /company - Update company (require permission to edit company)
 router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), async (req, res) => {
   try {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🔄 PATCH /company - Updating company profile');
-    console.log('🔄 Request body keys:', Object.keys(req.body));
-    console.log('🔄 Request files:', req.files ? req.files.map(f => ({ fieldname: f.fieldname, originalname: f.originalname, size: f.size })) : 'No files');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔄 [PATCH /company] Request body keys:', Object.keys(req.body));
+    console.log('🔄 [PATCH /company] Request files count:', req.files ? req.files.length : 0);
+    console.log('🔄 [PATCH /company] Request files:', req.files ? req.files.map(f => ({ 
+      fieldname: f.fieldname, 
+      originalname: f.originalname, 
+      mimetype: f.mimetype,
+      size: f.size,
+      bufferSize: f.buffer ? f.buffer.length : 'no buffer'
+    })) : 'No files');
     
     const {
       legalName,
@@ -633,7 +668,12 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     console.log('  - JWT restaurantId:', jwtRestaurantId);
     console.log('  - Using restaurantId:', restaurantId);
     console.log('  - Company name:', name);
+    console.log('  - Format:', format);
+    console.log('  - Specialty:', specialty);
+    console.log('  - Region:', region);
+    console.log('  - Comuna:', comuna);
     console.log('  - Current profileImageUrl from body:', profileImageUrl);
+    console.log('  - Current profileCarouselUrls from body:', Array.isArray(profileCarouselUrls) ? profileCarouselUrls.length : 'not array');
 
     // Handle file upload for profile image
     let finalProfileImageUrl = (() => {
@@ -716,15 +756,16 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     }
 
     console.log('🔄 [PATCH /company] Processing locations...');
+    console.log('  - Locations from request:', Array.isArray(locations) ? locations.length : 'not array');
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
     const locationsToDelete = findLocationsToDelete(currentLocations, locations);
-    console.log('🔄 [PATCH /company] Locations:', {
-      new: newLocations.length,
-      existing: existingLocations.length,
-      toDelete: locationsToDelete.length
-    });
+    console.log('🔄 [PATCH /company] Locations breakdown:');
+    console.log('  - Current locations in DB:', currentLocations.length);
+    console.log('  - New locations to create:', newLocations.length);
+    console.log('  - Existing locations to update:', existingLocations.length);
+    console.log('  - Locations to delete:', locationsToDelete.length);
 
     console.log('🔄 [PATCH /company] Starting database transaction...');
     console.log('🔄 [PATCH /company] Final profileImageUrl to save:', finalProfileImageUrl);
@@ -758,12 +799,18 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     });
 
     console.log('✅ [PATCH /company] Company profile updated successfully');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     res.status(200).json({ 
       success: true,
       message: 'Company profile updated successfully'
     });
   } catch (error) {
-    console.error('Error updating company profile:', error.message, error.stack);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('❌ [PATCH /company] ERROR updating company profile:');
+    console.error('  - Error message:', error.message);
+    console.error('  - Error stack:', error.stack);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
