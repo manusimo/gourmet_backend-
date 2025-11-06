@@ -11,6 +11,7 @@ const { buildFilters, buildSearchConditions } = require('../helpers/filterHelper
 const { deleteLocations, updateCompanyProfile, createNewLocations } = require('../helpers/company.js');
 const { getOrderByCriteriaCompanies } = require('../helpers/orderBy.js');
 const { verifyCSRFToken } = require('../helpers/csrf.js');
+const { setSecureAuthCookie } = require('../helpers/secureCookie.js');
 const {
   getCompanies,
   getTotalCompanies,
@@ -412,11 +413,8 @@ router.post('/company', (req, res, next) => {
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
 
-    res.cookie('manu', newToken, {
-      httpOnly: true,
-      sameSite: 'None',
-      secure: true,
-    });
+    // Set secure authentication cookie (cross-domain support)
+    setSecureAuthCookie(res, newToken);
 
     res.status(201).json({ 
       success: true,
