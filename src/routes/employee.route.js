@@ -6,6 +6,7 @@ const { getEmployeeIdFromCookie, getRestaurantIdFromCookie, getRestaurantUserIdF
 const { requirePlan } = require('../middleware/checkPlan.js');
 const { findApplicationDetails } = require('../helpers/employee/findApplication.js');
 const { convertImageUrls } = require('../utils/imageUrlUtils.js');
+const { setSecureAuthCookie } = require('../helpers/secureCookie.js');
 const {
   getEmployeeById,
   getEmployeeByUserId,
@@ -181,11 +182,8 @@ router.post('/employee', ...createEmployeeMiddleware, async (req, res) => {
       employeeId: employeeProfile.id,
     });
 
-    res.cookie('manu', newToken, {
-      httpOnly: true,
-      sameSite: 'None',
-      secure: true,
-    });
+    // Set secure authentication cookie (cross-domain support)
+    setSecureAuthCookie(res, newToken);
 
     // Convert image keys to actual signed URLs
     const employeeWithSignedUrls = await convertImageUrls(employeeProfile, ['profileImageUrl']);
