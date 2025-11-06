@@ -639,7 +639,7 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       bufferSize: f.buffer ? f.buffer.length : 'no buffer'
     })) : 'No files');
     
-    const {
+    let {
       legalName,
       rut,
       name,
@@ -656,6 +656,37 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       profileImageUrl,
       profileCarouselUrls,
     } = req.body;
+
+    // Parse JSON strings from FormData (locations, benefits, profileCarouselUrls)
+    if (typeof locations === 'string') {
+      try {
+        locations = JSON.parse(locations);
+        console.log('🔄 [PATCH /company] Parsed locations from JSON string');
+      } catch (error) {
+        console.error('🔄 [PATCH /company] Error parsing locations:', error.message);
+        locations = [];
+      }
+    }
+    
+    if (typeof benefits === 'string') {
+      try {
+        benefits = JSON.parse(benefits);
+        console.log('🔄 [PATCH /company] Parsed benefits from JSON string');
+      } catch (error) {
+        console.error('🔄 [PATCH /company] Error parsing benefits:', error.message);
+        benefits = {};
+      }
+    }
+    
+    if (typeof profileCarouselUrls === 'string') {
+      try {
+        profileCarouselUrls = JSON.parse(profileCarouselUrls);
+        console.log('🔄 [PATCH /company] Parsed profileCarouselUrls from JSON string');
+      } catch (error) {
+        console.error('🔄 [PATCH /company] Error parsing profileCarouselUrls:', error.message);
+        profileCarouselUrls = [];
+      }
+    }
 
     const { restaurantId: queryRestaurantId } = req.query;
     const { restaurantId: jwtRestaurantId } = req;
@@ -756,7 +787,14 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     }
 
     console.log('🔄 [PATCH /company] Processing locations...');
-    console.log('  - Locations from request:', Array.isArray(locations) ? locations.length : 'not array');
+    
+    // Ensure locations is an array (already parsed above if it was a string)
+    if (!Array.isArray(locations)) {
+      console.log('  - Locations is not an array, defaulting to empty array. Type:', typeof locations);
+      locations = [];
+    }
+    
+    console.log('  - Locations count:', locations.length);
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
