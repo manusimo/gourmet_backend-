@@ -567,4 +567,155 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
   }
 });
 
+// DELETE /company/:id - Delete restaurant/company
+router.delete('/company/:id', getAuthFromCookie, async (req, res) => {
+  try {
+    const restaurantId = parseInt(req.params.id, 10);
+    const userId = req.userId;
+
+    if (!restaurantId || isNaN(restaurantId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid restaurant ID'
+      });
+    }
+
+    console.log('🗑️ [Delete Restaurant] Attempting to delete restaurant:', {
+      restaurantId,
+      userId
+    });
+
+    // Verify the restaurant exists and user owns it
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: {
+        id: true,
+        name: true,
+        userId: true
+      }
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Restaurant not found'
+      });
+    }
+
+    // Check if user owns this restaurant
+    if (restaurant.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to delete this restaurant'
+      });
+    }
+
+    console.log('🗑️ [Delete Restaurant] Restaurant found, starting cascade delete...');
+
+    // Delete all related data in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Get all job offers for this restaurant
+      const jobOffers = await tx.jobOffer.findMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      console.log('🗑️ [Delete Restaurant] Found job offers:', jobOffers.length);
+
+      // For each job offer: delete dependent entities
+      for (const jobOffer of jobOffers) {
+        // Get applications for this job offer
+        const applications = await tx.application.findMany({
+          where: { jobPostId: jobOffer.id }
+        });
+
+        // Delete answers for applications
+        for (const application of applications) {
+          await tx.answer.deleteMany({
+            where: { applicationId: application.id }
+          });
+        }
+
+        // Delete applications
+        await tx.application.deleteMany({
+          where: { jobPostId: jobOffer.id }
+        });
+
+        // Delete questions
+        await tx.question.deleteMany({
+          where: { jobOfferId: jobOffer.id }
+        });
+
+        // Delete favourite jobs
+        await tx.favouriteJob.deleteMany({
+          where: { jobOfferId: jobOffer.id }
+        });
+      }
+
+      // Delete all job offers
+      await tx.jobOffer.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Delete locations
+      await tx.location.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Delete messages and conversations
+      const conversations = await tx.conversation.findMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      for (const conversation of conversations) {
+        await tx.message.deleteMany({
+          where: { conversationId: conversation.id }
+        });
+      }
+
+      await tx.conversation.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Delete talent pool entries
+      await tx.talentPool.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Delete restaurant user associations
+      await tx.restaurantUser.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Delete AI agents
+      await tx.aiAgent.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Delete scheduled calls
+      await tx.scheduledCall.deleteMany({
+        where: { restaurantId: restaurantId }
+      });
+
+      // Finally delete the restaurant
+      await tx.restaurant.delete({
+        where: { id: restaurantId }
+      });
+
+      console.log('✅ [Delete Restaurant] Restaurant and all related data deleted successfully');
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Restaurant deleted successfully'
+    });
+  } catch (error) {
+    console.error('❌ [Delete Restaurant] Error deleting restaurant:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal Server Error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;
