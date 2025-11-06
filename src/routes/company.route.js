@@ -634,10 +634,15 @@ router.get('/company/:id', async (req, res) => {
     const restaurant = await getCompanyById(id);
 
     if (restaurant) {
-      console.log('this is the restaurant', restaurant.benefits);
+      console.log('🔍 [GET /company/:id] Company found:', restaurant.name);
+      console.log('🔍 [GET /company/:id] Converting image URLs to signed URLs...');
+      
+      // Convert image keys to signed URLs
+      const companyWithSignedUrls = await convertImageUrls(restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+      
       res.status(200).json({ 
         success: true,
-        data: restaurant 
+        data: companyWithSignedUrls 
       });
     } else {
       res.status(404).json({ 
@@ -646,7 +651,7 @@ router.get('/company/:id', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error(error);
+    console.error('❌ [GET /company/:id] Error:', error);
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -672,9 +677,14 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
 
     if (company) {
       console.log('🔍 [Company Profile API] Found company:', company.name);
+      console.log('🔍 [Company Profile API] Converting image URLs to signed URLs...');
+      
+      // Convert image keys to signed URLs
+      const companyWithSignedUrls = await convertImageUrls(company, ['profileImageUrl', 'profileCarouselUrls']);
+      
       res.status(200).json({
         success: true,
-        data: company
+        data: companyWithSignedUrls
       });
     } else {
       console.log('🔍 [Company Profile API] Company not found for restaurantId:', restaurantId);
