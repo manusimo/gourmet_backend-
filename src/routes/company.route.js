@@ -12,6 +12,7 @@ const { deleteLocations, updateCompanyProfile, createNewLocations } = require('.
 const { getOrderByCriteriaCompanies } = require('../helpers/orderBy.js');
 const { verifyCSRFToken } = require('../helpers/csrf.js');
 const { setSecureAuthCookie } = require('../helpers/secureCookie.js');
+const { convertImageUrls } = require('../utils/imageUrlUtils.js');
 const {
   getCompanies,
   getTotalCompanies,
@@ -81,9 +82,16 @@ router.get('/companies', async (req, res) => {
     const companies = await getCompanies(filters, searchConditions, limitInt, (pageInt - 1) * limitInt);
     const totalCompanies = await getTotalCompanies(filters, searchConditions);
 
+    // Convert image keys to actual signed URLs for each company
+    const companiesWithSignedUrls = await Promise.all(
+      companies.map(async (company) => {
+        return await convertImageUrls(company, ['profileImageUrl', 'profileCarouselUrls']);
+      })
+    );
+
     res.json({
       success: true,
-      data: companies,
+      data: companiesWithSignedUrls,
       totalCompanies,
       currentPage: pageInt,
       totalPages: Math.ceil(totalCompanies / limitInt),
@@ -413,13 +421,17 @@ router.post('/company', (req, res, next) => {
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
 
-    // Set secure authentication cookie (cross-domain support)
+    // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, newToken);
 
     res.status(201).json({ 
       success: true,
       message: 'Company created successfully', 
-      data: companyProfile
+      data: {
+        ...companyProfile,
+        token: newToken // Include token for mobile browsers that can't use cookies
+      },
+      planInfo: planInfo
     });
   } catch (error) {
     console.error('Error creating company:', error.message, error.stack);

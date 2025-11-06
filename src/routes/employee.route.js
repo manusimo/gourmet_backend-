@@ -182,7 +182,7 @@ router.post('/employee', ...createEmployeeMiddleware, async (req, res) => {
       employeeId: employeeProfile.id,
     });
 
-    // Set secure authentication cookie (cross-domain support)
+    // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, newToken);
 
     // Convert image keys to actual signed URLs
@@ -191,7 +191,10 @@ router.post('/employee', ...createEmployeeMiddleware, async (req, res) => {
     res.status(201).json({ 
       success: true,
       message: 'Employee created successfully', 
-      data: employeeWithSignedUrls 
+      data: {
+        ...employeeWithSignedUrls,
+        token: newToken // Include token for mobile browsers that can't use cookies
+      }
     });
   } catch (error) {
     console.error('Error in employee route:', error);

@@ -142,7 +142,7 @@ router.post('/signup', validateSignup, async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Set secure authentication cookie (cross-domain support)
+    // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, token, {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
@@ -408,16 +408,16 @@ router.post('/signin', validateSignin, async (req, res) => {
 
       token = jwt.sign(
         {
-          userId: user.id,
-          email: user.email,
-          userType: user.userType,
-          role: user.role,
-          restaurantId: restaurantId,
-          restaurantUserId: restaurantUserId
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: '24h' }
-      );
+        userId: user.id,
+        email: user.email,
+        userType: user.userType,
+        role: user.role,
+        restaurantId: restaurantId,
+        restaurantUserId: restaurantUserId
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
       console.log('✅ [Signin] JWT token generated for user:', userEmail);
     } catch (jwtError) {
       console.error('❌ [Signin] Error generating JWT token:', jwtError.message);
@@ -427,7 +427,7 @@ router.post('/signin', validateSignin, async (req, res) => {
       });
     }
 
-    // Set secure authentication cookie with error handling (cross-domain support)
+    // Set secure authentication cookie (subdomain support)
     try {
       setSecureAuthCookie(res, token, {
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -486,7 +486,7 @@ router.post('/google-signin', async (req, res) => {
     // Authenticate with Google
     const authResult = await authenticateWithGoogle(credential, userType);
     
-    // Set secure authentication cookie (cross-domain support)
+    // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, authResult.token, {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
@@ -1034,7 +1034,7 @@ router.post('/set-password', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    // Set secure authentication cookie (cross-domain support)
+    // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, newToken, {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
@@ -1381,7 +1381,7 @@ router.post('/switch-restaurant', async (req, res) => {
         employeeId: decodedToken.employeeId
       }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-      // Set the new token in a secure cookie (cross-domain support)
+      // Set the new token in a secure cookie (subdomain support)
       setSecureAuthCookie(res, newToken, {
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });

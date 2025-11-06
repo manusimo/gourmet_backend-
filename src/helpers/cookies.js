@@ -5,11 +5,21 @@ const getAuthFromCookie = (req, res, next) => {
   console.log('🔍 getAuthFromCookie called');
   console.log('🔍 Request cookies:', req.cookies);
   
-  const token = req.cookies.manu;  
+  // Try to get token from cookie first (preferred for desktop)
+  let token = req.cookies.manu;
   console.log('🔍 Manu cookie exists:', !!token);
+  
+  // Fallback to Authorization header for mobile browsers that block third-party cookies
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      console.log('🔍 Token found in Authorization header (mobile fallback)');
+    }
+  }
 
   if (!token) {
-    console.log('❌ No manu cookie found');
+    console.log('❌ No manu cookie or Authorization header found');
     return res.status(401).json({ message: 'Entra a tu cuenta para usar la plataforma' });
   }
 
@@ -45,7 +55,16 @@ const getAuthFromCookie = (req, res, next) => {
 };
 
 const getEmployeeIdFromCookie = async (req, res, next) => {
-  const token = req.cookies.manu; 
+  // Try to get token from cookie first (preferred for desktop)
+  let token = req.cookies.manu;
+  
+  // Fallback to Authorization header for mobile browsers that block third-party cookies
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    }
+  } 
  
   if (!token) {
     return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
@@ -94,10 +113,20 @@ const getUserIdFromCookie = async (req, res, next) => {
     console.log('🍪 Request cookies:', req.cookies);
     console.log('🍪 Manu cookie exists:', !!req.cookies.manu);
     
-    const token = req.cookies.manu; 
+    // Try to get token from cookie first (preferred for desktop)
+    let token = req.cookies.manu;
+    
+    // Fallback to Authorization header for mobile browsers that block third-party cookies
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        console.log('🍪 Token found in Authorization header (mobile fallback)');
+      }
+    }
 
     if (!token) {
-      console.log('🍪 No token found in cookies');
+      console.log('🍪 No token found in cookies or Authorization header');
       return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
     }
 
@@ -138,7 +167,16 @@ const getUserIdFromCookie = async (req, res, next) => {
 }
 
 const getRestaurantUserIdFromCookie = async (req, res, next) => {
-  const token = req.cookies.manu; 
+  // Try to get token from cookie first (preferred for desktop)
+  let token = req.cookies.manu;
+  
+  // Fallback to Authorization header for mobile browsers that block third-party cookies
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    }
+  } 
 
   if (!token) {
     return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
