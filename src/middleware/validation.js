@@ -132,11 +132,12 @@ const validateSignup = [
       // Remove all spaces, dashes, and parentheses for validation
       const cleaned = value.replace(/[\s\-\(\)]/g, '');
       
-      // Accept Chilean phone numbers:
-      // - +569XXXXXXXX (11 digits: +56 + 9 digits)
-      // - 569XXXXXXXX (10 digits: 56 + 9 digits)  
-      // - 9XXXXXXXX (9 digits: just the mobile number)
-      const chileanMobileRegex = /^(\+?56)?9\d{8}$/;
+      // Accept Chilean phone numbers (flexible format):
+      // - +569XXXXXXXX or +569XXXXXXXXX (with country code +56, then 9, then 7-8 digits)
+      // - 569XXXXXXXX or 569XXXXXXXXX (without +, same format)
+      // - 9XXXXXXXX or 9XXXXXXXXX (just the mobile number starting with 9)
+      // Chilean mobile numbers are typically 9 digits total (9 + 8 more), but can vary
+      const chileanMobileRegex = /^(\+?56)?9\d{7,8}$/;
       
       // Check if it's a valid Chilean mobile number
       if (chileanMobileRegex.test(cleaned)) {
