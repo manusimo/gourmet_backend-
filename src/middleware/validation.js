@@ -126,7 +126,32 @@ const validateSignup = [
   body('phoneNumber')
     .optional()
     .trim()
-    .isMobilePhone('any', { strictMode: false })
+    .custom((value) => {
+      if (!value) return true; // Optional field, allow empty
+      
+      // Remove all spaces, dashes, and parentheses for validation
+      const cleaned = value.replace(/[\s\-\(\)]/g, '');
+      
+      // Accept Chilean phone numbers:
+      // - +569XXXXXXXX (11 digits: +56 + 9 digits)
+      // - 569XXXXXXXX (10 digits: 56 + 9 digits)  
+      // - 9XXXXXXXX (9 digits: just the mobile number)
+      const chileanMobileRegex = /^(\+?56)?9\d{8}$/;
+      
+      // Check if it's a valid Chilean mobile number
+      if (chileanMobileRegex.test(cleaned)) {
+        return true;
+      }
+      
+      // Fallback: Accept any phone number format with 8-15 digits (international format)
+      // This includes formats like: +1234567890, 1234567890, etc.
+      const generalPhoneRegex = /^\+?[\d]{8,15}$/;
+      if (generalPhoneRegex.test(cleaned)) {
+        return true;
+      }
+      
+      throw new Error('Please provide a valid phone number');
+    })
     .withMessage('Please provide a valid phone number')
     .customSanitizer(sanitizeAndTrim),
   
