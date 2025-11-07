@@ -2,7 +2,7 @@ const { body, param, query, validationResult } = require('express-validator');
 const xss = require('xss');
 
 /**
- * Handle validation errors
+ * Handle validation errors with user-friendly messages
  */
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -21,10 +21,41 @@ const handleValidationErrors = (req, res, next) => {
       errors: errorDetails
     });
     
+    // Create a user-friendly main message
+    // If there's only one error, use that message directly
+    // If there are multiple errors, create a summary message
+    let mainMessage;
+    if (errorDetails.length === 1) {
+      mainMessage = errorDetails[0].message;
+    } else {
+      // For multiple errors, create a summary
+      const fieldNames = errorDetails.map(e => {
+        const fieldMap = {
+          'name': 'nombre',
+          'email': 'email',
+          'password': 'contraseña',
+          'passwordConfirmation': 'confirmación de contraseña',
+          'userType': 'tipo de usuario',
+          'phoneNumber': 'teléfono'
+        };
+        return fieldMap[e.field] || e.field;
+      });
+      
+      if (fieldNames.length === 2) {
+        mainMessage = `Por favor, corrige los siguientes campos: ${fieldNames.join(' y ')}`;
+      } else {
+        mainMessage = `Por favor, corrige los siguientes campos: ${fieldNames.slice(0, -1).join(', ')} y ${fieldNames[fieldNames.length - 1]}`;
+      }
+    }
+    
     return res.status(400).json({
       success: false,
-      message: 'Validation failed',
-      errors: errorDetails
+      message: mainMessage,
+      errors: errorDetails,
+      // Add a detailed message for the frontend to display
+      details: errorDetails.length > 1 
+        ? errorDetails.map(e => `• ${e.message}`).join('\n')
+        : errorDetails[0].message
     });
   }
   next();
@@ -95,33 +126,43 @@ const validateContact = [
 const validateSignup = [
   body('name')
     .trim()
+    .notEmpty()
+    .withMessage('El nombre es requerido')
     .isLength({ min: 2, max: 100 })
-    .withMessage('Name must be between 2 and 100 characters')
+    .withMessage('El nombre debe tener entre 2 y 100 caracteres')
     .customSanitizer(sanitizeAndTrim),
   
   body('email')
     .trim()
+    .notEmpty()
+    .withMessage('El email es requerido')
     .isEmail()
-    .withMessage('Please provide a valid email address')
+    .withMessage('Por favor, ingresa un email válido (ejemplo: nombre@correo.com)')
     .normalizeEmail(),
   
   body('password')
+    .notEmpty()
+    .withMessage('La contraseña es requerida')
     .isLength({ min: 8, max: 128 })
-    .withMessage('Password must be between 8 and 128 characters')
+    .withMessage('La contraseña debe tener entre 8 y 128 caracteres')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number'),
+    .withMessage('La contraseña debe contener al menos una letra minúscula, una mayúscula y un número'),
   
   body('passwordConfirmation')
+    .notEmpty()
+    .withMessage('La confirmación de contraseña es requerida')
     .custom((value, { req }) => {
       if (value !== req.body.password) {
-        throw new Error('Password confirmation does not match password');
+        throw new Error('Las contraseñas no coinciden. Por favor, verifica que ambas contraseñas sean iguales');
       }
       return true;
     }),
   
   body('userType')
+    .notEmpty()
+    .withMessage('El tipo de usuario es requerido')
     .isIn(['profesionales', 'empresas'])
-    .withMessage('User type must be either profesionales or empresas'),
+    .withMessage('El tipo de usuario debe ser "profesionales" o "empresas"'),
   
   body('phoneNumber')
     .optional()
@@ -151,9 +192,9 @@ const validateSignup = [
         return true;
       }
       
-      throw new Error('Please provide a valid phone number');
+      throw new Error('Por favor, ingresa un número de teléfono válido (ejemplo: +56912345678 o 912345678)');
     })
-    .withMessage('Please provide a valid phone number')
+    .withMessage('Por favor, ingresa un número de teléfono válido')
     .customSanitizer(sanitizeAndTrim),
   
   handleValidationErrors

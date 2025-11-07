@@ -94,7 +94,7 @@ router.post('/signup', validateSignup, async (req, res) => {
       console.log('❌ [POST /signup] User already exists:', userEmail);
       return res.status(409).json({
         success: false,
-        message: 'User already exists with this email',
+        message: 'Este email ya está registrado. Por favor, inicia sesión o utiliza otro email.',
         error: 'EMAIL_ALREADY_EXISTS'
       });
     }
@@ -159,7 +159,8 @@ router.post('/signup', validateSignup, async (req, res) => {
       if (createError.code === 'P2002') {
         return res.status(409).json({
           success: false,
-          message: 'User already exists with this email'
+          message: 'Este email ya está registrado. Por favor, inicia sesión o utiliza otro email.',
+          error: 'EMAIL_ALREADY_EXISTS'
         });
       }
       
@@ -237,11 +238,11 @@ router.post('/signup', validateSignup, async (req, res) => {
     console.log('✅ [POST /signup] Signup completed successfully for:', newUser.email);
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
+      message: '¡Cuenta creada exitosamente! Bienvenido a GourmetJobs.',
       data: {
         user: newUser,
         token,
-        securityRecommendation: 'Consider enabling multi-factor authentication for enhanced security'
+        securityRecommendation: 'Considera habilitar la autenticación de dos factores para mayor seguridad'
       }
     });
 
@@ -253,13 +254,14 @@ router.post('/signup', validateSignup, async (req, res) => {
     if (error.code === 'P2002') {
       return res.status(409).json({
         success: false,
-        message: 'User already exists with this email'
+        message: 'Este email ya está registrado. Por favor, inicia sesión o utiliza otro email.',
+        error: 'EMAIL_ALREADY_EXISTS'
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Internal Server Error',
+      message: 'Ocurrió un error inesperado al crear tu cuenta. Por favor, intenta nuevamente más tarde.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
