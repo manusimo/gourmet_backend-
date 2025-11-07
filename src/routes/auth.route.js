@@ -60,14 +60,38 @@ router.use(enhancedSecurityMiddleware);
 // POST /signup - User registration with enhanced validation
 router.post('/signup', validateSignup, async (req, res) => {
   try {
-    const { email, password, userType } = req.body;
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
+    console.log('🔐 [POST /signup] Signup request received');
+    console.log('🔐 [POST /signup] Request body:', {
+      email: req.body.email,
+      userType: req.body.userType,
+      name: req.body.name,
+      hasPassword: !!req.body.password,
+      passwordLength: req.body.password?.length,
+      hasPasswordConfirmation: !!req.body.passwordConfirmation,
+      phoneNumber: req.body.phoneNumber
     });
+    
+    const { email, password, userType } = req.body;
+    const userEmail = email.toLowerCase();
+    console.log('🔐 [POST /signup] Processing signup for email:', userEmail);
+
+    // Check if user already exists with error handling
+    let existingUser;
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { email: userEmail }
+      });
+    } catch (dbError) {
+      console.error('❌ [POST /signup] Database error checking existing user:', dbError.message);
+      console.error('❌ [POST /signup] Full error:', dbError);
+      return res.status(500).json({
+        success: false,
+        message: 'Error de conexión con la base de datos. Por favor, intenta nuevamente en unos momentos.'
+      });
+    }
 
     if (existingUser) {
+      console.log('❌ [POST /signup] User already exists:', userEmail);
       return res.status(409).json({
         success: false,
         message: 'User already exists with this email',
@@ -75,78 +99,142 @@ router.post('/signup', validateSignup, async (req, res) => {
       });
     }
 
+    console.log('✅ [POST /signup] Email available, proceeding with registration');
+
     // Automatically assign role based on userType
     let role = 'admin'; // default role
-    
+    console.log('🔐 [POST /signup] Assigning role:', role, 'for userType:', userType);
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    // Hash password with error handling
+    let hashedPassword;
+    try {
+      console.log('🔐 [POST /signup] Hashing password...');
+      hashedPassword = await bcrypt.hash(password, 12);
+      console.log('✅ [POST /signup] Password hashed successfully');
+    } catch (hashError) {
+      console.error('❌ [POST /signup] Error hashing password:', hashError.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al procesar tu contraseña. Por favor, intenta nuevamente.'
+      });
+    }
 
     // Create user with enhanced security defaults
-    const newUser = await prisma.user.create({
-      data: {
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        userType,
-        role, // Use automatically assigned role
-        // Security enhancements
-        name: req.body.name || "Juanito",
-        surname: req.body.surname || "Pérez",
-        phoneNumber: req.body.phoneNumber || "+56976212644",
-        mfaEnabled: false,
-        mfaSecret: null,
-        accountLocked: false,
-        lastLoginAt: null,
-        loginAttempts: 0,
-        securityNotifications: true
-      },
-      select: {
-        id: true,
-        email: true,
-        userType: true,
-        role: true,
-        name: true,
-        surname: true,
-        createdAt: true,
-        mfaEnabled: false
+    let newUser;
+    try {
+      console.log('🔐 [POST /signup] Creating user in database...');
+      newUser = await prisma.user.create({
+        data: {
+          email: userEmail,
+          password: hashedPassword,
+          userType,
+          role, // Use automatically assigned role
+          // Security enhancements
+          name: req.body.name || "Juanito",
+          surname: req.body.surname || "Pérez",
+          phoneNumber: req.body.phoneNumber || "+56976212644",
+          mfaEnabled: false,
+          mfaSecret: null,
+          accountLocked: false,
+          lastLoginAt: null,
+          loginAttempts: 0,
+          securityNotifications: true
+        },
+        select: {
+          id: true,
+          email: true,
+          userType: true,
+          role: true,
+          name: true,
+          surname: true,
+          createdAt: true,
+          mfaEnabled: false
+        }
+      });
+      console.log(`✅ [POST /signup] User created successfully: ${newUser.email} (${newUser.userType}) with role: ${newUser.role}`);
+    } catch (createError) {
+      console.error('❌ [POST /signup] Error creating user:', createError.message);
+      console.error('❌ [POST /signup] Full error:', createError);
+      
+      if (createError.code === 'P2002') {
+        return res.status(409).json({
+          success: false,
+          message: 'User already exists with this email'
+        });
       }
-    });
-
-    console.log(`✅ New user registered: ${newUser.email} (${newUser.userType}) with role: ${newUser.role}`);
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Error al crear tu cuenta. Por favor, intenta nuevamente.'
+      });
+    }
 
     // Check if user has a restaurant (for company users)
     let restaurantId = null;
     if (newUser.userType === 'empresas') {
-      const restaurant = await prisma.restaurant.findFirst({
-        where: { userId: newUser.id },
-        select: { id: true }
-      });
-      if (restaurant) {
-        restaurantId = restaurant.id;
-        console.log(`🏢 Found restaurant for new user ${newUser.email}:`, restaurantId);
-      } else {
-        console.log(`🏢 No restaurant found for new user ${newUser.email}`);
+      try {
+        console.log('🏢 [POST /signup] Checking for restaurant for company user:', newUser.email);
+        const restaurant = await prisma.restaurant.findFirst({
+          where: { userId: newUser.id },
+          select: { id: true }
+        });
+        if (restaurant) {
+          restaurantId = restaurant.id;
+          console.log(`✅ [POST /signup] Found restaurant for new user ${newUser.email}:`, restaurantId);
+        } else {
+          console.log(`⚠️ [POST /signup] No restaurant found for new user ${newUser.email}`);
+        }
+      } catch (restaurantError) {
+        console.error('⚠️ [POST /signup] Error fetching restaurant data:', restaurantError.message);
+        // Continue with signup even if restaurant lookup fails
       }
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: newUser.id,
-        email: newUser.email,
-        userType: newUser.userType,
-        role: newUser.role,
-        restaurantId: restaurantId // Include restaurantId if user has one
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    // Generate JWT token with error handling
+    let token;
+    try {
+      if (!process.env.JWT_SECRET) {
+        console.error('❌ [POST /signup] JWT_SECRET not configured');
+        return res.status(500).json({
+          success: false,
+          message: 'Error en la configuración del servidor. Por favor, contacta al soporte.'
+        });
+      }
+      
+      console.log('🔐 [POST /signup] Generating JWT token...');
+      token = jwt.sign(
+        {
+          userId: newUser.id,
+          email: newUser.email,
+          userType: newUser.userType,
+          role: newUser.role,
+          restaurantId: restaurantId // Include restaurantId if user has one
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+      console.log('✅ [POST /signup] JWT token generated successfully');
+    } catch (tokenError) {
+      console.error('❌ [POST /signup] Error generating JWT token:', tokenError.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al generar el token de autenticación. Por favor, intenta nuevamente.'
+      });
+    }
 
     // Set secure authentication cookie (subdomain support)
-    setSecureAuthCookie(res, token, {
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    });
+    try {
+      console.log('🔐 [POST /signup] Setting secure authentication cookie...');
+      setSecureAuthCookie(res, token, {
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      });
+      console.log('✅ [POST /signup] Authentication cookie set successfully');
+    } catch (cookieError) {
+      console.error('⚠️ [POST /signup] Error setting cookie:', cookieError.message);
+      // Continue with response even if cookie setting fails
+    }
 
+    console.log('✅ [POST /signup] Signup completed successfully for:', newUser.email);
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -158,7 +246,9 @@ router.post('/signup', validateSignup, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Signup error:', error);
+    console.error('❌ [POST /signup] Unexpected signup error:', error.message);
+    console.error('❌ [POST /signup] Full error:', error);
+    console.error('❌ [POST /signup] Error stack:', error.stack);
 
     if (error.code === 'P2002') {
       return res.status(409).json({
