@@ -41,9 +41,18 @@ async function updateCompanyProfile(
       profileImageUrl: Array.isArray(profileImageUrl) ? profileImageUrl[0] || null : profileImageUrl,
       weeklyAverageClients,
       description,
-      benefits: {
-        set: Object.keys(benefits).filter(benefit => benefits[benefit]),
-      },
+      benefits: (() => {
+        // Handle both array and object formats
+        // If array: use directly (e.g., ['seguro', 'traslado'])
+        // If object: extract keys where value is true (e.g., { seguro: true, traslado: true } -> ['seguro', 'traslado'])
+        const processedBenefits = Array.isArray(benefits) 
+          ? benefits 
+          : (benefits ? Object.keys(benefits).filter(benefit => benefits[benefit]) : []);
+        console.log('🔍 [updateCompanyProfile] Benefits input:', benefits);
+        console.log('🔍 [updateCompanyProfile] Benefits type:', typeof benefits, 'Is array?', Array.isArray(benefits));
+        console.log('🔍 [updateCompanyProfile] Processed benefits to save:', processedBenefits);
+        return { set: processedBenefits };
+      })(),
       locations: {
         updateMany: existingLocations.map(location => ({
           where: { id: location.id },

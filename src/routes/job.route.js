@@ -407,23 +407,33 @@ router.get('/jobs/:jobId', async (req, res) => {
 
     const jobOffer = await getJobOfferById(jobId);
 
-    console.log('this is the job offer', jobOffer);
+    console.log('🔍 [GET /jobs/:jobId] Raw job offer from DB:', jobOffer);
+    console.log('🔍 [GET /jobs/:jobId] Restaurant:', jobOffer?.restaurant);
+    console.log('🔍 [GET /jobs/:jobId] Restaurant benefits:', jobOffer?.restaurant?.benefits);
+    console.log('🔍 [GET /jobs/:jobId] Benefits type:', typeof jobOffer?.restaurant?.benefits);
+    console.log('🔍 [GET /jobs/:jobId] Is benefits array?', Array.isArray(jobOffer?.restaurant?.benefits));
 
     if (jobOffer) {
       // Convert image keys to actual signed URLs for the job's restaurant
       const convertedJob = { ...jobOffer };
       if (jobOffer.restaurant) {
         convertedJob.restaurant = await convertImageUrls(jobOffer.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        console.log('🔍 [GET /jobs/:jobId] After image conversion - Restaurant benefits:', convertedJob.restaurant?.benefits);
       }
       
-      res.json({
+      const responseData = {
         success: true,
         data: {
           ...convertedJob,
           applicationsCount: jobOffer.applications.length,
           createdAt: jobOffer.createdAt.toISOString().slice(0, 10),
         }
-      });
+      };
+      
+      console.log('🔍 [GET /jobs/:jobId] Final response data:', JSON.stringify(responseData, null, 2));
+      console.log('🔍 [GET /jobs/:jobId] Final response restaurant benefits:', responseData.data?.restaurant?.benefits);
+      
+      res.json(responseData);
     } else {
       res.status(404).json({
         success: false,
