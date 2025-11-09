@@ -301,6 +301,8 @@ class AIJobCreationService {
     // Clean position
     if (data.position) {
       const validPositions = [
+        "Garzón", "Runner", "Chef", "Ayudante de Cocina", "Anfitrión", "Delivery", "Cajero", 
+        "Copero", "Barista", "Bartender", "Sommelier", "Maitre", "Jefe de salón", "Limpieza",
         "Chef Ejecutivo", "Sous Chef", "Jefe de Cocina", "Maestro de Cocina", "Maestro Pastelero", 
         "Pastelero", "Panadero", "Repostero", "Charcutero", "Pizzero", "Itamae", "Sushiman", 
         "Ayudante de Sushi", "Parrillero", "Cocinero Frío", "Cocinero Caliente", "Manipulador de Alimentos", 
