@@ -233,7 +233,11 @@ const authLimiter = rateLimit({
     error: 'Too many login attempts, please try again later' 
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development mode
+    return process.env.NODE_ENV === 'dev';
+  }
 });
 
 // Contact form rate limiting
