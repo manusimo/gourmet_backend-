@@ -944,13 +944,9 @@ router.post('/password-reset-request', validatePasswordReset, async (req, res) =
           </div>
         `
       });
-      console.log(`✅ Password reset email sent to: ${email}`);
     } catch (emailError) {
       console.error('❌ Error sending password reset email:', emailError);
-      // Don't fail the request if email fails
     }
-
-    console.log(`🔄 Password reset requested for: ${email}`);
 
     res.status(200).json({
       success: true,
@@ -961,7 +957,6 @@ router.post('/password-reset-request', validatePasswordReset, async (req, res) =
     });
 
   } catch (error) {
-    console.error('Password reset request error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal Server Error'
@@ -1022,8 +1017,6 @@ router.post('/password-reset-confirm', validatePasswordResetConfirm, async (req,
     // Reset any account lockout
     resetAccountLockout(decoded.userId);
 
-    console.log(`✅ Password reset completed for user: ${decoded.userId}`);
-
     res.status(200).json({
       success: true,
       message: 'Password reset successful'
@@ -1044,12 +1037,6 @@ router.post('/set-password', async (req, res) => {
     const { token, password, name, phoneNumber } = req.body;
 
     if (!token || !password) {
-      console.log('⚠️ Set-password: Missing required fields', { 
-        hasToken: !!token, 
-        hasPassword: !!password,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
-      });
       return res.status(400).json({
         success: false,
         message: 'Token and password are required'
@@ -1061,11 +1048,6 @@ router.post('/set-password', async (req, res) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
-      console.log('⚠️ Set-password: Invalid token', { 
-        error: error.message,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
-      });
       return res.status(400).json({
         success: false,
         message: 'Invalid or expired token'
@@ -1078,11 +1060,6 @@ router.post('/set-password', async (req, res) => {
     });
 
     if (!user) {
-      console.log('⚠️ Set-password: User not found', { 
-        userId: decoded.userId,
-        ip: req.ip,
-        userAgent: req.get('User-Agent')
-      });
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -1104,12 +1081,6 @@ router.post('/set-password', async (req, res) => {
     await prisma.user.update({
       where: { id: user.id },
       data: updateData
-    });
-
-    console.log(`✅ Set-password: Password set successfully for user: ${user.email}`, {
-      userId: user.id,
-      ip: req.ip,
-      userAgent: req.get('User-Agent')
     });
 
     // Generate a new JWT token for the user
@@ -1205,24 +1176,19 @@ router.get('/user/:id', validateUserId, validateTokenAndIdentifyUser, async (req
 // GET /user-info - Get current user info (userId, restaurantUserId, employeeId)
 router.get('/user-info', async (req, res) => {
   try {
-    console.log('🔍 user-info: Request received');
     
     // Check for cookie-based authentication
     const token = req.cookies.manu;
     
     if (!token) {
-      console.log('❌ user-info: No token found in cookies');
       return res.status(401).json({
         success: false,
         message: 'No authentication token found'
       });
     }
 
-    console.log('🔍 user-info: Token found, verifying...');
     try {
-      const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-      console.log('✅ user-info: Token verified, decoded:', decodedToken);
-      
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET); 
       const userId = decodedToken.userId;
       let restaurantUserId = null;
       let employeeId = null;
@@ -1272,29 +1238,18 @@ router.get('/user-info', async (req, res) => {
         orderBy: { id: 'asc' }
       });
 
-      console.log('🔍 user-info: Found restaurant users:', restaurantUsers.length);
-      console.log('🔍 user-info: Found owned restaurants:', ownedRestaurants.length);
       
       // Combine restaurant users and owned restaurants
       const allRestaurants = [];
       
       // Add restaurants from RestaurantUser table (staff access)
       for (const ru of restaurantUsers) {
-        console.log('🔍 user-info: Processing restaurant user:', {
-          restaurantId: ru.restaurant.id,
-          restaurantName: ru.restaurant.name,
-          originalImageUrl: ru.restaurant.profileImageUrl
-        });
         
         const convertedImageUrl = await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl).catch(error => {
           console.error('❌ Error converting restaurant image URL:', ru.restaurant.profileImageUrl, error);
           return '/default-restaurant.png';
         });
         
-        console.log('🔍 user-info: Converted image URL:', {
-          original: ru.restaurant.profileImageUrl,
-          converted: convertedImageUrl
-        });
         
         allRestaurants.push({
           restaurantUserId: ru.id,
@@ -1315,20 +1270,10 @@ router.get('/user-info', async (req, res) => {
         // Check if this restaurant is already in the list (avoid duplicates)
         const exists = allRestaurants.some(r => r.restaurantId === restaurant.id);
         if (!exists) {
-          console.log('🔍 user-info: Processing owned restaurant:', {
-            restaurantId: restaurant.id,
-            restaurantName: restaurant.name,
-            originalImageUrl: restaurant.profileImageUrl
-          });
           
           const convertedImageUrl = await convertImageKeyToSignedUrl(restaurant.profileImageUrl).catch(error => {
             console.error('❌ Error converting owned restaurant image URL:', restaurant.profileImageUrl, error);
             return '/default-restaurant.png';
-          });
-          
-          console.log('🔍 user-info: Converted owned restaurant image URL:', {
-            original: restaurant.profileImageUrl,
-            converted: convertedImageUrl
           });
           
           allRestaurants.push({
@@ -1361,7 +1306,6 @@ router.get('/user-info', async (req, res) => {
           restaurantUserId = userRestaurants[0].restaurantUserId;
         }
 
-        console.log('✅ user-info: restaurantUserId set to:', restaurantUserId);
       }
 
       // Check if user has an employee profile
@@ -1372,15 +1316,7 @@ router.get('/user-info', async (req, res) => {
       if (employee) {
         employeeId = employee.id;
       }
-
-      console.log('✅ user-info: Returning user info:', { 
-        userId, 
-        restaurantUserId, 
-        employeeId, 
-        restaurantCount: userRestaurants.length,
-        userType: decodedToken.userType
-      });
-      
+ 
       return res.json({
         success: true,
         userId,
@@ -1391,7 +1327,6 @@ router.get('/user-info', async (req, res) => {
       });
       
     } catch (tokenError) {
-      console.log('❌ user-info: Token verification failed:',isAuthenticated, tokenError.message);
       return res.status(401).json({
         success: false,
         message: 'Invalid authentication token'
@@ -1451,8 +1386,7 @@ router.post('/switch-restaurant', async (req, res) => {
 
         if (ownedRestaurant) {
           // Admin user owns this restaurant directly
-          restaurantUser = { id: null }; // Use null for admin users
-          console.log(`👑 Admin user ${userId} accessing owned restaurant ${restaurantId}`);
+          restaurantUser = { id: null }; 
         }
       }
 
@@ -1478,8 +1412,6 @@ router.post('/switch-restaurant', async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
 
-      console.log('✅ switch-restaurant: Successfully switched to restaurant:', restaurantId);
-
       return res.json({
         success: true,
         message: 'Restaurant switched successfully',
@@ -1504,15 +1436,11 @@ router.post('/switch-restaurant', async (req, res) => {
 // GET /check-login-status - Check if user is logged in
 router.get('/check-login-status', async (req, res) => {
   try {
-    console.log('🔍 check-login-status: Request received');
-    console.log('🔍 check-login-status: Available cookies:', req.cookies);
-    console.log('🔍 check-login-status: manu cookie:', req.cookies?.manu);
     
     // Check for cookie-based authentication
     const token = req.cookies.manu;
     
     if (!token) {
-      console.log('❌ check-login-status: No token found in cookies');
       return res.json({
         success: true,
         isLoggedIn: false,
@@ -1520,10 +1448,8 @@ router.get('/check-login-status', async (req, res) => {
       });
     }
 
-    console.log('🔍 check-login-status: Token found, verifying...');
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-      console.log('✅ check-login-status: Token verified, decoded:', decodedToken);
       
       // Fetch user data with profile image
       const user = await prisma.user.findUnique({
@@ -1552,19 +1478,18 @@ router.get('/check-login-status', async (req, res) => {
         }
       });
 
-      console.log('🔍 check-login-status: User found:', user);
-
       if (user) {
         // Get profile image URL based on user type
         let profileImageUrl = null;
         
         if (user.userType === 'profesionales' && user.employee?.profileImageUrl) {
           profileImageUrl = user.employee.profileImageUrl;
-        } else if (user.userType === 'empresas' && user.restaurantUsers?.[0]?.restaurant?.profileImageUrl) {
+        } 
+        
+        if (user.userType === 'empresas' && user.restaurantUsers?.[0]?.restaurant?.profileImageUrl) {
           profileImageUrl = user.restaurantUsers[0].restaurant.profileImageUrl;
         }
         
-        console.log('✅ check-login-status: User authenticated successfully, profileImageUrl:', profileImageUrl);
         return res.json({
           success: true,
           isLoggedIn: true,
@@ -1600,9 +1525,6 @@ router.get('/check-login-status', async (req, res) => {
   }
 });
 
-// ============================================================================
-// MIDDLEWARE SETUP ROUTES
-// ============================================================================
 
 // Apply role-based middleware
 router.use(setUserRole);

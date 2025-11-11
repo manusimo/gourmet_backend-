@@ -10,22 +10,17 @@ const checkUserType = (requiredUserType) => (req, res, next) => {
   try {
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     
-    console.log(`🔍 checkUserType: Required userType: ${requiredUserType}`);
-    console.log(`🔍 checkUserType: Decoded token:`, decodedToken);
   
     const userType = decodedToken.userType; 
-    console.log(`🔍 checkUserType: User userType from token: ${userType}`);
 
     if (userType !== requiredUserType) {
-      console.log(`❌ checkUserType: Access denied. User has userType '${userType}' but '${requiredUserType}' is required`);
       const errorMessage =
         requiredUserType === 'empresas' 
           ? 'Access forbidden for non-company/restaurant users'
-          : 'Access denied';
+          : 'Debes postular desde un perfil de profesionales';
       return res.status(403).json({ message: errorMessage });
     }
 
-    console.log(`✅ checkUserType: Access granted for userType '${userType}'`);
     req.userId = decodedToken.userId;
     req.userType = decodedToken.userType;
     req.userRole = decodedToken.role;

@@ -49,7 +49,19 @@ class JobRAGService extends BaseRAGService {
     const positions = [
       'waiter', 'garzón', 'chef', 'cook', 'bartender', 'barista', 
       'host', 'anfitrión', 'delivery', 'cajero', 'cashier', 'manager',
-      'supervisor', 'cleaner', 'limpieza', 'runner', 'busser'
+      'supervisor', 'cleaner', 'limpieza', 'runner', 'busser', 'copero',
+      'sommelier', 'maitre', 'jefe de salón', 'chef ejecutivo', 'sous chef',
+      'jefe de cocina', 'maestro de cocina', 'maestro pastelero', 'pastelero',
+      'panadero', 'repostero', 'charcutero', 'pizzero', 'itamae', 'sushiman',
+      'ayudante de sushi', 'parrillero', 'cocinero frío', 'cocinero caliente',
+      'manipulador de alimentos', 'encargado de producción', 'operador de cocina',
+      'operador de planta', 'operador multifuncional', 'encargado de reservas',
+      'recepcionista de restaurante', 'supervisor de salón', 'personal de banquetería',
+      'encargado de bodega', 'repositor', 'personal de mantenimiento',
+      'jefe de local', 'administrador de local', 'jefe de sucursales',
+      'administrador de restaurante', 'encargado de compras', 'control de calidad',
+      'catador de vinos', 'coordinador de banquetes', 'montajista', 'mixólogo',
+      'ayudante de cocina'
     ];
     
     const lowerMessage = userMessage.toLowerCase();

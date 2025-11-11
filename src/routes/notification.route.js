@@ -122,6 +122,73 @@ router.put('/mark-all-read', getUserIdFromCookie, async (req, res) => {
 });
 
 /**
+ * Mark notifications as read by conversationId
+ */
+router.put('/mark-read-by-conversation/:conversationId', getUserIdFromCookie, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const conversationId = parseInt(req.params.conversationId);
+
+    console.log(`🔔 Marking notifications as read for conversation ${conversationId} and user ${userId}`);
+
+    // Get all unread MESSAGE notifications first
+    const allUnread = await prisma.notification.findMany({
+      where: {
+        userId,
+        type: 'MESSAGE',
+        isRead: false
+      }
+    });
+
+    console.log(`🔍 Found ${allUnread.length} total unread MESSAGE notifications`);
+
+    // Filter by conversationId by parsing JSON data
+    const toMarkAsRead = allUnread.filter(notif => {
+      if (!notif.data) return false;
+      try {
+        const parsed = JSON.parse(notif.data);
+        // Handle both string and integer conversationId (stored as "5" but compared to 5)
+        const notifConversationId = parsed.conversationId;
+        // Use == for type coercion or convert both to same type
+        return notifConversationId == conversationId || 
+               parseInt(notifConversationId) === conversationId ||
+               notifConversationId === conversationId.toString();
+      } catch {
+        // Fallback: check if string contains conversationId (handle both "5" and 5 formats)
+        return notif.data.includes(`"conversationId":${conversationId}`) || 
+               notif.data.includes(`"conversationId": ${conversationId}`) ||
+               notif.data.includes(`"conversationId":"${conversationId}"`);
+      }
+    });
+
+    // Mark them as read
+    let result = { count: 0 };
+    if (toMarkAsRead.length > 0) {
+      result = await prisma.notification.updateMany({
+        where: {
+          id: { in: toMarkAsRead.map(n => n.id) }
+        },
+        data: { isRead: true }
+      });
+    }
+
+    console.log(`✅ Marked ${result.count} notifications as read for conversation ${conversationId}`);
+
+    res.json({
+      success: true,
+      message: 'Notifications marked as read',
+      count: result.count
+    });
+  } catch (error) {
+    console.error('❌ Error marking notifications as read by conversation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to mark notifications as read'
+    });
+  }
+});
+
+/**
  * Delete a specific notification
  */
 router.delete('/:id', getUserIdFromCookie, async (req, res) => {

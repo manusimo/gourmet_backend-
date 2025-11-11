@@ -142,30 +142,21 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
       });
     }
 
-    console.log('🔍 Fetching conversation with messages...');
     const conversation = await getConversationWithMessages(conversationId);
 
     if (!conversation) {
-      console.log(`Conversation with ID ${conversationId} not found`);
       return res.status(404).json({ 
         success: false,
         error: 'Conversation not found.' 
       });
     }
 
-    console.log('🔍 Found conversation:', {
-      id: conversation.id,
-      employeeId: conversation.employeeId,
-      restaurantUserId: conversation.restaurantUserId,
-      messageCount: conversation.messages ? conversation.messages.length : 0
-    });
+  
 
     // Simplified access control for now - allow access if user has sent messages
     let hasAccess = false;
     
-    try {
-      console.log('🔍 Checking access control for user:', userId);
-      
+    try { 
       // Check if user is an employee in this conversation
       if (conversation.employeeId) {
         const employee = await prisma.employee.findUnique({
@@ -173,7 +164,6 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
         });
         if (employee && employee.id === conversation.employeeId) {
           hasAccess = true;
-          console.log('✅ User is employee in conversation');
         }
       }
       
@@ -194,9 +184,7 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
         const adminRestaurantUsers = await prisma.restaurantUser.findMany({
           where: { userId: parseInt(userId) }
         });
-        
-        console.log('🔍 Found admin restaurant users:', adminRestaurantUsers.length);
-        
+            
         if (adminRestaurantUsers.length > 0) {
           const adminRestaurantUserIds = adminRestaurantUsers.map(ru => ru.id);
           const hasSentMessages = conversation.messages.some(message => 
@@ -204,7 +192,6 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
           );
           if (hasSentMessages) {
             hasAccess = true;
-            console.log('✅ Admin user has sent messages in conversation');
           }
         }
       }
@@ -216,7 +203,6 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
         });
         if (user && (user.role === 'admin' || user.role === 'staff')) {
           hasAccess = true;
-          console.log('✅ User is admin/staff, granting access');
         }
       }
     } catch (accessError) {
@@ -226,22 +212,17 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
     }
 
     if (!hasAccess) {
-      console.log(`User ${userId} not authorized for conversation ${conversationId}`);
       return res.status(403).json({ 
         success: false,
         error: 'User not authorized for this conversation' 
       });
     }
 
-    console.log('✅ User authorized, returning messages:', conversation.messages.length);
-
     res.status(200).json({ 
       success: true,
       data: conversation.messages 
     });
   } catch (error) {
-    console.error('❌ Error fetching messages:', error);
-    console.error('❌ Error stack:', error.stack);
     res.status(500).json({ 
       success: false,
       error: 'Internal Server Error',
@@ -252,9 +233,6 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
 
 // POST /send-message - Send a message
 router.post('/send-message', async (req, res) => {
-  console.log('🔔 [BACKEND] /send-message route called');
-  // TODO: Temporarily disabled plan requirement for development
-  // requirePlan(['pro', 'plus', 'premium']), 
   try {
     const { 
       text, 
@@ -283,92 +261,77 @@ router.post('/send-message', async (req, res) => {
       receiverType
     });
 
-    // Process message notifications with smart throttling
-    console.log('🔔 Starting notification processing...');
     try {
-      console.log('🔔 Processing notifications for message:', { 
-        senderUserId, 
-        receiverUserId, 
-        conversationId,
-        senderUserIdType: typeof senderUserId,
-        receiverUserIdType: typeof receiverUserId
-      });
       
       // Get sender and receiver details for notification
       // Note: senderUserId and receiverUserId might be RestaurantUser.id, Employee.id, or User.id (for admin users)
       // We need to find the actual User.id for notifications
-      const [sender, receiver, conversationWithRestaurant] = await Promise.all([
-        // Try to find sender as RestaurantUser first, then Employee, then direct User (for admin users)
-        prisma.restaurantUser.findUnique({
+      // Use senderType and receiverType to determine the correct lookup
+      
+      let sender, receiver;
+      
+      // Lookup sender based on senderType
+      if (senderType === 'restaurant') {
+        const restaurantUser = await prisma.restaurantUser.findUnique({
           where: { id: parseInt(senderUserId) },
           select: { 
             user: { select: { id: true, name: true, email: true } },
             restaurant: { select: { name: true } }
           }
-        }).then(ru => ru ? { ...ru.user, restaurantName: ru.restaurant.name } : null)
-        .catch(() => 
-          prisma.employee.findUnique({
-            where: { id: parseInt(senderUserId) },
-            select: { 
-              user: { select: { id: true, name: true, email: true } }
-            }
-          }).then(emp => emp ? emp.user : null)
-        ).catch(() => 
-          // For admin users, senderUserId might be the actual User.id
-        prisma.user.findUnique({
-            where: { id: parseInt(senderUserId) },
-            select: { id: true, name: true, email: true }
-          })
-        ),
-        
-        // Try to find receiver as Employee first, then RestaurantUser, then direct User (for admin users)
-        prisma.employee.findUnique({
+        });
+        sender = restaurantUser ? { ...restaurantUser.user, restaurantName: restaurantUser.restaurant.name } : null;
+      } else if (senderType === 'employee') {
+        const employee = await prisma.employee.findUnique({
+          where: { id: parseInt(senderUserId) },
+          select: { 
+            user: { select: { id: true, name: true, email: true } }
+          }
+        });
+        sender = employee ? employee.user : null;
+      } else {
+        // Fallback: try as direct User.id
+        sender = await prisma.user.findUnique({
+          where: { id: parseInt(senderUserId) },
+          select: { id: true, name: true, email: true }
+        });
+      }
+      
+      // Lookup receiver based on receiverType
+      if (receiverType === 'restaurant') {
+        const restaurantUser = await prisma.restaurantUser.findUnique({
           where: { id: parseInt(receiverUserId) },
           select: { 
             user: { select: { id: true, name: true, email: true } }
           }
-        }).then(emp => emp ? emp.user : null)
-        .catch(() => 
-          prisma.restaurantUser.findUnique({
-            where: { id: parseInt(receiverUserId) },
-            select: { 
-              user: { select: { id: true, name: true, email: true } }
-            }
-          }).then(ru => ru ? ru.user : null)
-        ).catch(() => 
-          // For admin users, receiverUserId might be the actual User.id
-          prisma.user.findUnique({
-            where: { id: parseInt(receiverUserId) },
-            select: { id: true, name: true, email: true }
-          })
-        ),
-        
-        prisma.conversation.findUnique({
-          where: { id: parseInt(conversationId) },
-          select: { 
-            restaurant: { 
-              select: { name: true } 
-            } 
-          }
-        })
-      ]);
-      
-      console.log('🔔 User lookup results:', { 
-        sender: sender ? { id: sender.id, name: sender.name, email: sender.email } : null,
-        receiver: receiver ? { id: receiver.id, name: receiver.name, email: receiver.email } : null,
-        restaurant: conversationWithRestaurant?.restaurant?.name || null
-      });
-
-      if (sender && receiver && conversationWithRestaurant) {
-        console.log('🔔 All required data found, calling processMessageNotifications...');
-        
-        console.log('🔔 Calling processMessageNotifications with:', {
-          senderUserId: sender.id,
-          receiverUserId: receiver.id,
-          conversationId,
-          senderName: sender.name,
-          recipientName: receiver.name
         });
+        receiver = restaurantUser ? restaurantUser.user : null;
+      } else if (receiverType === 'employee') {
+        const employee = await prisma.employee.findUnique({
+          where: { id: parseInt(receiverUserId) },
+          select: { 
+            user: { select: { id: true, name: true, email: true } }
+          }
+        });
+        receiver = employee ? employee.user : null;
+      } else {
+        // Fallback: try as direct User.id
+        receiver = await prisma.user.findUnique({
+          where: { id: parseInt(receiverUserId) },
+          select: { id: true, name: true, email: true }
+        });
+      }
+      
+      // Get restaurant info from conversation
+      const conversationWithRestaurant = await prisma.conversation.findUnique({
+        where: { id: parseInt(conversationId) },
+        select: { 
+          restaurant: { 
+            select: { name: true } 
+          } 
+        }
+      });
+      
+      if (sender && receiver && conversationWithRestaurant) {
         
         await processMessageNotifications({
           senderUserId: sender.id, // Use the actual User.id
@@ -382,14 +345,8 @@ router.post('/send-message', async (req, res) => {
           restaurantName: sender.restaurantName || conversationWithRestaurant.restaurant?.name || 'Restaurante'
         });
         
-        console.log('🔔 processMessageNotifications completed successfully');
-      } else {
-        console.log('❌ Missing required data for notifications:', {
-          hasSender: !!sender,
-          hasReceiver: !!receiver,
-          hasRestaurant: !!conversationWithRestaurant
-        });
-      }
+        
+      } 
     } catch (notificationError) {
       console.error('❌ Failed to process message notifications:', notificationError);
       console.error('❌ Notification error stack:', notificationError.stack);
@@ -414,9 +371,10 @@ router.post('/send-message', async (req, res) => {
 router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const { employeeId, type } = req.params;
+    const { jobPostId } = req.query; // Get jobPostId from query parameters
     const restaurantUserId = req.restaurantUserId;
     
-    console.log('checking the existence of the conversation in the backend', employeeId, restaurantUserId, type);
+    console.log('checking the existence of the conversation in the backend', employeeId, restaurantUserId, type, jobPostId);
 
     if (!restaurantUserId) {
       return res.status(400).json({ 
@@ -433,8 +391,15 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
 
     if (type === 'application') {
       console.log('check the application conversation');
-      conversation = await checkApplicationConversation(employeeId, restaurantUserId);
-      console.log('this is the conversation', conversation);
+      // If jobPostId is provided, check for conversation with that specific job post
+      if (jobPostId) {
+        conversation = await findConversationByJobPost(employeeId, parseInt(jobPostId), restaurantUserId, 'applicant');
+        console.log('Found conversation for specific job post:', conversation);
+      } else {
+        // Fallback to old behavior (check any conversation with this employee)
+        conversation = await checkApplicationConversation(employeeId, restaurantUserId);
+        console.log('this is the conversation', conversation);
+      }
     }
 
     if (conversation) {

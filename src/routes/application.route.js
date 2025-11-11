@@ -47,7 +47,7 @@ router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, 
     if (!jobPost) {
       return res.status(404).json({ 
         success: false,
-        message: 'Job post not found.' 
+        message: 'Trabajo no encontrado.' 
       });
     }
 
@@ -103,7 +103,7 @@ router.get('/applications/:applicationId', async (req, res) => {
     if (!applicationId || isNaN(parsedId) || parsedId <= 0 || parsedId > Number.MAX_SAFE_INTEGER) {
       return res.status(400).json({ 
         success: false,
-        message: 'Invalid application ID' 
+        message: 'ID de postulación inválido' 
       });
     }
 
@@ -112,7 +112,7 @@ router.get('/applications/:applicationId', async (req, res) => {
     if (!application) {
       return res.status(404).json({ 
         success: false,
-        message: 'Application not found' 
+        message: 'Postulación no encontrada' 
       });
     }
 
@@ -127,7 +127,7 @@ router.get('/applications/:applicationId', async (req, res) => {
     });
     res.status(500).json({ 
       success: false,
-      message: 'Internal Server Error' 
+      message: 'Error interno del servidor' 
     });
   }
 });
@@ -147,7 +147,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     if (!jobOfferId || isNaN(parsedJobOfferId) || parsedJobOfferId <= 0 || parsedJobOfferId > Number.MAX_SAFE_INTEGER) {
       return res.status(400).json({ 
         success: false,
-        message: 'Invalid job offer ID' 
+        message: 'ID de oferta de trabajo inválido' 
       });
     }
 
@@ -155,7 +155,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     if (!restaurantId) {
       return res.status(401).json({ 
         success: false,
-        message: 'Restaurant ID is required' 
+        message: 'ID del restaurante es requerido' 
       });
     }
 
@@ -168,7 +168,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
       console.log('🔍 [Job Applicants API] Job offer not found or does not belong to restaurant');
       return res.status(404).json({ 
         success: false,
-        message: 'Job offer not found or you do not have permission to view the applicants.' 
+        message: 'Oferta de trabajo no encontrada o no tienes permiso para ver los postulantes.' 
       });
     }
 
@@ -197,7 +197,7 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     console.error('Error getting applicants:', error);
     res.status(500).json({ 
       success: false,
-      message: 'Internal Server Error' 
+      message: 'Error interno del servidor' 
     });
   }
 });

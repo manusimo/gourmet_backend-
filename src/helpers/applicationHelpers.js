@@ -10,45 +10,45 @@ const validateApplicationInput = (data) => {
   if (!data) {
     return {
       isValid: false,
-      errors: ['Input data is required']
+      errors: ['Los datos son requeridos']
     };
   }
   const { jobPostId, answers } = data;
   const errors = [];
 
   if (jobPostId === 0) {
-    errors.push('Job post ID must be a positive number');
+    errors.push('El ID del trabajo debe ser un número positivo');
   } else if (!jobPostId) {
-    errors.push('Job post ID is required');
+    errors.push('El ID del trabajo es requerido');
   } else if (typeof jobPostId !== 'number' || isNaN(jobPostId)) {
-    errors.push('Job post ID must be a valid number');
+    errors.push('El ID del trabajo debe ser un número válido');
   } else if (jobPostId < 0) {
-    errors.push('Job post ID must be a positive number');
+    errors.push('El ID del trabajo debe ser un número positivo');
   } else if (jobPostId > Number.MAX_SAFE_INTEGER) {
-    errors.push('Job post ID must be a valid number');
+    errors.push('El ID del trabajo debe ser un número válido');
   }
 
   if (!answers || !Array.isArray(answers)) {
-    errors.push('Answers are required and must be an array');
+    errors.push('Las respuestas son requeridas');
   } else if (answers.length === 0) {
-    errors.push('At least one answer is required');
+    errors.push('Se requiere al menos una respuesta');
   } else {
     const questionIds = new Set();
     answers.forEach((answer, index) => {
       if (!answer.questionId || typeof answer.questionId !== 'number') {
-        errors.push('Each answer must have a valid questionId and answer');
+        errors.push('Cada respuesta debe tener un questionId y una respuesta válidos');
       }
       if (answer.answer === undefined || answer.answer === null) {
-        errors.push('Each answer must have a valid questionId and answer');
+        errors.push('Cada respuesta debe tener un questionId y una respuesta válidos');
       }
       if (typeof answer.answer === 'string' && answer.answer.trim() === '') {
-        errors.push('Answer cannot be empty');
+        errors.push('La respuesta no puede estar vacía');
       }
       if (typeof answer.answer === 'string' && answer.answer.length > 10000) {
-        errors.push('Answer is too long (maximum 10,000 characters)');
+        errors.push('La respuesta es demasiado larga (máximo 10,000 caracteres)');
       }
       if (questionIds.has(answer.questionId)) {
-        errors.push('Duplicate question IDs are not allowed');
+        errors.push('No se permiten IDs de preguntas duplicados');
       }
       questionIds.add(answer.questionId);
     });

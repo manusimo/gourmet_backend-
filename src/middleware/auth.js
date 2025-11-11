@@ -2,10 +2,6 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
 const { isTokenBlacklisted } = require('./security.js');
 
-// ============================================================================
-// TOKEN VALIDATION WITH BLACKLIST CHECK
-// ============================================================================
-
 /**
  * Enhanced token validation with blacklist checking
  */
@@ -24,7 +20,7 @@ const validateTokenAndIdentifyUser = async (req, res, next) => {
 
     // Check if token is blacklisted
     if (isTokenBlacklisted(token)) {
-      console.log(`🔒 Blacklisted token attempted access: ${token.substring(0, 20)}...`);
+  
       return res.status(401).json({
         success: false,
         message: 'Token has been invalidated',
@@ -139,10 +135,6 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-// ============================================================================
-// ROLE-BASED ACCESS CONTROL
-// ============================================================================
-
 /**
  * Check if user is an employee
  */
@@ -221,19 +213,15 @@ const checkCompany = async (req, res, next) => {
 const setUserRole = async (req, res, next) => {
   try {
     if (!req.userId) {
-      console.log('❌ setUserRole: Missing userId');
       req.role = 'user'; // Fallback role
       return next();
     }
 
-    // If no restaurantId, use the role from the token (for users creating their first restaurant)
     if (!req.restaurantId) {
-      console.log('🔍 setUserRole: No restaurantId, using role from token');
-      // The role should already be set from the token in getUserIdFromCookie
       if (!req.role) {
         req.role = 'user'; // Fallback role
       }
-      console.log(`✅ setUserRole: Using role from token: '${req.role}'`);
+
       return next();
     }
 
@@ -250,7 +238,6 @@ const setUserRole = async (req, res, next) => {
 
     if (restaurantUser) {
       req.role = restaurantUser.role;
-      console.log(`✅ setUserRole: User role set to '${restaurantUser.role}' from restaurant association`);
     } else {
       // If no restaurant association found, check if this is the restaurant owner
       const user = await prisma.user.findUnique({
@@ -260,10 +247,8 @@ const setUserRole = async (req, res, next) => {
       
       if (user && user.role === 'admin') {
         req.role = 'admin';
-        console.log('✅ setUserRole: User role set to admin (restaurant owner)');
       } else {
         req.role = 'user'; // Fallback role
-        console.log('⚠️ setUserRole: No role found, defaulting to user');
       }
     }
 
@@ -293,10 +278,6 @@ const setUserType = (req, res, next) => {
     next();
   }
 };
-
-// ============================================================================
-// PLAN-BASED ACCESS CONTROL
-// ============================================================================
 
 /**
  * Require specific plan for access
@@ -486,14 +467,9 @@ const requireRole = (allowedRoles) => {
   const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
   
   return (req, res, next) => {
-    console.log('🔐 SECURITY CHECK - requireRole middleware:');
-    console.log(`   Required roles: ${rolesArray.join(', ')}`);
-    console.log(`   User role: ${req.role}`);
-    console.log(`   User ID: ${req.userId}`);
-    console.log(`   User Type: ${req.userType}`);
+
     
     if (!req.role || !rolesArray.includes(req.role)) {
-      console.log(`❌ ACCESS DENIED - User has role '${req.role}' but requires one of: ${rolesArray.join(', ')}`);
       return res.status(403).json({ 
         success: false,
         message: `Access forbidden. Required role: ${rolesArray.join(' or ')}`,
@@ -502,7 +478,6 @@ const requireRole = (allowedRoles) => {
       });
     }
     
-    console.log(`✅ ACCESS GRANTED - User role '${req.role}' matches required roles`);
     next();
   };
 };
@@ -512,9 +487,8 @@ const requireRole = (allowedRoles) => {
  */
 const requirePermission = (permission) => {
   return (req, res, next) => {
-    console.log(`🔍 requirePermission: Checking for permission: ${permission}`);
-    console.log(`🔍 requirePermission: User role: ${req.role}`);
     
+  
     // Define role-based permissions
     const rolePermissions = {
       admin: ['create_company', 'edit_company', 'delete_company', 'manage_users', 'view_analytics'],
@@ -526,14 +500,12 @@ const requirePermission = (permission) => {
     const userPermissions = rolePermissions[req.role] || [];
     
     if (!userPermissions.includes(permission)) {
-      console.log(`❌ requirePermission: Access denied. User role '${req.role}' lacks permission '${permission}'`);
       return res.status(403).json({ 
         success: false,
         message: `Access forbidden. Missing permission: ${permission}` 
       });
     }
     
-    console.log(`✅ requirePermission: Access granted for permission '${permission}'`);
     next();
   };
 };
