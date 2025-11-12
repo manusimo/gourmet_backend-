@@ -128,9 +128,6 @@ router.put('/mark-read-by-conversation/:conversationId', getUserIdFromCookie, as
   try {
     const userId = req.userId;
     const conversationId = parseInt(req.params.conversationId);
-
-    console.log(`🔔 Marking notifications as read for conversation ${conversationId} and user ${userId}`);
-
     // Get all unread MESSAGE notifications first
     const allUnread = await prisma.notification.findMany({
       where: {
@@ -139,8 +136,6 @@ router.put('/mark-read-by-conversation/:conversationId', getUserIdFromCookie, as
         isRead: false
       }
     });
-
-    console.log(`🔍 Found ${allUnread.length} total unread MESSAGE notifications`);
 
     // Filter by conversationId by parsing JSON data
     const toMarkAsRead = allUnread.filter(notif => {
@@ -171,8 +166,6 @@ router.put('/mark-read-by-conversation/:conversationId', getUserIdFromCookie, as
         data: { isRead: true }
       });
     }
-
-    console.log(`✅ Marked ${result.count} notifications as read for conversation ${conversationId}`);
 
     res.json({
       success: true,
