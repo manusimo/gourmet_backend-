@@ -227,16 +227,24 @@ const generalLimiter = rateLimit({
 // Strict rate limiting for authentication endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
+  max: (req) => {
+    // More lenient limits in development
+    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev' || !process.env.NODE_ENV;
+    return isDev ? 50 : 5; // 50 attempts in dev, 5 in production
+  },
   message: { 
     success: false, 
-    error: 'Too many login attempts, please try again later' 
+    error: 'Demasiados intentos. Espera unos minutos antes de intentar nuevamente.' 
   },
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting in development mode
-    return process.env.NODE_ENV === 'dev';
+    // Skip rate limiting in development mode (check multiple possible values)
+    const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev' || !process.env.NODE_ENV;
+    if (isDev) {
+      console.log('🔓 [Rate Limit] Skipping auth rate limit for development');
+    }
+    return isDev;
   }
 });
 
@@ -309,6 +317,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api', csrfProtectionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/company', signedUrlRoutes);
+app.use('/api/employee', signedUrlRoutes);
 // app.use('/api', meetingRoutes);
 // app.use('/api', meetingAgentRoutes);
 

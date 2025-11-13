@@ -427,9 +427,21 @@ router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req
       });
     }
 
+    // Convert image URLs to signed URLs
+    const applicationWithSignedUrls = { ...application };
+    if (application.employee) {
+      applicationWithSignedUrls.employee = await convertImageUrls(application.employee, ['profileImageUrl']);
+    }
+    if (application.jobPost?.restaurant) {
+      applicationWithSignedUrls.jobPost.restaurant = await convertImageUrls(
+        application.jobPost.restaurant, 
+        ['profileImageUrl', 'profileCarouselUrls']
+      );
+    }
+
     res.json({ 
       success: true,
-      data: application 
+      data: applicationWithSignedUrls 
     });
   } catch (error) {
     console.error(error);

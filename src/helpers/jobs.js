@@ -201,7 +201,23 @@ const updateJobOffer = async (jobId, restaurantId, body) => {
     questions: { create: createQueue },
   };
 
-  if (locationId) data.location = { connect: { id: toInt(locationId) } };
+  // Handle locationId:
+  // -1 means "todas las sucursales" (all branches) - get or create special location
+  // null means "no especificado" (not specified) - disconnect location
+  // positive integer means specific location
+  let finalLocationId = locationId;
+  if (locationId === -1 || locationId === '-1') {
+    const { getOrCreateAllBranchesLocation } = require('./jobHelpers');
+    const allBranchesLocation = await getOrCreateAllBranchesLocation(restaurantId);
+    finalLocationId = allBranchesLocation.id;
+  }
+
+  if (finalLocationId && finalLocationId > 0) {
+    data.location = { connect: { id: toInt(finalLocationId) } };
+  } else if (locationId === null || locationId === 'null') {
+    // Disconnect location for null (not specified)
+    data.location = { disconnect: true };
+  }
 
   const updatedJob = await prisma.$transaction(async (tx) => {
     if (updateQueue.length) await Promise.all(updateQueue);

@@ -54,10 +54,12 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
     console.log('this is the locationId', locationId);
     console.log('this is the restaurantId', restaurantId);
 
-    if (!locationId) {
+    // Allow null for "no especificado" and -1 for "todas las sucursales"
+    // locationId can be null, -1, or a positive integer
+    if (locationId !== null && locationId !== -1 && (!locationId || locationId <= 0)) {
       return res.status(400).json({
         success: false,
-        message: 'locationId is required',
+        message: 'locationId must be a valid location ID, -1 (todas las sucursales), or null (no especificado)',
       });
     }
 

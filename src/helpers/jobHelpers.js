@@ -1,6 +1,37 @@
 const { prisma } = require("../db.js");
 
 /**
+ * Get or create the special "Todas las sucursales" location for a restaurant
+ * @param {number} restaurantId - Restaurant ID
+ * @returns {Object} Location object
+ */
+const getOrCreateAllBranchesLocation = async (restaurantId) => {
+  const specialAddress = "Todas las sucursales";
+  
+  // Try to find existing "Todas las sucursales" location
+  let location = await prisma.location.findFirst({
+    where: {
+      restaurantId: restaurantId,
+      address: specialAddress
+    }
+  });
+
+  // If it doesn't exist, create it
+  if (!location) {
+    location = await prisma.location.create({
+      data: {
+        address: specialAddress,
+        latitude: 0,
+        longitude: 0,
+        restaurantId: restaurantId
+      }
+    });
+  }
+
+  return location;
+};
+
+/**
  * Create job offer
  * @param {Object} jobData - Job offer data
  * @returns {Object} Created job offer
@@ -33,7 +64,6 @@ const createJobOffer = async (jobData) => {
   // Build data object, only including valid numeric fields
   const data = {
     position,
-    location: { connect: { id: locationId } },
     schedule,
     contract,
     description,
@@ -43,6 +73,21 @@ const createJobOffer = async (jobData) => {
     tips,
     questions: { create: questions },
   };
+
+  // Handle locationId:
+  // -1 means "todas las sucursales" (all branches) - get or create special location
+  // null means "no especificado" (not specified) - don't set location
+  // positive integer means specific location
+  let finalLocationId = locationId;
+  if (locationId === -1) {
+    const allBranchesLocation = await getOrCreateAllBranchesLocation(parseInt(restaurantId, 10));
+    finalLocationId = allBranchesLocation.id;
+  }
+
+  if (finalLocationId && finalLocationId > 0) {
+    data.location = { connect: { id: finalLocationId } };
+  }
+  // If locationId is null, we don't set the location field, so it defaults to null
   
   // Only connect restaurantUser if restaurantUserId is provided (for staff members)
   // Restaurant owners don't have restaurantUserId
@@ -405,6 +450,7 @@ const generateCompletePlanInfo = (planData) => {
 
 module.exports = {
   createJobOffer,
+  getOrCreateAllBranchesLocation,
   getJobOfferWithLocation,
   getPlanNames,
   generateJobPlanInfo,

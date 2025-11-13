@@ -1479,15 +1479,15 @@ router.get('/check-login-status', async (req, res) => {
       });
 
       if (user) {
-        // Get profile image URL based on user type
+        // Get profile image URL based on user type and convert to signed URL
         let profileImageUrl = null;
         
         if (user.userType === 'profesionales' && user.employee?.profileImageUrl) {
-          profileImageUrl = user.employee.profileImageUrl;
+          profileImageUrl = await convertImageKeyToSignedUrl(user.employee.profileImageUrl, '/default-employee.png');
         } 
         
         if (user.userType === 'empresas' && user.restaurantUsers?.[0]?.restaurant?.profileImageUrl) {
-          profileImageUrl = user.restaurantUsers[0].restaurant.profileImageUrl;
+          profileImageUrl = await convertImageKeyToSignedUrl(user.restaurantUsers[0].restaurant.profileImageUrl, '/default-restaurant.png');
         }
         
         return res.json({
