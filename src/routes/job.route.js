@@ -116,9 +116,20 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
 
     formattedJobs = await fetchJobsByNameAndLocation(jobName, location, null, finishedDateParsed);
 
+    // Convert restaurant image URLs to actual signed URLs for each job
+    const jobsWithSignedUrls = await Promise.all(
+      formattedJobs.map(async (job) => {
+        const updatedJob = { ...job };
+        if (updatedJob.restaurant) {
+          updatedJob.restaurant = await convertImageUrls(updatedJob.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
+        }
+        return updatedJob;
+      })
+    );
+
     res.json({
       success: true,
-      data: formattedJobs, // Use consistent 'data' property
+      data: jobsWithSignedUrls, // Use consistent 'data' property
     });
   } catch (error) {
     console.error('Error fetching recommended jobs:', error);
