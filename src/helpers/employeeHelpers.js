@@ -278,6 +278,90 @@ const createEducation = async (educationData) => {
 };
 
 /**
+ * Synchronize experiences: delete removed, update existing, create new
+ * @param {number} employeeId - Employee ID
+ * @param {Array} incomingExperiences - Experiences from request
+ * @param {Object} currentEmployee - Optional current employee data to avoid extra DB call
+ * @returns {Object} Result with counts
+ */
+const synchronizeExperiences = async (employeeId, incomingExperiences = [], currentEmployee = null) => {
+  // Get current experiences (use provided data or fetch if needed)
+  if (!currentEmployee) {
+    currentEmployee = await getEmployeeWithDetails(employeeId);
+  }
+  const existingExperienceIds = (currentEmployee?.experiences || []).map(exp => exp.id);
+  const incomingExperienceIds = incomingExperiences.filter(exp => exp?.id).map(exp => exp.id);
+  
+  // Find IDs to delete (existing but not in incoming)
+  const experienceIdsToDelete = existingExperienceIds.filter(id => !incomingExperienceIds.includes(id));
+  
+  // Delete removed experiences
+  let deletedCount = 0;
+  if (experienceIdsToDelete.length > 0) {
+    const result = await prisma.experience.deleteMany({
+      where: {
+        id: { in: experienceIdsToDelete },
+        employeeId: employeeId
+      }
+    });
+    deletedCount = result.count;
+    console.log(`🗑️ Deleted ${deletedCount} experience(s)`);
+  }
+  
+  // Create new experiences (those without IDs)
+  const newExperiences = incomingExperiences.filter(exp => !exp?.id);
+  let createdCount = 0;
+  for (const experience of newExperiences) {
+    await createExperience({ ...experience, employeeId });
+    createdCount++;
+  }
+  
+  return { deletedCount, createdCount, updatedCount: incomingExperiences.filter(exp => exp?.id).length };
+};
+
+/**
+ * Synchronize educations: delete removed, update existing, create new
+ * @param {number} employeeId - Employee ID
+ * @param {Array} incomingEducations - Educations from request
+ * @param {Object} currentEmployee - Optional current employee data to avoid extra DB call
+ * @returns {Object} Result with counts
+ */
+const synchronizeEducations = async (employeeId, incomingEducations = [], currentEmployee = null) => {
+  // Get current educations (use provided data or fetch if needed)
+  if (!currentEmployee) {
+    currentEmployee = await getEmployeeWithDetails(employeeId);
+  }
+  const existingEducationIds = (currentEmployee?.educations || []).map(edu => edu.id);
+  const incomingEducationIds = incomingEducations.filter(edu => edu?.id).map(edu => edu.id);
+  
+  // Find IDs to delete (existing but not in incoming)
+  const educationIdsToDelete = existingEducationIds.filter(id => !incomingEducationIds.includes(id));
+  
+  // Delete removed educations
+  let deletedCount = 0;
+  if (educationIdsToDelete.length > 0) {
+    const result = await prisma.education.deleteMany({
+      where: {
+        id: { in: educationIdsToDelete },
+        employeeId: employeeId
+      }
+    });
+    deletedCount = result.count;
+    console.log(`🗑️ Deleted ${deletedCount} education(s)`);
+  }
+  
+  // Create new educations (those without IDs)
+  const newEducations = incomingEducations.filter(edu => !edu?.id);
+  let createdCount = 0;
+  for (const education of newEducations) {
+    await createEducation({ ...education, employeeId });
+    createdCount++;
+  }
+  
+  return { deletedCount, createdCount, updatedCount: incomingEducations.filter(edu => edu?.id).length };
+};
+
+/**
  * Get employee with full details
  * @param {number} employeeId - Employee ID
  * @returns {Object|null} Employee with full details or null
@@ -514,6 +598,8 @@ module.exports = {
   createExperience,
   createEducation,
   getEmployeeWithDetails,
+  synchronizeExperiences,
+  synchronizeEducations,
   searchEmployees,
   getJobOfferById,
   getEmployeeByEmployeeId,

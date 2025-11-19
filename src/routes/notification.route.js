@@ -13,43 +13,29 @@ router.get('/test', (req, res) => {
  * Get all notifications for the authenticated user
  */
 router.get('/', getUserIdFromCookie, async (req, res) => {
-  try {
-    console.log('🔔 Notification route: GET / called');
-    console.log('🔔 Notification route: req.userId:', req.userId);
-    console.log('🔔 Notification route: req.cookies:', req.cookies);
-    console.log('🔔 Notification route: req.headers:', req.headers);
-    
+  try { 
     const userId = req.userId;
-    console.log('🔔 Notification route: userId:', userId);
-    
-    console.log('🔔 Notification route: Fetching notifications from database...');
     const notifications = await prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50 // Limit to last 50 notifications
     });
-    console.log('🔔 Notification route: Found notifications:', notifications.length);
-
-    console.log('🔔 Notification route: Counting unread notifications...');
+ 
     const unreadCount = await prisma.notification.count({
       where: { 
         userId,
         isRead: false 
       }
     });
-    console.log('🔔 Notification route: Unread count:', unreadCount);
 
     const response = {
       success: true,
       notifications,
       unreadCount
     };
-    console.log('🔔 Notification route: Sending response:', response);
-
+   
     res.json(response);
   } catch (error) {
-    console.error('❌ Error fetching notifications:', error);
-    console.error('❌ Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch notifications'

@@ -2,51 +2,32 @@ const jwt = require('jsonwebtoken');
 const { prisma } = require('../db.js');
 
 const getAuthFromCookie = (req, res, next) => {
-  console.log('🔍 getAuthFromCookie called');
-  console.log('🔍 Request cookies:', req.cookies);
-  
-  // Try to get token from cookie first (preferred for desktop)
+ 
   let token = req.cookies.manu;
-  console.log('🔍 Manu cookie exists:', !!token);
-  
-  // Fallback to Authorization header for mobile browsers that block third-party cookies
+
   if (!token) {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7); // Remove 'Bearer ' prefix
-      console.log('🔍 Token found in Authorization header (mobile fallback)');
+      token = authHeader.substring(7); 
     }
   }
 
   if (!token) {
-    console.log('❌ No manu cookie or Authorization header found');
     return res.status(401).json({ message: 'Entra a tu cuenta para usar la plataforma' });
   }
 
   try {
-    console.log('🔍 Verifying JWT token...');
     const decodedToken = jwt.verify(token, process.env.JWT_SECRET);  
-    console.log('🔍 Token decoded successfully:', {
-      userId: decodedToken.userId,
-      userType: decodedToken.userType,
-      role: decodedToken.role,
-      restaurantId: decodedToken.restaurantId,
-      restaurantUserId: decodedToken.restaurantUserId,
-      employeeId: decodedToken.employeeId
-    });
     
-    // Extract everything from JWT token
     req.userId = decodedToken.userId;
     req.userType = decodedToken.userType;
     req.role = decodedToken.role;
     req.restaurantId = decodedToken.restaurantId;
     req.restaurantUserId = decodedToken.restaurantUserId;
     req.employeeId = decodedToken.employeeId;
-   
-    console.log('🔍 Request object updated with user info');
+  
     next();  
   } catch (error) {
-    console.error('❌ Error in getAuthFromCookie middleware:', error);
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid token' });
     }
@@ -55,14 +36,12 @@ const getAuthFromCookie = (req, res, next) => {
 };
 
 const getEmployeeIdFromCookie = async (req, res, next) => {
-  // Try to get token from cookie first (preferred for desktop)
   let token = req.cookies.manu;
-  
-  // Fallback to Authorization header for mobile browsers that block third-party cookies
+ 
   if (!token) {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      token = authHeader.substring(7); 
     }
   } 
  
@@ -75,11 +54,8 @@ const getEmployeeIdFromCookie = async (req, res, next) => {
   
     let employeeId = decodedToken.employeeId;
     
-    // If employeeId is not in token, try to find it using userId
     if (!employeeId && decodedToken.userId) {
-      console.log('🔍 employeeId not in token, looking up using userId:', decodedToken.userId);
-      
-      // Find employee record by userId
+     
       const employee = await prisma.employee.findUnique({
         where: { userId: decodedToken.userId },
         select: { id: true }
@@ -87,9 +63,7 @@ const getEmployeeIdFromCookie = async (req, res, next) => {
       
       if (employee) {
         employeeId = employee.id;
-        console.log('✅ Found employeeId:', employeeId);
       } else {
-        console.log('❌ No employee record found for userId:', decodedToken.userId);
         return res.status(404).json({ 
           success: false,
           message: 'Employee profile not found. Please create your profile first.' 
@@ -109,53 +83,39 @@ const getEmployeeIdFromCookie = async (req, res, next) => {
 };
 
 const getUserIdFromCookie = async (req, res, next) => {
-    console.log('🍪 getUserIdFromCookie - Checking authentication');
-    console.log('🍪 Request cookies:', req.cookies);
-    console.log('🍪 Manu cookie exists:', !!req.cookies.manu);
     
-    // Try to get token from cookie first (preferred for desktop)
     let token = req.cookies.manu;
     
-    // Fallback to Authorization header for mobile browsers that block third-party cookies
     if (!token) {
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7); // Remove 'Bearer ' prefix
-        console.log('🍪 Token found in Authorization header (mobile fallback)');
+        token = authHeader.substring(7);
       }
     }
 
     if (!token) {
-      console.log('🍪 No token found in cookies or Authorization header');
       return res.status(401).json({ message: 'Entra o crea una cuenta para usar la plataforma' });
     }
 
-    console.log('🍪 Token found, verifying...');
-
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-      console.log('🍪 Token decoded successfully:', { userId: decodedToken.userId, userType: decodedToken.userType, role: decodedToken.role });
    
       const userId = decodedToken.userId; 
       const userType = decodedToken.userType;    
-      let role = decodedToken.role; // Extract role from JWT token
+      let role = decodedToken.role; 
 
-      // If role is not in token, get it from the database
       if (!role) {
-        console.log('🍪 Role not in token, fetching from database...');
         const user = await prisma.user.findUnique({
           where: { id: userId },
           select: { role: true }
         });
         role = user ? user.role : 'user';
-        console.log('🍪 Role from database:', role);
       }
 
       req.userId = userId; 
       req.userType = userType;
-      req.role = role; // Set role from JWT token or database
-      
-      console.log('🍪 Authentication successful, proceeding to next middleware');
+      req.role = role; 
+    
       next();
     } catch (error) {
       console.error('🍪 Error in getUserIdFromCookie middleware:', error);

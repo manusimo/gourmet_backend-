@@ -17,6 +17,8 @@ const {
   createExperience,
   createEducation,
   getEmployeeWithDetails,
+  synchronizeExperiences,
+  synchronizeEducations,
   searchEmployees,
   getJobOfferById,
   getEmployeeByEmployeeId,
@@ -271,9 +273,13 @@ router.patch('/employee', ...updateEmployeeMiddleware, async (req, res) => {
       profileImageUrl
     } = req.body;
 
-    // Parse JSON strings from FormData
-    const experiences = typeof experiencesRaw === 'string' ? JSON.parse(experiencesRaw) : experiencesRaw;
-    const educations = typeof educationsRaw === 'string' ? JSON.parse(educationsRaw) : educationsRaw;
+    // Parse JSON strings from FormData and ensure arrays are never undefined
+    const experiences = typeof experiencesRaw === 'string' 
+      ? (JSON.parse(experiencesRaw) || []) 
+      : (experiencesRaw || []);
+    const educations = typeof educationsRaw === 'string' 
+      ? (JSON.parse(educationsRaw) || []) 
+      : (educationsRaw || []);
     const skills = typeof skillsRaw === 'string' ? JSON.parse(skillsRaw) : skillsRaw;
 
     const employeeId = req.employeeId;
@@ -307,14 +313,18 @@ router.patch('/employee', ...updateEmployeeMiddleware, async (req, res) => {
       }
     }
 
-    const updatedEmployee = await updateEmployeeProfile(employeeId, {
+    // Get current employee data once (used for synchronization)
+    const currentEmployee = await getEmployeeWithDetails(employeeId);
+
+    // Update employee profile (this handles updating existing experiences/educations)
+    await updateEmployeeProfile(employeeId, {
       name,
       position,
-      experiences,
+      experiences: experiences || [],
       surname,
       period,
       yearsOfExperience,
-      educations,
+      educations: educations || [],
       skills,
       aboutMe,
       birthDate,
@@ -329,23 +339,11 @@ router.patch('/employee', ...updateEmployeeMiddleware, async (req, res) => {
       profileImageUrl: finalProfileImageUrl
     });
 
-    // Create new experiences
-    const newExperiences = experiences.filter(experience => !experience.id);
-    for (const experience of newExperiences) {
-      await createExperience({
-        ...experience,
-        employeeId
-      });
-    }
+    // Synchronize experiences: delete removed, create new (updates handled by updateEmployeeProfile)
+    await synchronizeExperiences(employeeId, experiences || [], currentEmployee);
 
-    // Create new educations
-    const newEducations = educations.filter(education => !education.id);
-    for (const education of newEducations) {
-      await createEducation({
-        ...education,
-        employeeId
-      });
-    }
+    // Synchronize educations: delete removed, create new (updates handled by updateEmployeeProfile)
+    await synchronizeEducations(employeeId, educations || [], currentEmployee);
 
     const thisNewEmployee = await getEmployeeWithDetails(employeeId);
     
