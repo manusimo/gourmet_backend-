@@ -13,10 +13,6 @@ const convertCompanyImageUrls = (restaurant) => {
   }
 
   const convertedRestaurant = { ...restaurant };
-
-  // For now, just return the URLs as-is since signed URL endpoints aren't implemented yet
-  // The frontend can handle blob URLs and direct URLs directly
-  console.log('🔗 [imageUrlUtils] Returning restaurant with original image URLs (signed URL endpoints not implemented yet)');
   
   return convertedRestaurant;
 };
@@ -45,7 +41,6 @@ const convertEmployeeImageUrls = (employee) => {
     } else {
       // Convert to signed URL endpoint
       convertedEmployee.profileImageUrl = `/api/employee/signed-url/${convertedEmployee.profileImageUrl}`;
-      console.log('🔗 [imageUrlUtils] Converted employee profile image to signed URL endpoint:', convertedEmployee.profileImageUrl);
     }
   }
 
@@ -58,17 +53,13 @@ const convertEmployeeImageUrls = (employee) => {
  * @param {string} defaultImage - Default image path if no image provided (optional)
  * @returns {string} - Actual signed URL or default image
  */
-const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-restaurant.png') => {
-  console.log('🔗 convertImageKeyToSignedUrl called with:', { imageUrl, defaultImage });
-  
+const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-restaurant.png') => {  
   if (!imageUrl || imageUrl === 'No photo') {
-    console.log('🔗 No image URL provided, returning default:', defaultImage);
     return defaultImage;
   }
 
   // If it's a blob URL, return as is (for local previews)
   if (imageUrl.startsWith('blob:')) {
-    console.log('🔗 Image URL is a blob URL, returning as is:', imageUrl);
     return imageUrl;
   }
 
@@ -77,8 +68,6 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
   
   if (imageUrl.includes('wasabisys.com')) {
     try {
-      // Parse the Wasabi URL to extract the key
-      // Format: https://s3.us-east-1.wasabisys.com/gourmet-staging/path/to/image.png?params
       const url = new URL(imageUrl);
       // Remove leading slash and bucket name from pathname
       const pathParts = url.pathname.split('/').filter(part => part.length > 0);
@@ -86,33 +75,20 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
       pathParts.shift(); // Remove 'gourmet-staging'
       imageKey = pathParts.join('/');
       
-      console.log('🔗 Extracted key from Wasabi URL:', imageKey);
-      console.log('🔗 Regenerating signed URL to ensure it\'s not expired');
     } catch (error) {
-      console.error('❌ Error parsing Wasabi URL, trying to use as key:', error.message);
-      // If parsing fails, try to extract key from path directly
+    
       const match = imageUrl.match(/wasabisys\.com\/[^\/]+\/(.+?)(?:\?|$)/);
       if (match && match[1]) {
         imageKey = match[1];
       }
     }
   } else if (imageUrl.startsWith('http')) {
-    // If it's a non-Wasabi HTTP URL, return as is
-    console.log('🔗 Image URL is a full non-Wasabi URL, returning as is:', imageUrl);
     return imageUrl;
   }
 
   // Generate a fresh signed URL for the key
   if (!imageKey.includes('http')) {
     try {
-      console.log('🔗 Generating signed URL for Wasabi key:', imageKey);
-      console.log('🔗 Environment variables check:', {
-        WASABI_ENDPOINT: process.env.WASABI_ENDPOINT ? 'SET' : 'NOT SET',
-        WASABI_REGION: process.env.WASABI_REGION ? 'SET' : 'NOT SET',
-        WASABI_ACCESS_KEY_ID: process.env.WASABI_ACCESS_KEY_ID ? 'SET' : 'NOT SET',
-        WASABI_SECRET_KEY_ID: process.env.WASABI_SECRET_KEY_ID ? 'SET' : 'NOT SET',
-        WASABI_BUCKET_NAME: process.env.WASABI_BUCKET_NAME ? 'SET' : 'NOT SET'
-      });
       
       const AWS = require('aws-sdk');
       
@@ -136,19 +112,13 @@ const convertImageKeyToSignedUrl = async (imageUrl, defaultImage = '/default-res
         Expires: 3600 // URL valid for 1 hour
       };
 
-      console.log('🔗 S3 params:', params);
       const signedUrl = wasabiS3.getSignedUrl('getObject', params);
-      console.log('🔗 Generated signed URL for key:', cleanKey, '->', signedUrl);
       return signedUrl;
     } catch (error) {
-      console.error('❌ Error generating signed URL for:', imageKey, error.message);
-      console.error('❌ Full error:', error);
       return defaultImage;
     }
   }
 
-  // Fallback: return as is if we couldn't process it
-  console.log('🔗 Could not process image URL, returning as is:', imageUrl);
   return imageUrl;
 };
 
