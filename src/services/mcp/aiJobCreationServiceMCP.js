@@ -36,10 +36,7 @@ class AIJobCreationServiceMCP {
     }
 
     try {
-      // Use real MCP client (connects to MCP server)
-      // eslint-disable-next-line global-require, import/no-dynamic-require
       const MCPClient = require('../../mcp/standaloneClient.js');
-      console.log('🔗 [AI JOB CREATION MCP] Using MCP client');
       
       this.mcpClient = new MCPClient();
       this.mcpAvailable = true;
@@ -142,7 +139,6 @@ class AIJobCreationServiceMCP {
     try {
       if (this.mcpAvailable && this.mcpClient) {
         await this.mcpClient.disconnect();
-        console.log('✅ [AI JOB CREATION MCP] MCP client disconnected');
       }
     } catch (error) {
       if (MCP_DEBUG) {
@@ -252,11 +248,16 @@ class AIJobCreationServiceMCP {
   }
 
   buildRestaurantContext(restaurant, restaurantUserId, locationId) {
+    // locationId can be:
+    // - A valid number (specific location)
+    // - null (not specified - will be selected by user in frontend)
+    // - undefined (not provided - will be selected by user in frontend)
+    // We should NOT default to 1, as that might be incorrect
     return {
       id: restaurant.id,
       name: restaurant.name,
       userId: restaurantUserId,
-      locationId: locationId || 1
+      locationId: locationId !== undefined ? locationId : null // Don't default to 1, let user select
     };
   }
 

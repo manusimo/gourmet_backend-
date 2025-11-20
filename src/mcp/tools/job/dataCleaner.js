@@ -49,11 +49,18 @@ class JobDataCleaner {
    * Prepare job data for database insertion
    */
   static prepareJobData(extractedData, restaurantContext) {
+    // locationId should come from:
+    // 1. extractedData (if user specified it in conversation)
+    // 2. restaurantContext.locationId (if provided in request)
+    // 3. null (will be selected by user in frontend before final creation)
+    // We should NOT default to 1 as that might be incorrect
+    const locationId = extractedData.locationId || restaurantContext.locationId || null;
+    
     return {
       ...extractedData,
       restaurantId: restaurantContext.id,
       restaurantUserId: restaurantContext.userId,
-      locationId: restaurantContext.locationId || 1
+      locationId: locationId
     };
   }
 }

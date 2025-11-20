@@ -25,7 +25,6 @@ class MCPClient {
    */
   async connect() {
     try {
-      console.log('🔗 [MCP Client] Starting MCP server process...');
       
       // Get server path
       const serverPath = path.join(__dirname, 'server.js');
@@ -59,7 +58,6 @@ class MCPClient {
       this.connected = true;
       this.status = 'connected';
       this.retryCount = 0;
-      console.log('✅ [MCP Client] Connected to MCP server via protocol');
       
       return true;
     } catch (error) {
@@ -88,7 +86,6 @@ class MCPClient {
       
       this.connected = false;
       this.status = 'disconnected';
-      console.log('✅ [MCP Client] Disconnected from MCP server');
     } catch (error) {
       console.error('❌ [MCP Client] Error disconnecting:', error);
     }
@@ -136,9 +133,6 @@ class MCPClient {
         throw new Error('MCP client not connected');
       }
 
-      console.log('🤖 [MCP Client] Processing job creation via MCP protocol:', userMessage);
-
-      // Call the process_job_creation tool via MCP protocol
       const result = await this.client.callTool({
         name: 'process_job_creation',
         arguments: {
@@ -148,9 +142,6 @@ class MCPClient {
         }
       });
 
-      console.log('✅ [MCP Client] Job creation processed successfully via MCP protocol');
-      
-      // Parse the MCP response
       if (result.content && result.content[0]) {
         const responseText = result.content[0].text;
         return JSON.parse(responseText);

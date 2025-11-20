@@ -83,38 +83,38 @@ class ProcessJobCreationTool extends BaseTool {
         }
 
         // Search for recommended candidates if user asked or if job is complete
-        if (isAskingForCandidates || cleanedResponse.status === 'complete') {
-          try {
-            const recommendedCandidates = await this.ragService.searchSimilarApplicants(cleanedResponse.extractedData, 5);
-            if (recommendedCandidates.length > 0) {
-            // Format candidates for response
-            cleanedResponse.recommendedCandidates = recommendedCandidates.map(rec => ({
-              name: `${rec.employee.user?.name || ''} ${rec.employee.user?.surname || ''}`.trim(),
-              email: rec.employee.user?.email || 'No email',
-              similarity: Math.round(rec.similarity * 100), // Percentage
-              matchReasons: rec.matchReasons || [],
-              employeeId: rec.employee.id,
-              hasExperience: rec.employee.experiences?.length > 0,
-              hasEducation: rec.employee.educations?.length > 0,
-              canContact: true, // Can initiate chat
-              contactMethod: 'chat', // Direct chat available
-              contactEndpoint: '/api/contact-recommended-candidate', // API endpoint to initiate chat
-              jobPostId: cleanedResponse.jobId || null // Include job ID if job was already created
-            }));
+        // if (isAskingForCandidates || cleanedResponse.status === 'complete') {
+        //   try {
+        //     const recommendedCandidates = await this.ragService.searchSimilarApplicants(cleanedResponse.extractedData, 5);
+        //     if (recommendedCandidates.length > 0) {
+        //     // Format candidates for response
+        //     cleanedResponse.recommendedCandidates = recommendedCandidates.map(rec => ({
+        //       name: `${rec.employee.user?.name || ''} ${rec.employee.user?.surname || ''}`.trim(),
+        //       email: rec.employee.user?.email || 'No email',
+        //       similarity: Math.round(rec.similarity * 100), // Percentage
+        //       matchReasons: rec.matchReasons || [],
+        //       employeeId: rec.employee.id,
+        //       hasExperience: rec.employee.experiences?.length > 0,
+        //       hasEducation: rec.employee.educations?.length > 0,
+        //       canContact: true, // Can initiate chat
+        //       contactMethod: 'chat', // Direct chat available
+        //       contactEndpoint: '/api/contact-recommended-candidate', // API endpoint to initiate chat
+        //       jobPostId: cleanedResponse.jobId || null // Include job ID if job was already created
+        //     }));
 
-              console.log(`👥 [MCP] Found ${recommendedCandidates.length} recommended candidates`);
+        //       console.log(`👥 [MCP] Found ${recommendedCandidates.length} recommended candidates`);
               
-              // Add message about candidates with contact info
-              const candidatesMessage = `\n\n👥 **CANDIDATOS RECOMENDADOS:**\nHe encontrado ${recommendedCandidates.length} candidato(s) que coinciden con los requisitos del puesto "${cleanedResponse.extractedData.position}". Puedes contactarlos directamente mediante chat para iniciar una conversación sobre el puesto.`;
-              cleanedResponse.message += candidatesMessage;
-            } else if (isAskingForCandidates) {
-              cleanedResponse.message += `\n\n👥 **CANDIDATOS:**\nNo he encontrado candidatos recomendados que coincidan exactamente con los requisitos del puesto "${cleanedResponse.extractedData.position}". Puedes esperar a que candidatos apliquen o ajustar los requisitos del trabajo.`;
-            }
-          } catch (error) {
-            console.error('❌ [MCP] Error fetching recommended candidates:', error);
-            // Don't fail the whole process if candidate search fails
-          }
-        }
+        //       // Add message about candidates with contact info
+        //       const candidatesMessage = `\n\n👥 **CANDIDATOS RECOMENDADOS:**\nHe encontrado ${recommendedCandidates.length} candidato(s) que coinciden con los requisitos del puesto "${cleanedResponse.extractedData.position}". Puedes contactarlos directamente mediante chat para iniciar una conversación sobre el puesto.`;
+        //       cleanedResponse.message += candidatesMessage;
+        //     } else if (isAskingForCandidates) {
+        //       cleanedResponse.message += `\n\n👥 **CANDIDATOS:**\nNo he encontrado candidatos recomendados que coincidan exactamente con los requisitos del puesto "${cleanedResponse.extractedData.position}". Puedes esperar a que candidatos apliquen o ajustar los requisitos del trabajo.`;
+        //     }
+        //   } catch (error) {
+        //     console.error('❌ [MCP] Error fetching recommended candidates:', error);
+        //     // Don't fail the whole process if candidate search fails
+        //   }
+        // }
       } else if (isAskingForCandidates) {
         // User asked for candidates but we don't have position yet
         cleanedResponse.message += `\n\n👥 Para buscar candidatos recomendados, primero necesito saber la posición del trabajo. Por favor, indica qué tipo de puesto necesitas.`;
@@ -474,6 +474,13 @@ class ProcessJobCreationTool extends BaseTool {
       foundInfo.push(`Preguntas: ${finalData.questions.length} pregunta(s)`);
     } else {
       missingInfo.push('al menos 1 pregunta para los candidatos');
+    }
+    
+    // Check locationId - it should come from restaurantContext or user selection
+    if (!finalData.locationId && (!restaurantContext.locationId || restaurantContext.locationId === 1)) {
+      // Only add to missing if it's truly missing (not just default)
+      // Location is typically selected in frontend, but we should note if it's not set
+      // missingInfo.push('la ubicación del trabajo');
     }
     
     // Build the message
@@ -1036,6 +1043,20 @@ class ProcessJobCreationTool extends BaseTool {
 
   async createJobIfComplete(aiResponse, restaurantContext) {
     try {
+      // Validate locationId before creating job
+      // locationId should come from extractedData (if user specified) or restaurantContext
+      const locationId = aiResponse.extractedData?.locationId || restaurantContext.locationId;
+      
+      if (!locationId || locationId === 1) {
+        // If locationId is missing or default, don't create job yet
+        // The frontend should handle location selection before final creation
+        console.log('⚠️ [MCP] locationId missing or default, job creation will require user selection in frontend');
+        aiResponse.message = 'Por favor selecciona una ubicación antes de crear el trabajo.';
+        aiResponse.status = 'incomplete';
+        aiResponse.missingFields = [...(aiResponse.missingFields || []), 'locationId'];
+        return;
+      }
+      
       const jobData = JobDataCleaner.prepareJobData(aiResponse.extractedData, restaurantContext);
       const jobOffer = await createJobOffer(jobData);
       

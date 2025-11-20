@@ -52,11 +52,15 @@ const EMAIL_PROVIDERS = {
   }
 };
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html }, retryCount = 0) {
+  const maxRetries = 2;
+  const retryDelay = 1000; // 1 second
+  
   console.log('📧 Email send attempt started:');
   console.log('  - To:', to);
   console.log('  - Subject:', subject);
   console.log('  - Method: Brevo API (Primary)');
+  console.log('  - Retry attempt:', retryCount);
   
   // Try Brevo API first (more reliable)
   if (process.env.BREVO_API_KEY) {
@@ -64,38 +68,33 @@ async function sendEmail({ to, subject, text, html }) {
     const apiResult = await sendEmailViaBrevoApi({ to, subject, text, html });
     
     if (apiResult.success) {
-      console.log('✅ Email sent successfully via Brevo API!');
       return apiResult;
     } else {
-      console.log('⚠️ Brevo API failed, falling back to SMTP...');
-      console.log('  - API Error:', apiResult.error);
+      
+      // Retry if it's a connection error and we haven't exceeded max retries
+      if ((apiResult.error?.includes('ECONNREFUSED') || apiResult.error?.includes('ENOTFOUND') || apiResult.error?.includes('ETIMEDOUT')) && retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)));
+        return sendEmail({ to, subject, text, html }, retryCount + 1);
+      }
     }
-  } else {
-    console.log('⚠️ Brevo API key not configured, using SMTP...');
-  }
-  
-  // Fallback to SMTP if API fails or is not configured
-  console.log('📧 Falling back to SMTP method...');
+  } 
+
   const providers = ['brevo', 'brevo_alt', 'brevo_tls'];
   
   // Check if SMTP credentials are configured
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ Neither Brevo API key nor SMTP credentials configured.');
     return { success: false, error: 'No email credentials configured' };
   }
 
   // Try each SMTP provider configuration
   for (const provider of providers) {
     try {
-      console.log(`🔧 Trying SMTP provider: ${provider}`);
       const config = EMAIL_PROVIDERS[provider];
       
       let transporter = nodemailer.createTransport(config);
 
-      console.log('🔐 Verifying SMTP connection...');
       await transporter.verify();
-      console.log(`✅ SMTP connection verified with ${provider}`);
-
+   
       const emailData = {
         from: `"Gourmet Jobs" <${process.env.EMAIL_USER}>`, 
         to: to,
@@ -111,24 +110,25 @@ async function sendEmail({ to, subject, text, html }) {
         replyTo: 'noreply@gourmetjobs.com'
       };
       
-      console.log('📤 Sending email via SMTP...');
       let info = await transporter.sendMail(emailData);
-
-      console.log('✅ Email sent successfully via SMTP!');
-      console.log('  - Message ID:', info.messageId);
-      console.log('  - Response:', info.response);
-      
+    
       return { success: true, messageId: info.messageId, method: 'smtp', provider };
       
     } catch (error) {
       console.error(`❌ SMTP Error with provider ${provider}:`, error.message);
       
-      // If this is the last provider, return the error
+      // If this is the last provider, check if we should retry
       if (provider === providers[providers.length - 1]) {
+        // Retry if it's a connection error and we haven't exceeded max retries
+        if ((error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND') || error.message?.includes('ETIMEDOUT')) && retryCount < maxRetries) {
+          console.log(`🔄 Retrying email send (attempt ${retryCount + 1}/${maxRetries}) after ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)));
+          return sendEmail({ to, subject, text, html }, retryCount + 1);
+        }
+        
         return { success: false, error: error.message, method: 'smtp', lastProvider: provider };
       }
       
-      console.log(`🔄 Trying next SMTP provider...`);
     }
   }
 }

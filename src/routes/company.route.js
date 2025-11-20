@@ -76,10 +76,6 @@ router.get('/companies', async (req, res) => {
 
     const filters = buildFilters(req.query, ['format', 'specialty', 'region', 'comuna', 'benefits', 'workers', 'weeklyAverageClients']);
     const searchConditions = buildSearchConditions(q, 'name');
-    console.log('🔍 [Companies API] Query params:', req.query);
-    console.log('🔍 [Companies API] Filters:', filters);
-    console.log('🔍 [Companies API] Search Conditions:', searchConditions);
-
     const companies = await getCompanies(filters, searchConditions, limitInt, (pageInt - 1) * limitInt);
     const totalCompanies = await getTotalCompanies(filters, searchConditions);
 
@@ -98,7 +94,6 @@ router.get('/companies', async (req, res) => {
       totalPages: Math.ceil(totalCompanies / limitInt),
     });
   } catch (error) {
-    console.error('Internal Server Error:', error);
     res.status(500).json({ 
       success: false,
       error: 'Internal Server Error' 
@@ -111,17 +106,12 @@ router.get('/restaurant/:restaurantUserId', async (req, res) => {
   try {
     const { restaurantUserId } = req.params;
     
-    console.log('🔍 Restaurant route called with restaurantUserId:', restaurantUserId);
-
     if (!restaurantUserId || isNaN(restaurantUserId)) {
-      console.log('❌ Invalid restaurantUserId:', restaurantUserId);
       return res.status(400).json({ 
         success: false,
         error: 'Invalid or missing restaurantUserId' 
       });
     }
-
-    console.log('🔍 Looking up restaurant user with ID:', parseInt(restaurantUserId));
 
     // Get restaurant user information
     const restaurantUser = await prisma.restaurantUser.findUnique({
@@ -132,10 +122,7 @@ router.get('/restaurant/:restaurantUserId', async (req, res) => {
       }
     });
 
-    console.log('🔍 Restaurant user found:', restaurantUser);
-
     if (!restaurantUser) {
-      console.log('❌ Restaurant user not found for ID:', restaurantUserId);
       return res.status(404).json({ 
         success: false,
         error: 'Restaurant user not found' 
@@ -154,8 +141,6 @@ router.get('/restaurant/:restaurantUserId', async (req, res) => {
       restaurantName: restaurantUser.restaurant.name,
       restaurantDescription: restaurantUser.restaurant.description
     };
-
-    console.log('✅ Returning restaurant info:', restaurantInfo);
 
     return res.status(200).json({ 
       success: true,
@@ -207,43 +192,28 @@ router.get('/api/company/restaurantUser/:userId', async (req, res) => {
 // GET /company/locations - Get company locations
 router.get('/company/locations', getAuthFromCookie, async (req, res) => {
   try {
-    console.log('🔍 /company/locations endpoint called');
-    console.log('🔍 Request user info:', { 
-      userId: req.userId, 
-      userType: req.userType, 
-      role: req.role,
-      restaurantId: req.restaurantId,
-      restaurantUserId: req.restaurantUserId 
-    });
-
     const { restaurantId: queryRestaurantId } = req.query;
     const { restaurantId: jwtRestaurantId } = req;
     
     // Use query parameter if provided, otherwise fall back to JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
     
-    console.log('🔍 [Company Locations API] Fetching locations:');
-    console.log('  - Query restaurantId:', queryRestaurantId);
-    console.log('  - JWT restaurantId:', jwtRestaurantId);
-    console.log('  - Using restaurantId:', restaurantId);
-
     if (!restaurantId) {
-      console.log('❌ No restaurantId found in request');
       return res.status(400).json({
         success: false,
         message: 'companyId is required',
       });
     }
 
-    console.log('🔍 Fetching locations for restaurantId:', restaurantId);
     const locations = await getCompanyLocations(restaurantId);
-    console.log('🔍 Found locations:', locations.length);
-
+    
+    // Return empty array if no locations found (instead of 404)
+    // This allows the frontend to handle empty state gracefully
     if (!locations.length) {
-      console.log('❌ No locations found for restaurantId:', restaurantId);
-      return res.status(404).json({
-        success: false,
-        message: 'No locations found for this company.',
+      console.log('⚠️ No locations found for restaurantId:', restaurantId, '- returning empty array');
+      return res.status(200).json({
+        success: true,
+        data: []
       });
     }
 
@@ -334,31 +304,10 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
 
 // POST /company - Create company (require admin or manager role)
 router.post('/company', (req, res, next) => {
-  console.log('🚨 POST /company route HIT - Request received!');
-  console.log('🚨 Method:', req.method);
-  console.log('🚨 URL:', req.url);
-  console.log('🚨 Headers:', req.headers);
   next();
 }, getUserIdFromCookie, setUserRole, requirePermission('create_company'), async (req, res) => {
   
   try {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🏢 POST /company - Creating company profile');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🏢 [POST /company] Request cookies:', req.cookies);
-    console.log('🏢 [POST /company] User ID from middleware:', req.userId);
-    console.log('🏢 [POST /company] User type from middleware:', req.userType);
-    console.log('🏢 [POST /company] User role from middleware:', req.userRole);
-    console.log('🏢 [POST /company] Request body keys:', Object.keys(req.body));
-    console.log('🏢 [POST /company] Request files count:', req.files ? req.files.length : 0);
-    console.log('🏢 [POST /company] Request files:', req.files ? req.files.map(f => ({ 
-      fieldname: f.fieldname, 
-      originalname: f.originalname, 
-      mimetype: f.mimetype,
-      size: f.size,
-      bufferSize: f.buffer ? f.buffer.length : 'no buffer'
-    })) : 'No files');
-
     const {
       name,
       specialty,
@@ -371,34 +320,27 @@ router.post('/company', (req, res, next) => {
       numberOfRestaurants,
       workers,
       weeklyAverageClients,
-      benefits,
-      locations,
       jobOffers,
-      profileImageUrl,
-      profileCarouselUrls
+      profileImageUrl
     } = req.body;
+    
+    // These variables need to be reassigned, so declare them with let
+    let benefits = req.body.benefits;
+    let locations = req.body.locations;
+    let profileCarouselUrls = req.body.profileCarouselUrls;
 
-    // Log initial locations type and value
-    console.log('🏢 [POST /company] Initial locations type:', typeof locations);
-    console.log('🏢 [POST /company] Initial locations value:', locations);
-    console.log('🏢 [POST /company] Is locations an array?', Array.isArray(locations));
 
     // Parse JSON strings from FormData (locations, benefits, profileCarouselUrls)
     if (typeof locations === 'string') {
       try {
         locations = JSON.parse(locations);
-        console.log('🏢 [POST /company] Parsed locations from JSON string');
-        console.log('🏢 [POST /company] Parsed locations type:', typeof locations);
-        console.log('🏢 [POST /company] Parsed locations is array?', Array.isArray(locations));
       } catch (error) {
-        console.error('🏢 [POST /company] Error parsing locations:', error.message);
         locations = [];
       }
     }
     
     // Ensure locations is always an array (handle null, undefined, objects, etc.)
     if (!Array.isArray(locations)) {
-      console.log('🏢 [POST /company] Locations is not an array after parsing, converting. Type:', typeof locations);
       if (locations === null || locations === undefined) {
         locations = [];
       } else if (typeof locations === 'object') {
@@ -407,15 +349,12 @@ router.post('/company', (req, res, next) => {
       } else {
         locations = [];
       }
-      console.log('🏢 [POST /company] Locations after conversion:', locations);
     }
     
     if (typeof benefits === 'string') {
       try {
         benefits = JSON.parse(benefits);
-        console.log('🏢 [POST /company] Parsed benefits from JSON string');
       } catch (error) {
-        console.error('🏢 [POST /company] Error parsing benefits:', error.message);
         benefits = {};
       }
     }
@@ -442,43 +381,24 @@ router.post('/company', (req, res, next) => {
 
     const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
     if (profileImageFile) {
-      console.log('📤 [POST /company] Uploading profile image...');
-      console.log('📤 [POST /company] File details:', {
-        originalname: profileImageFile.originalname,
-        mimetype: profileImageFile.mimetype,
-        size: profileImageFile.size,
-        bufferSize: profileImageFile.buffer ? profileImageFile.buffer.length : 'no buffer'
-      });
-      
       const profileImageResult = await uploadFile(profileImageFile, 'company-profiles');
       if (profileImageResult.success) {
         finalProfileImageUrl = profileImageResult.key;
-        console.log('✅ [POST /company] Profile image uploaded successfully, key stored:', finalProfileImageUrl);
       } else {
-        console.error('❌ [POST /company] Profile image upload failed:', profileImageResult.error);
         return res.status(400).json({
           success: false,
           message: 'Failed to upload profile image',
           error: profileImageResult.error
         });
       }
-    } else {
-      console.log('📤 [POST /company] No profile image file uploaded, using existing URL or default');
-    }
+    } 
 
     // Handle gallery/carousel images upload
     const galleryImageFiles = req.files && req.files.filter(file => file.fieldname === 'galleryImages');
     let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
     
     if (galleryImageFiles && galleryImageFiles.length > 0) {
-      console.log('📤 [POST /company] Uploading gallery images...');
-      console.log('📤 [POST /company] Gallery files count:', galleryImageFiles.length);
-      console.log('📤 [POST /company] Gallery files details:', galleryImageFiles.map(f => ({
-        originalname: f.originalname,
-        mimetype: f.mimetype,
-        size: f.size
-      })));
-      
+     
       const galleryUploadResult = await uploadMultipleFiles(galleryImageFiles, 'company-gallery');
       if (galleryUploadResult.success) {
         const newGalleryKeys = galleryUploadResult.files.map(file => file.key);
@@ -488,10 +408,8 @@ router.post('/company', (req, res, next) => {
           !url.startsWith('blob:') && !url.includes('signed-url')
         );
         finalProfileCarouselUrls = [...existingUrls, ...newGalleryKeys];
-        console.log('✅ [POST /company] Gallery images uploaded successfully, total URLs:', finalProfileCarouselUrls.length);
-        console.log('✅ [POST /company] Gallery keys:', newGalleryKeys);
+  
       } else {
-        console.error('❌ [POST /company] Gallery images upload failed:', galleryUploadResult.error);
         return res.status(400).json({
           success: false,
           message: 'Failed to upload gallery images',
@@ -499,7 +417,7 @@ router.post('/company', (req, res, next) => {
         });
       }
     } else {
-      console.log('📤 [POST /company] No gallery images uploaded, using existing URLs');
+
       // Process existing carousel URLs to extract keys if needed
       finalProfileCarouselUrls = finalProfileCarouselUrls.map(url => {
         if (url.includes('/api/company/signed-url/')) {
@@ -512,37 +430,12 @@ router.post('/company', (req, res, next) => {
 
     const userId = req.userId;
     const role = req.role;
-
-    console.log('🏢 [POST /company] About to create company profile for userId:', userId);
-    console.log('🏢 [POST /company] Request body data:', {
-      name,
-      specialty,
-      format,
-      description,
-      rut,
-      legalName,
-      region,
-      comuna,
-      numberOfRestaurants,
-      workers,
-      weeklyAverageClients,
-      benefits: Array.isArray(benefits) ? benefits.length : 'not array',
-      locations: Array.isArray(locations) ? locations.length : 'not array',
-      jobOffers: Array.isArray(jobOffers) ? jobOffers.length : 'not array',
-      profileImageUrl: profileImageUrl ? 'provided' : 'not provided',
-      profileCarouselUrls: Array.isArray(profileCarouselUrls) ? profileCarouselUrls.length : 'not array'
-    });
-
-    // Data validation and conversion
-    console.log('🏢 [POST /company] Processing and validating data...');
     
     // Final safety check: ensure locations is an array
     if (!Array.isArray(locations)) {
-      console.warn('⚠️ [POST /company] WARNING: locations is not an array before processedData. Type:', typeof locations, 'Value:', locations);
       if (typeof locations === 'string') {
         try {
           locations = JSON.parse(locations);
-          console.log('🔄 [POST /company] Re-parsed locations from string in final check');
         } catch (e) {
           console.error('❌ [POST /company] Failed to parse locations in final check:', e.message);
           locations = [];
@@ -551,7 +444,6 @@ router.post('/company', (req, res, next) => {
         locations = [];
       }
     }
-    console.log('🏢 [POST /company] Final locations check - is array:', Array.isArray(locations), 'count:', locations.length);
     
     const processedData = {
       name: name || '',
@@ -573,31 +465,10 @@ router.post('/company', (req, res, next) => {
       userId
     };
 
-    console.log('🏢 [POST /company] Processed data summary:');
-    console.log('  - Name:', processedData.name);
-    console.log('  - Format:', processedData.format);
-    console.log('  - Specialty:', processedData.specialty);
-    console.log('  - Region:', processedData.region);
-    console.log('  - Comuna:', processedData.comuna);
-    console.log('  - Locations count:', processedData.locations.length);
-    console.log('  - Benefits count:', processedData.benefits.length);
-    console.log('  - Final profileImageUrl:', processedData.profileImageUrl);
-    console.log('  - Final profileCarouselUrls count:', processedData.profileCarouselUrls.length);
-
-    // Allow multiple restaurants per user - no need to check for existing company
-    console.log('🏢 [POST /company] Creating restaurant for user (multiple restaurants allowed)');
-    console.log('🏢 [POST /company] Calling createCompanyProfile...');
-    
     const companyProfile = await createCompanyProfile(processedData);
-    console.log('✅ [POST /company] Company profile created successfully!');
-    console.log('  - Company ID:', companyProfile.id);
-    console.log('  - Company Name:', companyProfile.name);
-    console.log('  - Created At:', companyProfile.createdAt);
-
     // Admin users don't need RestaurantUser record - they remain as admin users
     const restaurantUserId = null;
 
-    console.log('🏢 Generating company token...');
     const newToken = generateCompanyToken({
       userId,
       userType: req.userType, // Include userType from request
@@ -605,14 +476,9 @@ router.post('/company', (req, res, next) => {
       restaurantId: companyProfile.id,
       restaurantUserId: restaurantUserId, // null for admin users, actual ID for staff
     });
-    console.log('✅ [POST /company] Token generated successfully');
-
+   
     // Set secure authentication cookie (subdomain support)
     setSecureAuthCookie(res, newToken);
-    console.log('✅ [POST /company] Authentication cookie set');
-
-    console.log('✅ [POST /company] Company creation completed successfully');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     res.status(201).json({ 
       success: true,
@@ -623,11 +489,6 @@ router.post('/company', (req, res, next) => {
       }
     });
   } catch (error) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ [POST /company] ERROR creating company:');
-    console.error('  - Error message:', error.message);
-    console.error('  - Error stack:', error.stack);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -675,18 +536,10 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
     
     // Use query parameter if provided, otherwise fall back to JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
-    
-    console.log('🔍 [Company Profile API] Fetching company profile:');
-    console.log('  - Query restaurantId:', queryRestaurantId);
-    console.log('  - JWT restaurantId:', jwtRestaurantId);
-    console.log('  - Using restaurantId:', restaurantId);
-    
+     
     const company = await getCompanyByRestaurantId(restaurantId);
 
     if (company) {
-      console.log('🔍 [Company Profile API] Found company:', company.name);
-      console.log('🔍 [Company Profile API] Converting image URLs to signed URLs...');
-      
       // Convert image keys to signed URLs
       const companyWithSignedUrls = await convertImageUrls(company, ['profileImageUrl', 'profileCarouselUrls']);
       
@@ -695,7 +548,6 @@ router.get('/company', getAuthFromCookie, async (req, res) => {
         data: companyWithSignedUrls
       });
     } else {
-      console.log('🔍 [Company Profile API] Company not found for restaurantId:', restaurantId);
       res.status(404).json({ 
         success: false,
         error: 'Company not found' 
@@ -736,9 +588,6 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     if (typeof locations === 'string') {
       try {
         locations = JSON.parse(locations);
-        console.log('🔄 [PATCH /company] Parsed locations from JSON string');
-        console.log('🔄 [PATCH /company] Parsed locations type:', typeof locations);
-        console.log('🔄 [PATCH /company] Parsed locations is array?', Array.isArray(locations));
       } catch (error) {
         console.error('🔄 [PATCH /company] Error parsing locations:', error.message);
         locations = [];
@@ -747,7 +596,6 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     
     // Ensure locations is always an array (handle null, undefined, objects, etc.)
     if (!Array.isArray(locations)) {
-      console.log('🔄 [PATCH /company] Locations is not an array after parsing, converting. Type:', typeof locations);
       if (locations === null || locations === undefined) {
         locations = [];
       } else if (typeof locations === 'object') {
@@ -762,7 +610,6 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     if (typeof benefits === 'string') {
       try {
         benefits = JSON.parse(benefits);
-        console.log('🔄 [PATCH /company] Parsed benefits from JSON string');
       } catch (error) {
         console.error('🔄 [PATCH /company] Error parsing benefits:', error.message);
         benefits = {};
@@ -772,7 +619,6 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     if (typeof profileCarouselUrls === 'string') {
       try {
         profileCarouselUrls = JSON.parse(profileCarouselUrls);
-        console.log('🔄 [PATCH /company] Parsed profileCarouselUrls from JSON string');
       } catch (error) {
         console.error('🔄 [PATCH /company] Error parsing profileCarouselUrls:', error.message);
         profileCarouselUrls = [];
@@ -784,19 +630,7 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
     
     // Use query parameter if provided, otherwise fall back to JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
-    
-    console.log('🔄 [PATCH /company] Updating company profile:');
-    console.log('  - Query restaurantId:', queryRestaurantId);
-    console.log('  - JWT restaurantId:', jwtRestaurantId);
-    console.log('  - Using restaurantId:', restaurantId);
-    console.log('  - Company name:', name);
-    console.log('  - Format:', format);
-    console.log('  - Specialty:', specialty);
-    console.log('  - Region:', region);
-    console.log('  - Comuna:', comuna);
-    console.log('  - Current profileImageUrl from body:', profileImageUrl);
-    console.log('  - Current profileCarouselUrls from body:', Array.isArray(profileCarouselUrls) ? profileCarouselUrls.length : 'not array');
-
+  
     // Handle file upload for profile image
     let finalProfileImageUrl = (() => {
       if (!profileImageUrl) return profileImageUrl;
@@ -809,42 +643,24 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
 
     const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
     if (profileImageFile) {
-      console.log('📤 [PATCH /company] Uploading updated profile image...');
-      console.log('📤 [PATCH /company] File details:', {
-        originalname: profileImageFile.originalname,
-        mimetype: profileImageFile.mimetype,
-        size: profileImageFile.size,
-        bufferSize: profileImageFile.buffer ? profileImageFile.buffer.length : 'no buffer'
-      });
       
       const profileImageResult = await uploadFile(profileImageFile, 'company-profiles');
       if (profileImageResult.success) {
         finalProfileImageUrl = profileImageResult.key;
-        console.log('✅ [PATCH /company] Profile image updated successfully, key stored:', finalProfileImageUrl);
       } else {
-        console.error('❌ [PATCH /company] Profile image upload failed:', profileImageResult.error);
         return res.status(400).json({
           success: false,
           message: 'Failed to upload profile image',
           error: profileImageResult.error
         });
       }
-    } else {
-      console.log('📤 [PATCH /company] No profile image file uploaded, keeping existing:', finalProfileImageUrl);
-    }
+    } 
 
     // Handle gallery/carousel images upload
     const galleryImageFiles = req.files && req.files.filter(file => file.fieldname === 'galleryImages');
     let finalProfileCarouselUrls = Array.isArray(profileCarouselUrls) ? profileCarouselUrls : [];
     
     if (galleryImageFiles && galleryImageFiles.length > 0) {
-      console.log('📤 [PATCH /company] Uploading gallery images...');
-      console.log('📤 [PATCH /company] Gallery files count:', galleryImageFiles.length);
-      console.log('📤 [PATCH /company] Gallery files details:', galleryImageFiles.map(f => ({
-        originalname: f.originalname,
-        mimetype: f.mimetype,
-        size: f.size
-      })));
       
       const galleryUploadResult = await uploadMultipleFiles(galleryImageFiles, 'company-gallery');
       if (galleryUploadResult.success) {
@@ -855,10 +671,7 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
           !url.startsWith('blob:') && !url.includes('signed-url')
         );
         finalProfileCarouselUrls = [...existingUrls, ...newGalleryKeys];
-        console.log('✅ [PATCH /company] Gallery images uploaded successfully, total URLs:', finalProfileCarouselUrls.length);
-        console.log('✅ [PATCH /company] Gallery keys:', newGalleryKeys);
       } else {
-        console.error('❌ [PATCH /company] Gallery images upload failed:', galleryUploadResult.error);
         return res.status(400).json({
           success: false,
           message: 'Failed to upload gallery images',
@@ -866,7 +679,6 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
         });
       }
     } else {
-      console.log('📤 [PATCH /company] No gallery images uploaded, using existing URLs');
       // Process existing carousel URLs to extract keys if needed
       finalProfileCarouselUrls = finalProfileCarouselUrls.map(url => {
         if (url.includes('/api/company/signed-url/')) {
@@ -877,24 +689,10 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
       });
     }
 
-    console.log('🔄 [PATCH /company] Processing locations...');
-    console.log('  - Locations type:', typeof locations);
-    console.log('  - Locations is array?', Array.isArray(locations));
-    console.log('  - Locations count:', locations.length);
-    console.log('  - Locations value:', JSON.stringify(locations, null, 2));
     const newLocations = filterNewLocations(locations);
     const existingLocations = filterExistingLocations(locations);
     const currentLocations = await getCurrentLocations(restaurantId);
     const locationsToDelete = findLocationsToDelete(currentLocations, locations);
-    console.log('🔄 [PATCH /company] Locations breakdown:');
-    console.log('  - Current locations in DB:', currentLocations.length);
-    console.log('  - New locations to create:', newLocations.length);
-    console.log('  - Existing locations to update:', existingLocations.length);
-    console.log('  - Locations to delete:', locationsToDelete.length);
-
-    console.log('🔄 [PATCH /company] Starting database transaction...');
-    console.log('🔄 [PATCH /company] Final profileImageUrl to save:', finalProfileImageUrl);
-    console.log('🔄 [PATCH /company] Final profileCarouselUrls to save:', finalProfileCarouselUrls.length, 'images');
     
     await prisma.$transaction(async () => {
       await deleteLocations(locationsToDelete);
@@ -917,25 +715,15 @@ router.patch('/company', getAuthFromCookie, requirePermission('edit_company'), a
         existingLocations,
         profileCarouselUrls: finalProfileCarouselUrls,
       });
-      console.log('✅ [PATCH /company] Updated company profile');
       
       await createNewLocations(newLocations, restaurantId);
-      console.log('✅ [PATCH /company] Created new locations');
     });
 
-    console.log('✅ [PATCH /company] Company profile updated successfully');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    
     res.status(200).json({ 
       success: true,
       message: 'Company profile updated successfully'
     });
   } catch (error) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('❌ [PATCH /company] ERROR updating company profile:');
-    console.error('  - Error message:', error.message);
-    console.error('  - Error stack:', error.stack);
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -986,16 +774,12 @@ router.delete('/company/:id', getAuthFromCookie, async (req, res) => {
       });
     }
 
-    console.log('🗑️ [Delete Restaurant] Restaurant found, starting cascade delete...');
-
     // Delete all related data in a transaction
     await prisma.$transaction(async (tx) => {
       // Get all job offers for this restaurant
       const jobOffers = await tx.jobOffer.findMany({
         where: { restaurantId: restaurantId }
       });
-
-      console.log('🗑️ [Delete Restaurant] Found job offers:', jobOffers.length);
 
       // For each job offer: delete dependent entities
       for (const jobOffer of jobOffers) {
@@ -1077,7 +861,6 @@ router.delete('/company/:id', getAuthFromCookie, async (req, res) => {
         where: { id: restaurantId }
       });
 
-      console.log('✅ [Delete Restaurant] Restaurant and all related data deleted successfully');
     });
 
     res.status(200).json({

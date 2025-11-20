@@ -914,14 +914,9 @@ router.post('/password-reset-request', validatePasswordReset, async (req, res) =
       { expiresIn: '1h' }
     );
 
-    // Store reset token in TokenDenyList (we'll use this to track used tokens)
-    // For now, we'll just generate the token and send the email
-    // The token validation will be done by JWT verification
 
     // Generate reset URL
-    const baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://www.gourmetjobs.cl' 
-      : 'http://localhost:3001';
+    const baseUrl = 'https://www.gourmetjobs.cl';
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
     // Send email with reset link

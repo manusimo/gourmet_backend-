@@ -141,14 +141,12 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
       restaurantId: restaurantId,
       restaurantUserId: restaurantUser.id
     }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    const baseUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://www.gourmetjobs.cl' 
-      : 'http://localhost:3001';
+    const baseUrl = 'https://www.gourmetjobs.cl';
     const setupUrl = `${baseUrl}/set-password?token=${token}`;
 
     // Send email with temporary password and setup link
     try {
-      await sendEmail({
+      const emailResult = await sendEmail({
         to: email,
         subject: 'Bienvenido a GourmetJobs - Tu cuenta ha sido creada',
         text: `Hola ${name},\n\nTu cuenta ha sido creada exitosamente en GourmetJobs.\n\nTu contraseña temporal es: ${tempPassword}\n\nConfigura tu contraseña aquí: ${setupUrl}\n\nPor favor, cambia tu contraseña después de iniciar sesión por primera vez.\n\nSaludos,\nEl equipo de GourmetJobs`,
@@ -169,9 +167,22 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
           </div>
         `
       });
-      console.log('✅ Email sent successfully to:', email);
+      
+      if (emailResult && emailResult.success) {
+        console.log('✅ Email sent successfully to:', email);
+        console.log('  - Method:', emailResult.method);
+        console.log('  - Message ID:', emailResult.messageId);
+      } else {
+        console.error('❌ Error sending email to:', email);
+        console.error('  - Error:', emailResult?.error || 'Unknown error');
+        console.error('  - Method attempted:', emailResult?.method || 'unknown');
+        console.error('  - Full result:', JSON.stringify(emailResult, null, 2));
+        // Don't fail the user creation if email fails
+      }
     } catch (emailError) {
-      console.error('❌ Error sending email:', emailError);
+      console.error('❌ Exception while sending email:', emailError);
+      console.error('  - Error message:', emailError.message);
+      console.error('  - Error stack:', emailError.stack);
       // Don't fail the user creation if email fails
     }
 
