@@ -56,11 +56,6 @@ async function sendEmail({ to, subject, text, html }, retryCount = 0) {
   const maxRetries = 2;
   const retryDelay = 1000; // 1 second
   
-  console.log('📧 Email send attempt started:');
-  console.log('  - To:', to);
-  console.log('  - Subject:', subject);
-  console.log('  - Method: Brevo API (Primary)');
-  console.log('  - Retry attempt:', retryCount);
   
   // Try Brevo API first (more reliable)
   if (process.env.BREVO_API_KEY) {
