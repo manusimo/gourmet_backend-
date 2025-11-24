@@ -3,17 +3,12 @@
  * Centralized exports for all MCP-related services
  */
 
-const RestaurantContextService = require('./RestaurantContextService');
-const JobCreationProcessor = require('./JobCreationProcessor');
-
-// Main service (current implementation)
 const AIJobCreationServiceMCP = require('./aiJobCreationServiceMCP');
+const TalentMatchServiceMCP = require('./talentMatchServiceMCP');
+const LangGraphAgent = require('./agents/langGraphAgent');
 
 module.exports = {
-  // Main services
-  RestaurantContextService,
-  JobCreationProcessor,
-  
-  // AI Job Creation Service (main export)
-  AIJobCreationServiceMCP
+  AIJobCreationServiceMCP,
+  TalentMatchServiceMCP,
+  LangGraphAgent
 };

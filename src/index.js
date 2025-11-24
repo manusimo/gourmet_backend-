@@ -321,13 +321,15 @@ app.use('/api/employee', signedUrlRoutes);
 // app.use('/api', meetingRoutes);
 // app.use('/api', meetingAgentRoutes);
 
-// Mount AI Job Creation routes (MCP routes)
+// Mount MCP routes
 try {
-  const { aiJobCreationRoutes } = require('./routes/mcp');
-  app.use('/api/ai-job-creation', aiJobCreationRoutes);
-  console.log('🧭 AI Job Creation routes mounted');
+  const { chatRoutes, aiJobCreationRoutes, talentMatchRoutes } = require('./routes/mcp');
+  app.use('/api/chat', chatRoutes); // New unified chat endpoint
+  app.use('/api/ai-job-creation', aiJobCreationRoutes); // Legacy - kept for backward compatibility
+  app.use('/api/talent-match', talentMatchRoutes);
+  console.log('🧭 MCP routes mounted (Chat, AI Job Creation [legacy], Talent Match)');
 } catch (e) {
-  console.error('❌ Failed to mount AI Job Creation routes:', e);
+  console.error('❌ Failed to mount MCP routes:', e);
 }
 
 // Security status endpoint

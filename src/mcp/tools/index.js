@@ -4,9 +4,10 @@
  */
 
 const jobTools = require('./job');
-const schedulingTools = require('./schedulingTools');
-const dataTools = require('./dataTools');
-const notificationTools = require('./notificationTools');
+const schedulingTools = require('./scheduling');
+const talentMatchTools = require('./talentMatch');
+const communicationTools = require('./communication');
+const restaurantTools = require('./restaurant');
 
 /**
  * Get all available tools
@@ -15,8 +16,9 @@ function getAllTools() {
   return [
     ...jobTools.getTools(),
     ...schedulingTools.getTools(),
-    ...dataTools.getTools(),
-    ...notificationTools.getTools()
+    ...talentMatchTools.getTools(),
+    ...communicationTools.getTools(),
+    ...restaurantTools.getTools()
   ];
 }
 
@@ -27,8 +29,9 @@ function getToolHandler(toolName) {
   const handlers = {
     ...jobTools.getHandlers(),
     ...schedulingTools.getHandlers(),
-    ...dataTools.getHandlers(),
-    ...notificationTools.getHandlers()
+    ...talentMatchTools.getHandlers(),
+    ...communicationTools.getHandlers(),
+    ...restaurantTools.getHandlers()
   };
   
   return handlers[toolName];

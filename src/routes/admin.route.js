@@ -407,19 +407,36 @@ router.get('/total-counts', async (req, res) => {
       registeredCompanies,
       registeredProfessionals,
       publishedOffers,
-      totalApplications
+      totalApplications,
+      professionalUsers,
+      adminCompanyUsers
     ] = await Promise.all([
       prisma.restaurant.count(),
       prisma.employee.count(),
       prisma.jobOffer.count(),
-      prisma.application.count()
+      prisma.application.count(),
+      prisma.user.count({
+        where: { userType: 'profesionales' }
+      }),
+      prisma.user.count({
+        where: {
+          userType: 'empresas',
+          role: 'admin'
+        }
+      })
     ]);
 
     const totalCounts = {
-      registeredCompanies: registeredCompanies || 0,
-      registeredProfessionals: registeredProfessionals || 0,
+      registeredCompanies: (registeredCompanies || 0) + (adminCompanyUsers || 0),
+      registeredProfessionals: (registeredProfessionals || 0) + (professionalUsers || 0),
       publishedOffers: publishedOffers || 0,
-      totalApplications: totalApplications || 0
+      totalApplications: totalApplications || 0,
+      breakdown: {
+        restaurantProfiles: registeredCompanies || 0,
+        adminCompanyUsers: adminCompanyUsers || 0,
+        professionalProfiles: registeredProfessionals || 0,
+        professionalUsers: professionalUsers || 0
+      }
     };
 
     res.status(200).json({ 
@@ -442,19 +459,36 @@ router.get('/metrics', async (req, res) => {
       registeredCompanies,
       registeredProfessionals,
       publishedOffers,
-      totalApplications
+      totalApplications,
+      professionalUsers,
+      adminCompanyUsers
     ] = await Promise.all([
       prisma.restaurant.count(),
       prisma.employee.count(),
       prisma.jobOffer.count(),
-      prisma.application.count()
+      prisma.application.count(),
+      prisma.user.count({
+        where: { userType: 'profesionales' }
+      }),
+      prisma.user.count({
+        where: {
+          userType: 'empresas',
+          role: 'admin'
+        }
+      })
     ]);
 
     res.json({
-      registeredCompanies: registeredCompanies || 0,
-      registeredProfessionals: registeredProfessionals || 0,
+      registeredCompanies: (registeredCompanies || 0) + (adminCompanyUsers || 0),
+      registeredProfessionals: (registeredProfessionals || 0) + (professionalUsers || 0),
       publishedOffers: publishedOffers || 0,
-      totalApplications: totalApplications || 0
+      totalApplications: totalApplications || 0,
+      breakdown: {
+        restaurantProfiles: registeredCompanies || 0,
+        adminCompanyUsers: adminCompanyUsers || 0,
+        professionalProfiles: registeredProfessionals || 0,
+        professionalUsers: professionalUsers || 0
+      }
     });
   } catch (error) {
     console.error('Error fetching metrics:', error);

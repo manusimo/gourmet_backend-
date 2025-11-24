@@ -2,92 +2,39 @@ const express = require('express');
 const router = express.Router();
 const { getUserIdFromCookie, getRestaurantUserIdFromCookie } = require('../../helpers/cookies.js');
 const { requirePlan } = require('../../middleware/checkPlan.js');
-const { AIJobCreationServiceMCP } = require('../../services/mcp');
+const { AIJobCreationServiceMCP, LangGraphAgent } = require('../../services/mcp');
+const { getRestaurant, buildRestaurantContext } = require('../../services/mcp/contexts/restaurantContext');
 const { prisma } = require('../../db.js');
-const AdvancedJobCreationAgent = require('../../services/agents/jobCreationAgentGraph');
 
 /**
- * AI Job Creation Routes
- * Handles natural language job creation with AI processing
- * Requires PRO+ plan for AI agent features
+ * AI Job Creation Routes (Legacy)
+ * DEPRECATED: Use /api/chat/process instead
+ * Kept for backward compatibility only
  */
 
 // Initialize services
 const aiJobCreationService = new AIJobCreationServiceMCP();
 
-// Initialize advanced agent lazily (only when needed)
-let advancedAgent = null;
-function getAdvancedAgent() {
-  if (!advancedAgent) {
-    try {
-      advancedAgent = new AdvancedJobCreationAgent();
-      console.log('✅ [AI JOB CREATION] Advanced agent initialized successfully');
-    } catch (error) {
-      console.error('❌ [AI JOB CREATION] Failed to initialize advanced agent:', error);
-      throw error;
-    }
+// Initialize LangGraph agent (singleton)
+let langGraphAgent = null;
+function getLangGraphAgent() {
+  if (!langGraphAgent) {
+    langGraphAgent = new LangGraphAgent();
   }
-  return advancedAgent;
+  return langGraphAgent;
 }
 
-// Note: client initialization is handled internally by the service constructor
-
 /**
- * POST /process - Process job creation message with AI (Basic agent)
- * @description Analyzes natural language job descriptions and extracts structured data
- * Uses the basic MCP-based agent (sequential, hardcoded logic)
+ * POST /process - Legacy endpoint (DEPRECATED)
+ * @description DEPRECATED: Use /api/chat/process instead
+ * This endpoint now uses LangGraph agent directly (same as /api/chat/process)
+ * Kept for backward compatibility only
  */
 router.post('/process', getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
-    console.log('📥 [AI JOB CREATION ROUTE] Received request (basic agent):', {
-      body: req.body,
-      restaurantUserId: req.restaurantUserId,
-      hasMessage: !!req.body.message,
-      hasRestaurantId: !!req.body.restaurantId
-    });
-    
-    const result = await aiJobCreationService.processJobCreationRequest(req.body, req.restaurantUserId);
-    
-    console.log('📤 [AI JOB CREATION ROUTE] Returning result:', {
-      success: result.success,
-      hasData: !!result.data,
-      dataType: typeof result.data,
-      dataKeys: Object.keys(result.data || {}),
-      isError: result.data?.isError,
-      statusCode: result.statusCode,
-      error: result.error
-    });
-    
-    if (result.statusCode) {
-      return res.status(result.statusCode).json(result);
-    }
-    
-    res.json(result);
-  } catch (error) {
-    console.error('❌ [AI JOB CREATION] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process job creation request'
-    });
-  }
-});
-
-/**
- * POST /process-advanced - Process job creation with advanced agent (Auto-reasoning)
- * @description Uses LangGraph-based agent with auto-reasoning capabilities
- * The agent decides what actions to take dynamically instead of following hardcoded rules
- */
-router.post('/process-advanced', getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
-  try {
-    console.log('🤖 [AI JOB CREATION ROUTE] Received request (advanced agent):', {
-      body: req.body,
-      restaurantUserId: req.restaurantUserId,
-      hasMessage: !!req.body.message,
-      hasRestaurantId: !!req.body.restaurantId
-    });
-    
     const { message, conversationHistory = [], restaurantId, locationId } = req.body;
     
+    // Validate input
     if (!message) {
       return res.status(400).json({
         success: false,
@@ -102,41 +49,58 @@ router.post('/process-advanced', getUserIdFromCookie, getRestaurantUserIdFromCoo
       });
     }
     
+    // Get restaurant context
+    const restaurant = await getRestaurant(restaurantId);
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        error: 'Restaurant not found'
+      });
+    }
+    
     // Build restaurant context
-    const restaurantContext = {
-      id: parseInt(restaurantId),
-      userId: req.restaurantUserId,
-      locationId: locationId ? parseInt(locationId) : 1
-    };
+    const restaurantContext = buildRestaurantContext(restaurant, req.restaurantUserId, locationId);
     
-    // Process with advanced agent (lazy initialization)
-    const agent = getAdvancedAgent();
-    const result = await agent.processRequest(
-      message,
-      conversationHistory,
-      restaurantContext
-    );
+    // Get LangGraph agent and process query
+    const agent = getLangGraphAgent();
+    const result = await agent.processQuery(message.trim(), conversationHistory, restaurantContext);
     
-    console.log('📤 [AI JOB CREATION ROUTE] Advanced agent result:', {
-      success: result.success,
-      status: result.status,
-      hasReasoning: !!result.reasoning,
-      completedActions: result.completedActions?.length || 0
-    });
-    
+    // Format response
     res.json({
-      success: result.success,
-      data: result
+      success: true,
+      data: {
+        status: result.status || 'complete',
+        message: result.message,
+        toolCalls: result.toolCalls,
+        usedDynamicSelection: true,
+        debugInfo: {
+          source: 'LANGGRAPH',
+          model: 'gpt-4',
+          framework: 'LangGraph',
+          timestamp: new Date().toISOString()
+        }
+      }
     });
     
   } catch (error) {
-    console.error('❌ [AI JOB CREATION] Advanced agent error:', error);
+    console.error('❌ [AI JOB CREATION] Error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to process job creation request with advanced agent',
+      error: 'Failed to process message',
       message: error.message
     });
   }
+});
+
+/**
+ * POST /process-advanced - DEPRECATED
+ * @description DEPRECATED: Use /api/chat/process instead
+ * This endpoint is no longer needed as /process now uses LangGraph directly
+ */
+router.post('/process-advanced', getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
+  // Redirect to /process (which now uses LangGraph)
+  req.url = '/process';
+  router.handle(req, res);
 });
 
 /**
@@ -163,17 +127,12 @@ router.post('/create-job', getUserIdFromCookie, getRestaurantUserIdFromCookie, a
       restaurantId: parseInt(restaurantId),
       restaurantUserId: req.restaurantUserId,
       locationId: parseInt(locationId),
-      // Map tips to propina for compatibility with createJobOffer
       propina: extractedData.tips ? 'Si' : 'No'
     };
-
-    console.log('💼 [AI JOB CREATION] Creating job from extracted data:', jobData);
 
     // Create the job offer
     const jobOffer = await createJobOffer(jobData);
     
-    console.log('✅ [AI JOB CREATION] Job created successfully:', jobOffer.id);
-
     res.json({
       success: true,
       message: 'Job created successfully',

@@ -125,34 +125,37 @@ class MCPClient {
   }
 
   /**
-   * Process job creation request via MCP protocol
+   * Call any MCP tool generically
+   * This is the main method for interacting with MCP tools
    */
-  async processJobCreation({ userMessage, conversationHistory, restaurantContext }) {
+  async callTool(toolName, args = {}) {
     try {
+      // Auto-connect if not connected
       if (!this.connected || !this.client) {
-        throw new Error('MCP client not connected');
+        await this.connect();
       }
 
       const result = await this.client.callTool({
-        name: 'process_job_creation',
-        arguments: {
-          userMessage,
-          conversationHistory,
-          restaurantContext
-        }
+        name: toolName,
+        arguments: args
       });
 
       if (result.content && result.content[0]) {
         const responseText = result.content[0].text;
-        return JSON.parse(responseText);
+        try {
+          return JSON.parse(responseText);
+        } catch (parseError) {
+          // If not JSON, return as text
+          return { text: responseText };
+        }
       }
       
       throw new Error('Invalid MCP response format');
 
     } catch (error) {
-      console.error('❌ [MCP Client] Error processing job creation:', error);
+      console.error(`❌ [MCP Client] Error calling tool ${toolName}:`, error);
       
-      // If connection lost, try to reconnect
+      // If connection lost, mark as disconnected
       if (error.message.includes('not connected') || error.message.includes('connection')) {
         this.connected = false;
         this.status = 'error';
