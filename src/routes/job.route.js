@@ -45,6 +45,8 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
       propina,
       functions,
       restaurantId: requestRestaurantId,
+      startDate,
+      endDate
     } = req.body;
 
     // Use restaurantId from request body if provided (for holding companies), otherwise use from middleware
@@ -83,7 +85,9 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
       propina,
       functions,
       restaurantId,
-      restaurantUserId
+      restaurantUserId,
+      startDate,
+      endDate
     });
 
     const jobOfferCheck = await getJobOfferWithLocation(jobOffer.id);

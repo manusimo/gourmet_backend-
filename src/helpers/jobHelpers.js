@@ -51,7 +51,9 @@ const createJobOffer = async (jobData) => {
     propina,
     functions,
     restaurantId,
-    restaurantUserId
+    restaurantUserId,
+    startDate,
+    endDate
   } = jobData;
 
   const tips = propina === 'Si';
@@ -73,6 +75,14 @@ const createJobOffer = async (jobData) => {
     tips,
     questions: { create: questions },
   };
+
+  // Handle dates - convert string to Date if provided
+  if (startDate) {
+    data.startDate = startDate instanceof Date ? startDate : new Date(startDate);
+  }
+  if (endDate) {
+    data.endDate = endDate instanceof Date ? endDate : new Date(endDate);
+  }
 
   // Handle locationId:
   // -1 means "todas las sucursales" (all branches) - get or create special location

@@ -95,6 +95,10 @@ model Employee {
   
   // AI Agent relations
   scheduledCalls      ScheduledCall[]
+  
+  // Hiring relations
+  hirings       Hiring[]
+  reviews       Review[]
 }
 
 model Experience {
@@ -147,6 +151,10 @@ model Restaurant {
   aiAgents            AiAgent[]
   scheduledCalls      ScheduledCall[]
   
+  // Hiring relations
+  hirings             Hiring[]
+  reviews             Review[]
+  
   // Soft delete
   deletedAt            DateTime?
 }
@@ -176,13 +184,16 @@ model JobOffer {
   vacancies          Int
   yearsOfExperience  Int
   description        String
+  startDate          DateTime?        // When the job position starts
+  endDate            DateTime?        // When the job position ends (null = ongoing/permanent)
   questions          Question[]
   restaurantId       Int
   restaurant         Restaurant       @relation(fields: [restaurantId], references: [id])
   applications       Application[]
   conversations      Conversation[]
   favouriteJobs      FavouriteJob[]
-  createdAt  DateTime @default(now())
+  hirings            Hiring[]
+  createdAt          DateTime         @default(now())
   restaurantUserId   Int?
   restaurantUser     RestaurantUser?  @relation(fields: [restaurantUserId], references: [id])
   deletedAt          DateTime?
@@ -235,6 +246,9 @@ model Conversation {
   
   // AI Agent relations
   agentConversations  AgentConversation[]
+  
+  // Hiring relations
+  hiring              Hiring?
 }
 
 model Message {
@@ -423,7 +437,59 @@ model Notification {
   @@index([userId, createdAt])
 }
 
+// Hiring System Models
+model Hiring {
+  id                  Int       @id @default(autoincrement())
+  employeeId          Int
+  restaurantId        Int
+  jobOfferId          Int?      // Reference to JobOffer (contains: position, salary, contract, schedule, startDate, endDate, etc.)
+  conversationId      Int?      @unique // One-to-one relation with Conversation
+  
+  // Hiring process dates
+  offerDate           DateTime  @default(now()) // When the offer was made
+  acceptanceDate      DateTime? // When the employee accepted the offer
+  offerExpirationDate DateTime? // When the offer expires (optional)
+  
+  // Status workflow
+  status              String    @default("offered") // offered, pending, accepted, active, completed, cancelled, rejected, negotiating
+  
+  // Message tracking
+  startMessageSent    Boolean   @default(false) // Track if start message was sent
+  endMessageSent      Boolean   @default(false) // Track if end message was sent
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  jobOffer        JobOffer? @relation(fields: [jobOfferId], references: [id])
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+  reviews         Review[]
+  
+  @@index([employeeId, status])
+  @@index([restaurantId, status])
+  @@index([offerExpirationDate])
+}
 
-
-
+model Review {
+  id              Int       @id @default(autoincrement())
+  hiringId        Int
+  employeeId      Int
+  restaurantId    Int
+  reviewType      String    // "employee_review" (restaurant reviewing employee) or "restaurant_review" (employee reviewing restaurant)
+  rating          Int       // 1-5 stars
+  comment         String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  hiring          Hiring    @relation(fields: [hiringId], references: [id])
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  
+  @@index([employeeId])
+  @@index([restaurantId])
+  @@index([hiringId])
+}
 

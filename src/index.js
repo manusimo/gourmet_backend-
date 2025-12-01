@@ -1,8 +1,9 @@
-// Load environment variables
-// Use path relative to this file to ensure .env is found regardless of working directory
+//
 const path = require('path');
 const envPath = path.join(__dirname, '../.env');
 const envResult = require('dotenv').config({ path: envPath });
+// Initialize scheduled tasks
+const scheduler = require('./services/scheduler.js');
 
 // Log environment variable loading status
 if (envResult.error) {
@@ -45,6 +46,8 @@ const contactRoutes = require('./routes/contact.route.js');
 const employeeRoutes = require('./routes/employee.route.js');
 const companyRoutes = require('./routes/company.route.js');
 const jobRoutes = require('./routes/job.route.js');
+const hiringRoutes = require('./routes/hiring.route.js');
+const reviewRoutes = require('./routes/review.route.js');
 const applicationRoutes = require('./routes/application.route.js');
 const poolRoutes = require('./routes/pool.route.js');
 const chatRoutes = require('./routes/chat.route.js');
@@ -310,6 +313,8 @@ app.use('/api', contactRoutes);
 app.use('/api', employeeRoutes);
 app.use('/api', companyRoutes);
 app.use('/api', jobRoutes);
+app.use('/api', hiringRoutes);
+app.use('/api', reviewRoutes);
 app.use('/api', applicationRoutes);
 app.use('/api', poolRoutes);
 app.use('/api', chatRoutes);
@@ -478,6 +483,10 @@ const gracefulShutdown = async (signal) => {
       console.error('❌ Error closing database connection:', error);
     }
     
+    // Stop scheduled jobs
+    const scheduler = require('./services/scheduler.js');
+    scheduler.stop();
+    
     Logger.info('Process terminated');
     console.log('Process terminated');
     process.exit(0);
@@ -515,5 +524,7 @@ process.on('unhandledRejection', (reason, promise) => {
   });
   console.error('Unhandled Rejection:', reason);
 });
+
+scheduler.start();
 
 module.exports = app;

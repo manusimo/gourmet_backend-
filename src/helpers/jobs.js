@@ -163,6 +163,8 @@ const updateJobOffer = async (jobId, restaurantId, body) => {
     salary,
     propina,
     functions,
+    startDate,
+    endDate,
   } = body;
 
   const existingJob = await ensureActiveJob(jobId, restaurantId);
@@ -200,6 +202,22 @@ const updateJobOffer = async (jobId, restaurantId, body) => {
     salary: toInt(salary),
     questions: { create: createQueue },
   };
+
+  // Handle dates - convert string to Date if provided, or set to null if empty string
+  if (startDate !== undefined) {
+    if (startDate === null || startDate === '') {
+      data.startDate = null;
+    } else {
+      data.startDate = startDate instanceof Date ? startDate : new Date(startDate);
+    }
+  }
+  if (endDate !== undefined) {
+    if (endDate === null || endDate === '') {
+      data.endDate = null;
+    } else {
+      data.endDate = endDate instanceof Date ? endDate : new Date(endDate);
+    }
+  }
 
   // Handle locationId:
   // -1 means "todas las sucursales" (all branches) - get or create special location
