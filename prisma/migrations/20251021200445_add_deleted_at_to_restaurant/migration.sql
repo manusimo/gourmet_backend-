@@ -1,9 +1,17 @@
--- AlterTable
+-- AlterTable (safe to run multiple times)
 ALTER TABLE "Employee" ALTER COLUMN "birthDate" SET DEFAULT timestamp '1996-02-02 00:00:00';
 
+-- AlterTable (add deletedAt if it doesn't exist)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'Restaurant' AND column_name = 'deletedAt') THEN
+        ALTER TABLE "Restaurant" ADD COLUMN "deletedAt" TIMESTAMP(3);
+    END IF;
+END $$;
 
 -- CreateTable
-CREATE TABLE "KnowledgeDocument" (
+CREATE TABLE IF NOT EXISTS "KnowledgeDocument" (
     "id" SERIAL NOT NULL,
     "content" TEXT NOT NULL,
     "embedding" TEXT NOT NULL,
@@ -17,7 +25,7 @@ CREATE TABLE "KnowledgeDocument" (
 );
 
 -- CreateTable
-CREATE TABLE "AiAgent" (
+CREATE TABLE IF NOT EXISTS "AiAgent" (
     "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
@@ -34,7 +42,7 @@ CREATE TABLE "AiAgent" (
 );
 
 -- CreateTable
-CREATE TABLE "AgentConversation" (
+CREATE TABLE IF NOT EXISTS "AgentConversation" (
     "id" SERIAL NOT NULL,
     "agentId" INTEGER NOT NULL,
     "userId" INTEGER NOT NULL,
@@ -48,7 +56,7 @@ CREATE TABLE "AgentConversation" (
 );
 
 -- CreateTable
-CREATE TABLE "AgentMessage" (
+CREATE TABLE IF NOT EXISTS "AgentMessage" (
     "id" SERIAL NOT NULL,
     "agentConversationId" INTEGER NOT NULL,
     "messageId" INTEGER NOT NULL,
@@ -62,7 +70,7 @@ CREATE TABLE "AgentMessage" (
 );
 
 -- CreateTable
-CREATE TABLE "ScheduledCall" (
+CREATE TABLE IF NOT EXISTS "ScheduledCall" (
     "id" SERIAL NOT NULL,
     "agentId" INTEGER NOT NULL,
     "restaurantId" INTEGER NOT NULL,
@@ -82,7 +90,7 @@ CREATE TABLE "ScheduledCall" (
 );
 
 -- CreateTable
-CREATE TABLE "AgentConfig" (
+CREATE TABLE IF NOT EXISTS "AgentConfig" (
     "id" SERIAL NOT NULL,
     "agentId" INTEGER NOT NULL,
     "configKey" TEXT NOT NULL,
@@ -95,7 +103,7 @@ CREATE TABLE "AgentConfig" (
 );
 
 -- CreateTable
-CREATE TABLE "Notification" (
+CREATE TABLE IF NOT EXISTS "Notification" (
     "id" SERIAL NOT NULL,
     "userId" INTEGER NOT NULL,
     "type" TEXT NOT NULL,
@@ -110,16 +118,16 @@ CREATE TABLE "Notification" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AgentConversation_agentId_conversationId_key" ON "AgentConversation"("agentId", "conversationId");
+CREATE UNIQUE INDEX IF NOT EXISTS "AgentConversation_agentId_conversationId_key" ON "AgentConversation"("agentId", "conversationId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AgentConfig_agentId_configKey_key" ON "AgentConfig"("agentId", "configKey");
+CREATE UNIQUE INDEX IF NOT EXISTS "AgentConfig_agentId_configKey_key" ON "AgentConfig"("agentId", "configKey");
 
 -- CreateIndex
-CREATE INDEX "Notification_userId_isRead_idx" ON "Notification"("userId", "isRead");
+CREATE INDEX IF NOT EXISTS "Notification_userId_isRead_idx" ON "Notification"("userId", "isRead");
 
 -- CreateIndex
-CREATE INDEX "Notification_userId_createdAt_idx" ON "Notification"("userId", "createdAt");
+CREATE INDEX IF NOT EXISTS "Notification_userId_createdAt_idx" ON "Notification"("userId", "createdAt");
 
 -- AddForeignKey
 ALTER TABLE "AiAgent" ADD CONSTRAINT "AiAgent_restaurantId_fkey" FOREIGN KEY ("restaurantId") REFERENCES "Restaurant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
