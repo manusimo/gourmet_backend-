@@ -1,19 +1,5 @@
-/*
-  Warnings:
-
-  - Added the required column `restaurantId` to the `Conversation` table without a default value. This is not possible if the table is not empty.
-  - Made the column `restaurantUserId` on table `Conversation` required. This step will fail if there are existing NULL values in that column.
-
-*/
--- DropForeignKey
-ALTER TABLE "Conversation" DROP CONSTRAINT "Conversation_restaurantUserId_fkey";
-
 -- DropIndex
 DROP INDEX "Restaurant_userId_key";
-
--- AlterTable
-ALTER TABLE "Conversation" ADD COLUMN     "restaurantId" INTEGER NOT NULL,
-ALTER COLUMN "restaurantUserId" SET NOT NULL;
 
 -- AlterTable
 ALTER TABLE "Employee" ALTER COLUMN "birthDate" SET DEFAULT timestamp '1996-02-02 00:00:00';
@@ -139,12 +125,6 @@ CREATE INDEX "Notification_userId_isRead_idx" ON "Notification"("userId", "isRea
 
 -- CreateIndex
 CREATE INDEX "Notification_userId_createdAt_idx" ON "Notification"("userId", "createdAt");
-
--- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_restaurantUserId_fkey" FOREIGN KEY ("restaurantUserId") REFERENCES "RestaurantUser"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_restaurantId_fkey" FOREIGN KEY ("restaurantId") REFERENCES "Restaurant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AiAgent" ADD CONSTRAINT "AiAgent_restaurantId_fkey" FOREIGN KEY ("restaurantId") REFERENCES "Restaurant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
