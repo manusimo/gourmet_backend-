@@ -99,6 +99,10 @@ model Employee {
   // Hiring relations
   hirings       Hiring[]
   reviews       Review[]
+  
+  // Timestamps
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }
 
 model Experience {
@@ -215,6 +219,8 @@ model Application {
   employee      Employee   @relation(fields: [employeeId], references: [id])
   answers       Answer[]
   deletedAt     DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }
 
 model Answer {

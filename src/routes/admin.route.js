@@ -403,18 +403,33 @@ router.get('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFr
 // GET /admin/total-counts - Get total counts for dashboard
 router.get('/total-counts', async (req, res) => {
   try {
+    // Calculate 48 hours ago timestamp
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
     const [
       registeredCompanies,
       registeredProfessionals,
       publishedOffers,
       totalApplications,
       professionalUsers,
-      adminCompanyUsers
+      adminCompanyUsers,
+      activeProfessionals,
+      jobsWithNoApplicationsAfter48h,
+      workersWhoNeverCameBack
     ] = await Promise.all([
       prisma.restaurant.count(),
-      prisma.employee.count(),
+      // Count Users with userType 'profesionales' who have created an Employee profile
+      prisma.user.count({
+        where: {
+          userType: 'profesionales',
+          employee: {
+            isNot: null
+          }
+        }
+      }),
       prisma.jobOffer.count(),
       prisma.application.count(),
+      // Count all users with userType 'profesionales' (registered but may not have profile)
       prisma.user.count({
         where: { userType: 'profesionales' }
       }),
@@ -423,19 +438,110 @@ router.get('/total-counts', async (req, res) => {
           userType: 'empresas',
           role: 'admin'
         }
+      }),
+      // Count distinct professional users with completed profiles who have applied to ≥1 job
+      prisma.user.count({
+        where: {
+          userType: 'profesionales',
+          employee: {
+            isNot: null,
+            applications: {
+              some: {}
+            }
+          }
+        }
+      }),
+      // Jobs with 0 applications after 48h (urgent help needed)
+      prisma.jobOffer.count({
+        where: {
+          createdAt: {
+            lt: fortyEightHoursAgo
+          },
+          deletedAt: null,
+          applications: {
+            none: {}
+          }
+        }
+      }),
+      // Workers who never came back after signup (signed up but didn't create profile)
+      prisma.user.count({
+        where: {
+          userType: 'profesionales',
+          employee: {
+            is: null
+          }
+        }
       })
     ]);
 
+    // Calculate percentage of finished profiles that take action
+    const activeProfessionalsCount = activeProfessionals || 0;
+    const registeredProfessionalsCount = registeredProfessionals || 0;
+    const activeProfessionalsPercentage = registeredProfessionalsCount > 0 
+      ? Math.round((activeProfessionalsCount / registeredProfessionalsCount) * 100) 
+      : 0;
+
+    // Calculate average time metrics (same as /metrics endpoint)
+    let avgSignupToProfileDays = null;
+    let avgProfileToApplicationDays = null;
+
+    try {
+      const signupToProfileResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (e."createdAt" - u."createdAt"))) / 86400 as avg_days
+        FROM "User" u
+        INNER JOIN "Employee" e ON e."userId" = u.id
+        WHERE u."userType" = 'profesionales'
+          AND e."createdAt" IS NOT NULL
+      `;
+      
+      if (signupToProfileResult && signupToProfileResult[0]?.avg_days !== null) {
+        avgSignupToProfileDays = Math.round(parseFloat(signupToProfileResult[0].avg_days) * 10) / 10;
+      }
+    } catch (error) {
+      console.warn('Employee.createdAt field does not exist. Add createdAt to Employee model for this metric.');
+    }
+
+    try {
+      const profileToApplicationResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (
+            (SELECT MIN(a."createdAt") FROM "Application" a WHERE a."employeeId" = e.id) - e."createdAt"
+          ))) / 86400 as avg_days
+        FROM "User" u
+        INNER JOIN "Employee" e ON e."userId" = u.id
+        WHERE u."userType" = 'profesionales'
+          AND e."createdAt" IS NOT NULL
+          AND EXISTS (SELECT 1 FROM "Application" a WHERE a."employeeId" = e.id AND a."createdAt" IS NOT NULL)
+      `;
+      
+      if (profileToApplicationResult && profileToApplicationResult[0]?.avg_days !== null) {
+        avgProfileToApplicationDays = Math.round(parseFloat(profileToApplicationResult[0].avg_days) * 10) / 10;
+      }
+    } catch (error) {
+      console.warn('Employee.createdAt or Application.createdAt fields do not exist. Add createdAt to both models for this metric.');
+    }
+
     const totalCounts = {
       registeredCompanies: (registeredCompanies || 0) + (adminCompanyUsers || 0),
-      registeredProfessionals: (registeredProfessionals || 0) + (professionalUsers || 0),
+      // registeredProfessionals = Users with userType 'profesionales' who created Employee profile
+      registeredProfessionals: registeredProfessionalsCount,
       publishedOffers: publishedOffers || 0,
       totalApplications: totalApplications || 0,
       breakdown: {
         restaurantProfiles: registeredCompanies || 0,
         adminCompanyUsers: adminCompanyUsers || 0,
-        professionalProfiles: registeredProfessionals || 0,
-        professionalUsers: professionalUsers || 0
+        professionalProfiles: registeredProfessionalsCount,
+        professionalUsers: professionalUsers || 0,
+        // Workers: Professional users with completed profiles who applied to ≥1 job
+        activeProfessionals: activeProfessionalsCount,
+        activeProfessionalsPercentage: activeProfessionalsPercentage,
+        // Average time metrics (requires createdAt on Employee and Application)
+        avgSignupToProfileDays: avgSignupToProfileDays,
+        avgProfileToApplicationDays: avgProfileToApplicationDays,
+        // Urgent metrics
+        jobsWithNoApplicationsAfter48h: jobsWithNoApplicationsAfter48h || 0,
+        workersWhoNeverCameBack: workersWhoNeverCameBack || 0
       }
     };
 
@@ -455,18 +561,33 @@ router.get('/total-counts', async (req, res) => {
 // GET /admin/metrics - Legacy endpoint for compatibility
 router.get('/metrics', async (req, res) => {
   try {
+    // Calculate 48 hours ago timestamp
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
     const [
       registeredCompanies,
       registeredProfessionals,
       publishedOffers,
       totalApplications,
       professionalUsers,
-      adminCompanyUsers
+      adminCompanyUsers,
+      activeProfessionals,
+      jobsWithNoApplicationsAfter48h,
+      workersWhoNeverCameBack
     ] = await Promise.all([
       prisma.restaurant.count(),
-      prisma.employee.count(),
+      // Count Users with userType 'profesionales' who have created an Employee profile
+      prisma.user.count({
+        where: {
+          userType: 'profesionales',
+          employee: {
+            isNot: null
+          }
+        }
+      }),
       prisma.jobOffer.count(),
       prisma.application.count(),
+      // Count all users with userType 'profesionales' (registered but may not have profile)
       prisma.user.count({
         where: { userType: 'profesionales' }
       }),
@@ -475,19 +596,120 @@ router.get('/metrics', async (req, res) => {
           userType: 'empresas',
           role: 'admin'
         }
+      }),
+      // Count distinct professional users with completed profiles who have applied to ≥1 job
+      prisma.user.count({
+        where: {
+          userType: 'profesionales',
+          employee: {
+            isNot: null,
+            applications: {
+              some: {}
+            }
+          }
+        }
+      }),
+      // Jobs with 0 applications after 48h (urgent help needed)
+      prisma.jobOffer.count({
+        where: {
+          createdAt: {
+            lt: fortyEightHoursAgo
+          },
+          deletedAt: null,
+          applications: {
+            none: {}
+          }
+        }
+      }),
+      // Workers who never came back after signup (signed up but didn't create profile)
+      prisma.user.count({
+        where: {
+          userType: 'profesionales',
+          employee: {
+            is: null
+          }
+        }
       })
     ]);
 
+    // Calculate percentage of finished profiles that take action
+    const activeProfessionalsCount = activeProfessionals || 0;
+    const registeredProfessionalsCount = registeredProfessionals || 0;
+    const activeProfessionalsPercentage = registeredProfessionalsCount > 0 
+      ? Math.round((activeProfessionalsCount / registeredProfessionalsCount) * 100) 
+      : 0;
+
+    // Calculate average time metrics
+    // NOTE: Employee and Application models don't have createdAt fields in the schema
+    // We need to add createdAt to Employee and Application models for these metrics to work
+    // For now, we'll try to use raw SQL to check if the columns exist in the database
+    
+    let avgSignupToProfileDays = null;
+    let avgProfileToApplicationDays = null;
+
+    try {
+      // Metric 1: Average time from signup (User.createdAt) to profile creation (Employee.createdAt)
+      // Check if Employee table has createdAt column
+      const signupToProfileResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (e."createdAt" - u."createdAt"))) / 86400 as avg_days
+        FROM "User" u
+        INNER JOIN "Employee" e ON e."userId" = u.id
+        WHERE u."userType" = 'profesionales'
+          AND e."createdAt" IS NOT NULL
+      `;
+      
+      if (signupToProfileResult && signupToProfileResult[0]?.avg_days !== null) {
+        avgSignupToProfileDays = Math.round(parseFloat(signupToProfileResult[0].avg_days) * 10) / 10;
+      }
+    } catch (error) {
+      // Employee.createdAt field doesn't exist - need to add it via migration
+      console.warn('Employee.createdAt field does not exist. Add createdAt to Employee model for this metric.');
+    }
+
+    try {
+      // Metric 2: Average time from profile creation to first application
+      // Requires both Employee.createdAt and Application.createdAt
+      const profileToApplicationResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (
+            (SELECT MIN(a."createdAt") FROM "Application" a WHERE a."employeeId" = e.id) - e."createdAt"
+          ))) / 86400 as avg_days
+        FROM "User" u
+        INNER JOIN "Employee" e ON e."userId" = u.id
+        WHERE u."userType" = 'profesionales'
+          AND e."createdAt" IS NOT NULL
+          AND EXISTS (SELECT 1 FROM "Application" a WHERE a."employeeId" = e.id AND a."createdAt" IS NOT NULL)
+      `;
+      
+      if (profileToApplicationResult && profileToApplicationResult[0]?.avg_days !== null) {
+        avgProfileToApplicationDays = Math.round(parseFloat(profileToApplicationResult[0].avg_days) * 10) / 10;
+      }
+    } catch (error) {
+      // Employee.createdAt or Application.createdAt fields don't exist
+      console.warn('Employee.createdAt or Application.createdAt fields do not exist. Add createdAt to both models for this metric.');
+    }
+
     res.json({
       registeredCompanies: (registeredCompanies || 0) + (adminCompanyUsers || 0),
-      registeredProfessionals: (registeredProfessionals || 0) + (professionalUsers || 0),
+      // registeredProfessionals = Users with userType 'profesionales' who created Employee profile
+      registeredProfessionals: registeredProfessionalsCount,
       publishedOffers: publishedOffers || 0,
       totalApplications: totalApplications || 0,
       breakdown: {
         restaurantProfiles: registeredCompanies || 0,
         adminCompanyUsers: adminCompanyUsers || 0,
-        professionalProfiles: registeredProfessionals || 0,
-        professionalUsers: professionalUsers || 0
+        professionalProfiles: registeredProfessionalsCount,
+        professionalUsers: professionalUsers || 0,
+        // Workers: Professional users with completed profiles who applied to ≥1 job
+        activeProfessionals: activeProfessionalsCount,
+        activeProfessionalsPercentage: activeProfessionalsPercentage,
+        // Average time metrics (requires createdAt fields on Employee and Application)
+        avgSignupToProfileDays: avgSignupToProfileDays,
+        avgProfileToApplicationDays: avgProfileToApplicationDays,
+        // Urgent metrics
+        jobsWithNoApplicationsAfter48h: jobsWithNoApplicationsAfter48h || 0,
+        workersWhoNeverCameBack: workersWhoNeverCameBack || 0
       }
     });
   } catch (error) {
@@ -931,7 +1153,7 @@ router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRo
         mfaEnabled: true
       },
       orderBy: {
-        createdAt: 'desc'
+        id: 'desc' // Order by ID desc to show newest users first (IDs are auto-incrementing)
       }
     });
 
