@@ -339,9 +339,36 @@ router.get('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFr
 
 // GET /admin/total-counts - Get total counts for dashboard
 router.get('/total-counts', async (req, res) => {
+  const startTime = Date.now();
+  console.log('[METRICS] Starting /admin/total-counts request');
+  
   try {
     // Calculate 48 hours ago timestamp
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    console.log('[METRICS] 48 hours ago timestamp:', fortyEightHoursAgo.toISOString());
+
+    // Try to get jobsWithNoApplicationsAfter48h, but handle if createdAt doesn't exist yet
+    let jobsWithNoApplicationsAfter48h = 0;
+    try {
+      console.log('[METRICS] Fetching jobsWithNoApplicationsAfter48h...');
+      jobsWithNoApplicationsAfter48h = await prisma.jobOffer.count({
+        where: {
+          createdAt: {
+            lt: fortyEightHoursAgo
+          },
+          deletedAt: null,
+          applications: {
+            none: {}
+          }
+        }
+      });
+      console.log('[METRICS] jobsWithNoApplicationsAfter48h:', jobsWithNoApplicationsAfter48h);
+    } catch (error) {
+      // JobOffer.createdAt field doesn't exist yet - migration not applied
+      console.warn('[METRICS] JobOffer.createdAt field does not exist. Error:', error.message);
+      console.warn('[METRICS] Will return 0 until migration is applied.');
+      jobsWithNoApplicationsAfter48h = 0;
+    }
 
     const [
       registeredCompanies,
@@ -351,7 +378,6 @@ router.get('/total-counts', async (req, res) => {
       professionalUsers,
       adminCompanyUsers,
       activeProfessionals,
-      jobsWithNoApplicationsAfter48h,
       workersWhoNeverCameBack
     ] = await Promise.all([
       prisma.restaurant.count(),
@@ -388,18 +414,6 @@ router.get('/total-counts', async (req, res) => {
           }
         }
       }),
-      // Jobs with 0 applications after 48h (urgent help needed)
-      prisma.jobOffer.count({
-        where: {
-          createdAt: {
-            lt: fortyEightHoursAgo
-          },
-          deletedAt: null,
-          applications: {
-            none: {}
-          }
-        }
-      }),
       // Workers who never came back after signup (signed up but didn't create profile)
       prisma.user.count({
         where: {
@@ -419,10 +433,12 @@ router.get('/total-counts', async (req, res) => {
       : 0;
 
     // Calculate average time metrics (same as /metrics endpoint)
+    console.log('[METRICS] Calculating average time metrics...');
     let avgSignupToProfileDays = null;
     let avgProfileToApplicationDays = null;
 
     try {
+      console.log('[METRICS] Fetching avgSignupToProfileDays...');
       const signupToProfileResult = await prisma.$queryRaw`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (e."createdAt" - u."createdAt"))) / 86400 as avg_days
@@ -434,12 +450,17 @@ router.get('/total-counts', async (req, res) => {
       
       if (signupToProfileResult && signupToProfileResult[0]?.avg_days !== null) {
         avgSignupToProfileDays = Math.round(parseFloat(signupToProfileResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgSignupToProfileDays:', avgSignupToProfileDays);
+      } else {
+        console.log('[METRICS] avgSignupToProfileDays: No data available (null result)');
       }
     } catch (error) {
-      console.warn('Employee.createdAt field does not exist. Add createdAt to Employee model for this metric.');
+      console.warn('[METRICS] Employee.createdAt field does not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to Employee model for this metric.');
     }
 
     try {
+      console.log('[METRICS] Fetching avgProfileToApplicationDays...');
       const profileToApplicationResult = await prisma.$queryRaw`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (
@@ -454,9 +475,13 @@ router.get('/total-counts', async (req, res) => {
       
       if (profileToApplicationResult && profileToApplicationResult[0]?.avg_days !== null) {
         avgProfileToApplicationDays = Math.round(parseFloat(profileToApplicationResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgProfileToApplicationDays:', avgProfileToApplicationDays);
+      } else {
+        console.log('[METRICS] avgProfileToApplicationDays: No data available (null result)');
       }
     } catch (error) {
-      console.warn('Employee.createdAt or Application.createdAt fields do not exist. Add createdAt to both models for this metric.');
+      console.warn('[METRICS] Employee.createdAt or Application.createdAt fields do not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to both models for this metric.');
     }
 
     const totalCounts = {
@@ -482,12 +507,20 @@ router.get('/total-counts', async (req, res) => {
       }
     };
 
+    const executionTime = Date.now() - startTime;
+    console.log('[METRICS] Calculated activeProfessionalsPercentage:', activeProfessionalsPercentage + '%');
+    console.log('[METRICS] Total execution time:', executionTime + 'ms');
+    console.log('[METRICS] Successfully returning total counts');
+
     res.status(200).json({ 
       success: true,
       data: totalCounts 
     });
   } catch (error) {
-    console.error('Error fetching total counts:', error);
+    const executionTime = Date.now() - startTime;
+    console.error('[METRICS] Error fetching total counts after', executionTime + 'ms');
+    console.error('[METRICS] Error details:', error);
+    console.error('[METRICS] Error stack:', error.stack);
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -497,10 +530,38 @@ router.get('/total-counts', async (req, res) => {
 
 // GET /admin/metrics - Legacy endpoint for compatibility
 router.get('/metrics', async (req, res) => {
+  const startTime = Date.now();
+  console.log('[METRICS] Starting /admin/metrics request');
+  
   try {
     // Calculate 48 hours ago timestamp
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    console.log('[METRICS] 48 hours ago timestamp:', fortyEightHoursAgo.toISOString());
 
+    // Try to get jobsWithNoApplicationsAfter48h, but handle if createdAt doesn't exist yet
+    let jobsWithNoApplicationsAfter48h = 0;
+    try {
+      console.log('[METRICS] Fetching jobsWithNoApplicationsAfter48h...');
+      jobsWithNoApplicationsAfter48h = await prisma.jobOffer.count({
+        where: {
+          createdAt: {
+            lt: fortyEightHoursAgo
+          },
+          deletedAt: null,
+          applications: {
+            none: {}
+          }
+        }
+      });
+      console.log('[METRICS] jobsWithNoApplicationsAfter48h:', jobsWithNoApplicationsAfter48h);
+    } catch (error) {
+      // JobOffer.createdAt field doesn't exist yet - migration not applied
+      console.warn('[METRICS] JobOffer.createdAt field does not exist. Error:', error.message);
+      console.warn('[METRICS] Will return 0 until migration is applied.');
+      jobsWithNoApplicationsAfter48h = 0;
+    }
+
+    console.log('[METRICS] Fetching main metrics in parallel...');
     const [
       registeredCompanies,
       registeredProfessionals,
@@ -509,7 +570,6 @@ router.get('/metrics', async (req, res) => {
       professionalUsers,
       adminCompanyUsers,
       activeProfessionals,
-      jobsWithNoApplicationsAfter48h,
       workersWhoNeverCameBack
     ] = await Promise.all([
       prisma.restaurant.count(),
@@ -546,18 +606,6 @@ router.get('/metrics', async (req, res) => {
           }
         }
       }),
-      // Jobs with 0 applications after 48h (urgent help needed)
-      prisma.jobOffer.count({
-        where: {
-          createdAt: {
-            lt: fortyEightHoursAgo
-          },
-          deletedAt: null,
-          applications: {
-            none: {}
-          }
-        }
-      }),
       // Workers who never came back after signup (signed up but didn't create profile)
       prisma.user.count({
         where: {
@@ -569,6 +617,16 @@ router.get('/metrics', async (req, res) => {
       })
     ]);
 
+    console.log('[METRICS] Main metrics fetched:');
+    console.log('[METRICS]   - registeredCompanies:', registeredCompanies);
+    console.log('[METRICS]   - registeredProfessionals:', registeredProfessionals);
+    console.log('[METRICS]   - publishedOffers:', publishedOffers);
+    console.log('[METRICS]   - totalApplications:', totalApplications);
+    console.log('[METRICS]   - professionalUsers:', professionalUsers);
+    console.log('[METRICS]   - adminCompanyUsers:', adminCompanyUsers);
+    console.log('[METRICS]   - activeProfessionals:', activeProfessionals);
+    console.log('[METRICS]   - workersWhoNeverCameBack:', workersWhoNeverCameBack);
+
     // Calculate percentage of finished profiles that take action
     const activeProfessionalsCount = activeProfessionals || 0;
     const registeredProfessionalsCount = registeredProfessionals || 0;
@@ -576,11 +634,12 @@ router.get('/metrics', async (req, res) => {
       ? Math.round((activeProfessionalsCount / registeredProfessionalsCount) * 100) 
       : 0;
 
+    console.log('[METRICS] Calculating average time metrics...');
     let avgSignupToProfileDays = null;
     let avgProfileToApplicationDays = null;
 
     try {
-     
+      console.log('[METRICS] Fetching avgSignupToProfileDays...');
       const signupToProfileResult = await prisma.$queryRaw`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (e."createdAt" - u."createdAt"))) / 86400 as avg_days
@@ -592,14 +651,18 @@ router.get('/metrics', async (req, res) => {
       
       if (signupToProfileResult && signupToProfileResult[0]?.avg_days !== null) {
         avgSignupToProfileDays = Math.round(parseFloat(signupToProfileResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgSignupToProfileDays:', avgSignupToProfileDays);
+      } else {
+        console.log('[METRICS] avgSignupToProfileDays: No data available (null result)');
       }
     } catch (error) {
       // Employee.createdAt field doesn't exist - need to add it via migration
-      console.warn('Employee.createdAt field does not exist. Add createdAt to Employee model for this metric.');
+      console.warn('[METRICS] Employee.createdAt field does not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to Employee model for this metric.');
     }
 
     try {
-
+      console.log('[METRICS] Fetching avgProfileToApplicationDays...');
       const profileToApplicationResult = await prisma.$queryRaw`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (
@@ -614,11 +677,20 @@ router.get('/metrics', async (req, res) => {
       
       if (profileToApplicationResult && profileToApplicationResult[0]?.avg_days !== null) {
         avgProfileToApplicationDays = Math.round(parseFloat(profileToApplicationResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgProfileToApplicationDays:', avgProfileToApplicationDays);
+      } else {
+        console.log('[METRICS] avgProfileToApplicationDays: No data available (null result)');
       }
     } catch (error) {
       // Employee.createdAt or Application.createdAt fields don't exist
-      console.warn('Employee.createdAt or Application.createdAt fields do not exist. Add createdAt to both models for this metric.');
+      console.warn('[METRICS] Employee.createdAt or Application.createdAt fields do not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to both models for this metric.');
     }
+
+    const executionTime = Date.now() - startTime;
+    console.log('[METRICS] Calculated activeProfessionalsPercentage:', activeProfessionalsPercentage + '%');
+    console.log('[METRICS] Total execution time:', executionTime + 'ms');
+    console.log('[METRICS] Successfully returning metrics');
 
     res.json({
       registeredCompanies: (registeredCompanies || 0) + (adminCompanyUsers || 0),
@@ -643,7 +715,10 @@ router.get('/metrics', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching metrics:', error);
+    const executionTime = Date.now() - startTime;
+    console.error('[METRICS] Error fetching metrics after', executionTime + 'ms');
+    console.error('[METRICS] Error details:', error);
+    console.error('[METRICS] Error stack:', error.stack);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
