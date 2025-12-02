@@ -49,26 +49,14 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
       endDate
     } = req.body;
 
-    // Use restaurantId from request body if provided (for holding companies), otherwise use from middleware
     const restaurantId = requestRestaurantId || req.restaurantId;
     const restaurantUserId = req.restaurantUserId;
 
-    console.log('this is the locationId', locationId);
-    console.log('this is the restaurantId', restaurantId);
-
-    // Allow null for "no especificado" and -1 for "todas las sucursales"
-    // locationId can be null, -1, or a positive integer
     if (locationId !== null && locationId !== -1 && (!locationId || locationId <= 0)) {
       return res.status(400).json({
         success: false,
         message: 'locationId must be a valid location ID, -1 (todas las sucursales), or null (no especificado)',
       });
-    }
-
-    // For now, allow all users to have access to all restaurants
-    // TODO: Implement proper restaurant access control later
-    if (requestRestaurantId) {
-      console.log(`✅ Allowing access to restaurant ${requestRestaurantId} for user ${req.userId}`);
     }
 
     const jobOffer = await createJobOffer({
@@ -91,8 +79,6 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
     });
 
     const jobOfferCheck = await getJobOfferWithLocation(jobOffer.id);
-
-    console.log('this is the job offer', jobOfferCheck);
 
     res.status(201).json({
       success: true,
@@ -147,18 +133,15 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
 // GET /jobs/top-rated-jobs-carousel - Get top rated jobs
 router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
   try {
-    const { limit = 4 } = req.query; // Default limit of 4 jobs
+    const { limit = 4 } = req.query; 
     const userId = req.userId;
     const userType = req.userType;
-    const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 60)); // Extended to 60 days
-
-    console.log('🔍 /jobs/top-rated-jobs-carousel called with:', { limit, userId, userType, finishedDateParsed });
+    const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 60)); 
 
     let formattedJobs;
 
     formattedJobs = await fetchTopRatedJobs(limit, finishedDateParsed);
     
-    // Convert restaurant image URLs to actual signed URLs for each job
     const jobsWithSignedUrls = await Promise.all(
       formattedJobs.map(async (job) => {
         const updatedJob = { ...job };
@@ -169,8 +152,6 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
       })
     );
     
-    console.log('🔍 Returning formatted jobs:', jobsWithSignedUrls.length);
-
     res.json({
       success: true,
       data: jobsWithSignedUrls, // Use consistent 'data' property
@@ -424,19 +405,12 @@ router.get('/jobs/:jobId', async (req, res) => {
 
     const jobOffer = await getJobOfferById(jobId);
 
-    console.log('🔍 [GET /jobs/:jobId] Raw job offer from DB:', jobOffer);
-    console.log('🔍 [GET /jobs/:jobId] Restaurant:', jobOffer?.restaurant);
-    console.log('🔍 [GET /jobs/:jobId] Restaurant benefits:', jobOffer?.restaurant?.benefits);
-    console.log('🔍 [GET /jobs/:jobId] Benefits type:', typeof jobOffer?.restaurant?.benefits);
-    console.log('🔍 [GET /jobs/:jobId] Is benefits array?', Array.isArray(jobOffer?.restaurant?.benefits));
-
     if (jobOffer) {
       // Convert image keys to actual signed URLs for the job's restaurant
       const convertedJob = { ...jobOffer };
       if (jobOffer.restaurant) {
         convertedJob.restaurant = await convertImageUrls(jobOffer.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        console.log('🔍 [GET /jobs/:jobId] After image conversion - Restaurant benefits:', convertedJob.restaurant?.benefits);
-      }
+        console.log('🔍 [GET /jobs/:jobId] After image conversion - Restaurant benefits:', convertedJob.restaurant?.benefits)      }
       
       const responseData = {
         success: true,

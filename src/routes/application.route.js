@@ -133,10 +133,7 @@ router.get('/applications/:applicationId', async (req, res) => {
       data: applicationWithSignedUrls 
     });
   } catch (error) {
-    console.error('🚨 Error in GET /applications/:applicationId:', {
-      error: error.message,
-      stack: error.stack
-    });
+    
     res.status(500).json({ 
       success: false,
       message: 'Error interno del servidor' 
@@ -171,13 +168,9 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
       });
     }
 
-    console.log('🔍 [Job Applicants API] Fetching applicants for jobOfferId:', parsedJobOfferId, 'restaurantId:', restaurantId);
-    console.log('🔍 [Job Applicants API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
-
     // Check if job offer exists and belongs to restaurant
     const jobOffer = await getJobOfferForRestaurant(parsedJobOfferId, restaurantId);
     if (!jobOffer) {
-      console.log('🔍 [Job Applicants API] Job offer not found or does not belong to restaurant');
       return res.status(404).json({ 
         success: false,
         message: 'Oferta de trabajo no encontrada o no tienes permiso para ver los postulantes.' 
@@ -186,8 +179,6 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
 
     // Get applications for this job offer
     const applications = await getApplicationsForJobOffer(parsedJobOfferId);
-
-    console.log('🔍 [Job Applicants API] Found applications:', applications.length);
 
     // Convert employee profile image URLs to actual signed URLs
     const applicationsWithSignedUrls = await Promise.all(

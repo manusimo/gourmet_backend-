@@ -38,18 +38,10 @@ const router = express.Router();
 // GET /chat-token - Generate chat socket token
 router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
   try {
-    console.log('🔍 chat-token: Request received', {
-      userId: req.userId,
-      userType: req.userType,
-      userAgent: req.get('User-Agent'),
-      ip: req.ip,
-      timestamp: new Date().toISOString()
-    });
     
     const { userId, userType } = req;
     
     if (!userId) {
-      console.log('❌ chat-token: No user ID found');
       return res.status(401).json({
         success: false,
         message: 'Authentication required'
@@ -72,20 +64,12 @@ router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
       }
     );
 
-    console.log('✅ chat-token: Generated token for user:', {
-      userId,
-      userType,
-      tokenLength: chatToken.length,
-      timestamp: new Date().toISOString()
-    });
-    
     res.json({
       success: true,
       token: chatToken
     });
     
   } catch (error) {
-    console.error('Error generating chat token:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -125,17 +109,7 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
     const { conversationId } = req.params;
     const { userId } = req;
 
-    console.log('🔍 Messages endpoint called with:', { 
-      conversationId, 
-      userId,
-      userType: req.userType,
-      userAgent: req.get('User-Agent'),
-      ip: req.ip,
-      timestamp: new Date().toISOString()
-    });
-
     if (!userId) {
-      console.log('Unauthorized access: No valid user ID found');
       return res.status(403).json({ 
         success: false,
         error: 'Unauthorized access. User ID not found.' 
@@ -151,9 +125,6 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
       });
     }
 
-  
-
-    // Simplified access control for now - allow access if user has sent messages
     let hasAccess = false;
     
     try { 
@@ -172,9 +143,9 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
         const restaurantUser = await prisma.restaurantUser.findFirst({
           where: { userId: parseInt(userId) }
         });
+
         if (restaurantUser && restaurantUser.id === conversation.restaurantUserId) {
           hasAccess = true;
-          console.log('✅ User is restaurant user in conversation');
         }
       }
       
@@ -206,8 +177,6 @@ router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUs
         }
       }
     } catch (accessError) {
-      console.error('❌ Error in access control:', accessError);
-      // For now, grant access on error to avoid blocking users
       hasAccess = true;
     }
 
@@ -262,11 +231,6 @@ router.post('/send-message', async (req, res) => {
     });
 
     try {
-      
-      // Get sender and receiver details for notification
-      // Note: senderUserId and receiverUserId might be RestaurantUser.id, Employee.id, or User.id (for admin users)
-      // We need to find the actual User.id for notifications
-      // Use senderType and receiverType to determine the correct lookup
       
       let sender, receiver;
       
@@ -349,8 +313,6 @@ router.post('/send-message', async (req, res) => {
       } 
     } catch (notificationError) {
       console.error('❌ Failed to process message notifications:', notificationError);
-      console.error('❌ Notification error stack:', notificationError.stack);
-      // Don't fail the message sending if notifications fail
     }
 
     res.status(200).json({ 
@@ -374,8 +336,6 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
     const { jobPostId } = req.query; // Get jobPostId from query parameters
     const restaurantUserId = req.restaurantUserId;
     
-    console.log('checking the existence of the conversation in the backend', employeeId, restaurantUserId, type, jobPostId);
-
     if (!restaurantUserId) {
       return res.status(400).json({ 
         success: false,
@@ -390,15 +350,11 @@ router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantU
     }
 
     if (type === 'application') {
-      console.log('check the application conversation');
-      // If jobPostId is provided, check for conversation with that specific job post
+      
       if (jobPostId) {
         conversation = await findConversationByJobPost(employeeId, parseInt(jobPostId), restaurantUserId, 'applicant');
-        console.log('Found conversation for specific job post:', conversation);
       } else {
-        // Fallback to old behavior (check any conversation with this employee)
         conversation = await checkApplicationConversation(employeeId, restaurantUserId);
-        console.log('this is the conversation', conversation);
       }
     }
 
@@ -432,21 +388,8 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
     const userId = req.userId;
     let restaurantUserId;
 
-    console.log('🔍 create-conversation - Request data:', {
-      employeeId,
-      jobPostId,
-      talentPoolId,
-      type,
-      userId,
-      restaurantId,
-      requestBody: req.body
-    });
-
-    // Determine the correct restaurantUserId based on restaurantId parameter or fallback to JWT
     if (restaurantId) {
-      console.log('🔍 Using restaurantId from request:', restaurantId);
-      
-      // Find or create RestaurantUser record for the specified restaurant
+     
       const restaurantUser = await prisma.restaurantUser.findFirst({
         where: {
           userId: userId,
@@ -456,7 +399,6 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
       
       if (restaurantUser) {
         restaurantUserId = restaurantUser.id;
-        console.log('✅ Found existing restaurantUserId:', restaurantUserId);
       } else {
         // Create RestaurantUser record for this restaurant
         const newRestaurantUser = await prisma.restaurantUser.create({
@@ -467,7 +409,6 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
           }
         });
         restaurantUserId = newRestaurantUser.id;
-        console.log('✅ Created new restaurantUserId:', restaurantUserId);
       }
     } else {
       // No restaurantId provided - this should not happen in the new multi-restaurant system
@@ -500,13 +441,6 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
 
     // Create new conversation if none exists
     if (!conversation) {
-      console.log('🔍 Creating new conversation with:', {
-        employeeId: parsedEmployeeId,
-        jobPostId,
-        talentPoolId,
-        restaurantUserId,
-        type
-      });
       
       conversation = await createConversation({
         employeeId: parsedEmployeeId,
@@ -517,10 +451,7 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
         type
       });
       
-      console.log('✅ Created conversation:', conversation.id);
-    } else {
-      console.log('✅ Found existing conversation:', conversation.id);
-    }
+    } 
 
     res.status(200).json({ 
       success: true,
@@ -528,7 +459,6 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
       data: conversation 
     });
   } catch (error) {
-    console.error('Error creating/ensuring conversation:', error);
     res.status(500).json({ 
       success: false,
       error: 'Failed to create/ensure conversation.' 
@@ -557,15 +487,6 @@ router.post('/contact-recommended-candidate', checkCompany, getUserIdFromCookie,
       });
     }
 
-    console.log('💬 [Contact Recommended] Creating conversation with recommended candidate:', {
-      employeeId,
-      jobPostId,
-      restaurantId,
-      restaurantUserId,
-      userId
-    });
-
-    // Check if conversation already exists
     let conversation = null;
     if (jobPostId) {
       conversation = await findConversationByJobPost(
@@ -588,10 +509,7 @@ router.post('/contact-recommended-candidate', checkCompany, getUserIdFromCookie,
         type: jobPostId ? 'applicant' : 'talent' // Use applicant if job exists, otherwise talent
       });
 
-      console.log('✅ [Contact Recommended] Created conversation:', conversation.id);
-    } else {
-      console.log('✅ [Contact Recommended] Found existing conversation:', conversation.id);
-    }
+    } 
 
     res.status(200).json({ 
       success: true,
@@ -603,7 +521,6 @@ router.post('/contact-recommended-candidate', checkCompany, getUserIdFromCookie,
       }
     });
   } catch (error) {
-    console.error('❌ [Contact Recommended] Error creating conversation:', error);
     res.status(500).json({ 
       success: false,
       error: 'Failed to create conversation with candidate.' 
@@ -636,9 +553,7 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
 router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
   try {
     const { type, restaurantId } = req.query;
-    
-    console.log('🔍 [Conversations API] Fetching conversations with params:', { type, restaurantId });
-
+  
     if (req.employeeId) {
       const employeeConversations = await getEmployeeConversations(req.employeeId, type);
       
@@ -666,7 +581,6 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
 
     if (req.restaurantUserId) {
       const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, type, restaurantId);
-      console.log('🔍 [Conversations API] Found conversations:', restaurantConversations.length);
       
       // Convert employee image URLs to actual signed URLs in conversations
       const conversationsWithSignedUrls = await Promise.all(
@@ -690,7 +604,6 @@ router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
       });
     }
 
-    console.log('No valid user type found in the request. Unable to fetch conversations.');
     return res.status(400).json({ 
       success: false,
       message: 'Invalid user type or ID' 
@@ -713,13 +626,8 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
     const userType = req.userType;
     const role = req.role;
 
-    console.log('🗑️ Delete conversation request:', { conversationId, userId, userType, role });
-
-    // For admin/staff users, we need to check if they have access to this conversation
     if (userType === 'empresas' && (role === 'admin' || role === 'staff')) {
-      console.log('🗑️ Admin/Staff user detected, checking conversation access');
       
-      // Find the conversation to check if user has access
       const conversation = await prisma.conversation.findUnique({
         where: { id: parseInt(conversationId) },
         include: {
@@ -753,7 +661,6 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
         });
       }
 
-      console.log('🗑️ Admin/Staff user has access, proceeding with deletion');
     } else {
       // For regular users, use the existing logic
     const employeeId = req.employeeId;
@@ -777,8 +684,7 @@ router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, as
     }
 
     const conversationDeleted = await deleteConversation(conversationId);
-    console.log('conversation deleted', conversationDeleted);
-
+    
     res.status(200).json({ 
       success: true,
       message: 'Conversation deleted successfully.' 

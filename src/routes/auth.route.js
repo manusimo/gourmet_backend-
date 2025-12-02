@@ -60,30 +60,15 @@ router.use(enhancedSecurityMiddleware);
 // POST /signup - User registration with enhanced validation
 router.post('/signup', validateSignup, async (req, res) => {
   try {
-    console.log('🔐 [POST /signup] Signup request received');
-    console.log('🔐 [POST /signup] Request body:', {
-      email: req.body.email,
-      userType: req.body.userType,
-      name: req.body.name,
-      hasPassword: !!req.body.password,
-      passwordLength: req.body.password?.length,
-      hasPasswordConfirmation: !!req.body.passwordConfirmation,
-      phoneNumber: req.body.phoneNumber
-    });
-    
     const { email, password, userType } = req.body;
     const userEmail = email.toLowerCase();
-    console.log('🔐 [POST /signup] Processing signup for email:', userEmail);
-
-    // Check if user already exists with error handling
+   
     let existingUser;
     try {
       existingUser = await prisma.user.findUnique({
         where: { email: userEmail }
       });
     } catch (dbError) {
-      console.error('❌ [POST /signup] Database error checking existing user:', dbError.message);
-      console.error('❌ [POST /signup] Full error:', dbError);
       return res.status(500).json({
         success: false,
         message: 'Error de conexión con la base de datos. Por favor, intenta nuevamente en unos momentos.'
@@ -91,7 +76,6 @@ router.post('/signup', validateSignup, async (req, res) => {
     }
 
     if (existingUser) {
-      console.log('❌ [POST /signup] User already exists:', userEmail);
       return res.status(409).json({
         success: false,
         message: 'Este email ya está registrado. Por favor, inicia sesión o utiliza otro email.',
@@ -99,20 +83,14 @@ router.post('/signup', validateSignup, async (req, res) => {
       });
     }
 
-    console.log('✅ [POST /signup] Email available, proceeding with registration');
-
     // Automatically assign role based on userType
     let role = 'admin'; // default role
-    console.log('🔐 [POST /signup] Assigning role:', role, 'for userType:', userType);
-
+  
     // Hash password with error handling
     let hashedPassword;
     try {
-      console.log('🔐 [POST /signup] Hashing password...');
       hashedPassword = await bcrypt.hash(password, 12);
-      console.log('✅ [POST /signup] Password hashed successfully');
     } catch (hashError) {
-      console.error('❌ [POST /signup] Error hashing password:', hashError.message);
       return res.status(500).json({
         success: false,
         message: 'Error al procesar tu contraseña. Por favor, intenta nuevamente.'
@@ -122,7 +100,6 @@ router.post('/signup', validateSignup, async (req, res) => {
     // Create user with enhanced security defaults
     let newUser;
     try {
-      console.log('🔐 [POST /signup] Creating user in database...');
       newUser = await prisma.user.create({
         data: {
           email: userEmail,
@@ -151,10 +128,7 @@ router.post('/signup', validateSignup, async (req, res) => {
           mfaEnabled: false
         }
       });
-      console.log(`✅ [POST /signup] User created successfully: ${newUser.email} (${newUser.userType}) with role: ${newUser.role}`);
     } catch (createError) {
-      console.error('❌ [POST /signup] Error creating user:', createError.message);
-      console.error('❌ [POST /signup] Full error:', createError);
       
       if (createError.code === 'P2002') {
         return res.status(409).json({
@@ -174,17 +148,15 @@ router.post('/signup', validateSignup, async (req, res) => {
     let restaurantId = null;
     if (newUser.userType === 'empresas') {
       try {
-        console.log('🏢 [POST /signup] Checking for restaurant for company user:', newUser.email);
         const restaurant = await prisma.restaurant.findFirst({
           where: { userId: newUser.id },
           select: { id: true }
         });
+
         if (restaurant) {
           restaurantId = restaurant.id;
-          console.log(`✅ [POST /signup] Found restaurant for new user ${newUser.email}:`, restaurantId);
-        } else {
-          console.log(`⚠️ [POST /signup] No restaurant found for new user ${newUser.email}`);
-        }
+        } 
+
       } catch (restaurantError) {
         console.error('⚠️ [POST /signup] Error fetching restaurant data:', restaurantError.message);
         // Continue with signup even if restaurant lookup fails
@@ -195,14 +167,12 @@ router.post('/signup', validateSignup, async (req, res) => {
     let token;
     try {
       if (!process.env.JWT_SECRET) {
-        console.error('❌ [POST /signup] JWT_SECRET not configured');
         return res.status(500).json({
           success: false,
           message: 'Error en la configuración del servidor. Por favor, contacta al soporte.'
         });
       }
       
-      console.log('🔐 [POST /signup] Generating JWT token...');
       token = jwt.sign(
         {
           userId: newUser.id,
@@ -214,28 +184,23 @@ router.post('/signup', validateSignup, async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
-      console.log('✅ [POST /signup] JWT token generated successfully');
+  
     } catch (tokenError) {
-      console.error('❌ [POST /signup] Error generating JWT token:', tokenError.message);
       return res.status(500).json({
         success: false,
         message: 'Error al generar el token de autenticación. Por favor, intenta nuevamente.'
       });
     }
 
-    // Set secure authentication cookie (subdomain support)
     try {
-      console.log('🔐 [POST /signup] Setting secure authentication cookie...');
       setSecureAuthCookie(res, token, {
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       });
-      console.log('✅ [POST /signup] Authentication cookie set successfully');
     } catch (cookieError) {
       console.error('⚠️ [POST /signup] Error setting cookie:', cookieError.message);
       // Continue with response even if cookie setting fails
     }
 
-    console.log('✅ [POST /signup] Signup completed successfully for:', newUser.email);
     res.status(201).json({
       success: true,
       message: '¡Cuenta creada exitosamente! Bienvenido a GourmetJobs.',
@@ -247,10 +212,7 @@ router.post('/signup', validateSignup, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ [POST /signup] Unexpected signup error:', error.message);
-    console.error('❌ [POST /signup] Full error:', error);
-    console.error('❌ [POST /signup] Error stack:', error.stack);
-
+   
     if (error.code === 'P2002') {
       return res.status(409).json({
         success: false,
@@ -270,12 +232,10 @@ router.post('/signup', validateSignup, async (req, res) => {
 // POST /signin - User login with enhanced validation and security
 router.post('/signin', validateSignin, async (req, res) => {
   try {
-    console.log('🔐 [Signin] Login attempt started');
     const { email, password, mfaToken } = req.body;
     
     // Validate required fields
     if (!email || !password) {
-      console.error('❌ [Signin] Missing required fields:', { hasEmail: !!email, hasPassword: !!password });
       return res.status(400).json({
         success: false,
         message: 'Email y contraseña son requeridos'
@@ -283,9 +243,7 @@ router.post('/signin', validateSignin, async (req, res) => {
     }
 
     const userEmail = email.toLowerCase();
-    console.log('🔐 [Signin] Attempting login for email:', userEmail);
-
-    // Find user with error handling
+  
     let user;
     try {
       user = await prisma.user.findUnique({
@@ -306,8 +264,6 @@ router.post('/signin', validateSignin, async (req, res) => {
         }
       });
     } catch (dbError) {
-      console.error('❌ [Signin] Database error finding user:', dbError.message);
-      console.error('❌ [Signin] Full error:', dbError);
       return res.status(500).json({
         success: false,
         message: 'Error de conexión con la base de datos. Por favor, intenta nuevamente en unos momentos.'
@@ -315,14 +271,11 @@ router.post('/signin', validateSignin, async (req, res) => {
     }
 
     if (!user) {
-      console.log('❌ [Signin] User not found:', userEmail);
       return res.status(401).json({
         success: false,
         message: 'El usuario no existe. Verifica tu email e intenta nuevamente.'
       });
     }
-
-    console.log('✅ [Signin] User found:', { id: user.id, email: user.email, userType: user.userType });
 
     // Check account lockout
     let lockoutStatus;
@@ -334,7 +287,6 @@ router.post('/signin', validateSignin, async (req, res) => {
     }
 
     if (lockoutStatus) {
-      console.log('⚠️ [Signin] Account locked for user:', userEmail, lockoutStatus);
       return res.status(423).json({
         success: false,
         message: `Cuenta temporalmente bloqueada debido a múltiples intentos fallidos`,
@@ -349,7 +301,6 @@ router.post('/signin', validateSignin, async (req, res) => {
     let isPasswordValid = false;
     try {
       if (!user.password) {
-        console.error('❌ [Signin] User has no password hash:', user.id);
         return res.status(500).json({
           success: false,
           message: 'Error en la configuración de tu cuenta. Por favor, contacta al soporte.'
@@ -357,7 +308,6 @@ router.post('/signin', validateSignin, async (req, res) => {
       }
       isPasswordValid = await bcrypt.compare(password, user.password);
     } catch (bcryptError) {
-      console.error('❌ [Signin] Error comparing password:', bcryptError.message);
       return res.status(500).json({
         success: false,
         message: 'Error al verificar tu contraseña. Por favor, intenta nuevamente.'
@@ -365,11 +315,8 @@ router.post('/signin', validateSignin, async (req, res) => {
     }
 
     if (!isPasswordValid) {
-      console.log('❌ [Signin] Invalid password for user:', userEmail);
-      // Record failed attempt with error handling
       try {
         const lockoutData = recordFailedAttempt(user.id);
-        console.log('⚠️ [Signin] Failed attempt recorded:', { attempts: lockoutData.attempts });
       } catch (recordError) {
         console.error('❌ [Signin] Error recording failed attempt:', recordError.message);
       }
@@ -383,13 +330,9 @@ router.post('/signin', validateSignin, async (req, res) => {
       });
     }
 
-    console.log('✅ [Signin] Password verified for user:', userEmail);
-
     // If MFA is enabled, verify MFA token
     if (user.mfaEnabled) {
-      console.log('🔐 [Signin] MFA enabled for user:', userEmail);
       if (!mfaToken) {
-        console.log('❌ [Signin] MFA token missing for user:', userEmail);
         return res.status(403).json({
           success: false,
           message: 'Autenticación de dos factores requerida',
@@ -400,7 +343,6 @@ router.post('/signin', validateSignin, async (req, res) => {
       let isMFAValid = false;
       try {
         if (!user.mfaSecret) {
-          console.error('❌ [Signin] MFA enabled but no secret found for user:', user.id);
           return res.status(500).json({
             success: false,
             message: 'Error en la configuración de tu cuenta. Por favor, contacta al soporte.'
@@ -408,7 +350,6 @@ router.post('/signin', validateSignin, async (req, res) => {
         }
         isMFAValid = verifyMFAToken(user.mfaSecret, mfaToken);
       } catch (mfaError) {
-        console.error('❌ [Signin] Error verifying MFA token:', mfaError.message);
         return res.status(500).json({
           success: false,
           message: 'Error al verificar el código de autenticación. Por favor, intenta nuevamente.'
@@ -416,8 +357,6 @@ router.post('/signin', validateSignin, async (req, res) => {
       }
 
       if (!isMFAValid) {
-        console.log('❌ [Signin] Invalid MFA token for user:', userEmail);
-        // Record failed attempt for invalid MFA
         try {
           recordFailedAttempt(user.id);
         } catch (recordError) {
@@ -429,16 +368,13 @@ router.post('/signin', validateSignin, async (req, res) => {
           message: 'Código de autenticación inválido'
         });
       }
-      console.log('✅ [Signin] MFA token verified for user:', userEmail);
     }
 
     // Reset account lockout on successful login
     try {
       resetAccountLockout(user.id);
-      console.log('✅ [Signin] Account lockout reset for user:', userEmail);
     } catch (resetError) {
       console.error('⚠️ [Signin] Error resetting account lockout:', resetError.message);
-      // Continue with login even if reset fails
     }
 
     // Update last login with error handling
@@ -447,10 +383,8 @@ router.post('/signin', validateSignin, async (req, res) => {
         where: { id: user.id },
         data: { lastLoginAt: new Date() }
       });
-      console.log('✅ [Signin] Last login updated for user:', userEmail);
     } catch (updateError) {
       console.error('⚠️ [Signin] Error updating last login:', updateError.message);
-      // Continue with login even if update fails
     }
 
     // Check if user has a restaurant (for company users)
@@ -467,7 +401,6 @@ router.post('/signin', validateSignin, async (req, res) => {
         if (restaurantUser) {
           restaurantId = restaurantUser.restaurantId;
           restaurantUserId = restaurantUser.id;
-          console.log(`🏢 [Signin] Found restaurant for user ${user.email}:`, { restaurantId, restaurantUserId });
         } else {
           // Fallback: try to find restaurant directly (for admin users)
           const restaurant = await prisma.restaurant.findFirst({
@@ -476,10 +409,7 @@ router.post('/signin', validateSignin, async (req, res) => {
           });
           if (restaurant) {
             restaurantId = restaurant.id;
-            console.log(`🏢 [Signin] Found restaurant for admin user ${user.email}:`, restaurantId);
-          } else {
-            console.log(`⚠️ [Signin] No restaurant found for user ${user.email}`);
-          }
+          } 
         }
       } catch (restaurantError) {
         console.error('⚠️ [Signin] Error fetching restaurant data:', restaurantError.message);
@@ -491,7 +421,6 @@ router.post('/signin', validateSignin, async (req, res) => {
     let token;
     try {
       if (!process.env.JWT_SECRET) {
-        console.error('❌ [Signin] JWT_SECRET not configured');
         return res.status(500).json({
           success: false,
           message: 'Error en la configuración del servidor. Por favor, contacta al soporte.'
@@ -510,9 +439,7 @@ router.post('/signin', validateSignin, async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-      console.log('✅ [Signin] JWT token generated for user:', userEmail);
     } catch (jwtError) {
-      console.error('❌ [Signin] Error generating JWT token:', jwtError.message);
       return res.status(500).json({
         success: false,
         message: 'Error al generar el token de acceso. Por favor, intenta nuevamente.'
@@ -524,13 +451,9 @@ router.post('/signin', validateSignin, async (req, res) => {
       setSecureAuthCookie(res, token, {
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       });
-      console.log('✅ [Signin] Authentication cookie set for user:', userEmail);
     } catch (cookieError) {
       console.error('⚠️ [Signin] Error setting cookie:', cookieError.message);
-      // Continue even if cookie fails - token is in response body
     }
-
-    console.log(`✅ [Signin] User login successful: ${user.email}`);
 
     res.status(200).json({
       success: true,
@@ -552,10 +475,6 @@ router.post('/signin', validateSignin, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ [Signin] Unexpected error:', error.message);
-    console.error('❌ [Signin] Error stack:', error.stack);
-    console.error('❌ [Signin] Request body:', { email: req.body?.email ? 'provided' : 'missing' });
-    
     res.status(500).json({
       success: false,
       message: 'Ocurrió un error inesperado durante el inicio de sesión. Por favor, intenta nuevamente más tarde.',
@@ -701,8 +620,6 @@ router.post('/mfa/verify', validateTokenAndIdentifyUser, async (req, res) => {
       data: { mfaEnabled: false }
     });
 
-    console.log(`✅ MFA enabled for user ${userId}`);
-
     res.status(200).json({
       success: true,
       message: 'MFA enabled successfully',
@@ -713,7 +630,6 @@ router.post('/mfa/verify', validateTokenAndIdentifyUser, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('MFA verification error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to verify MFA'
@@ -805,16 +721,14 @@ router.post('/mfa/disable', validateTokenAndIdentifyUser, async (req, res) => {
 // POST /logout - Enhanced logout with token blacklisting
 router.post('/logout', async (req, res) => {
   try {
-    console.log('🚪 Logout request received');
-    
-    // Get token from cookie instead of Authorization header
+  
+      // Get token from cookie instead of Authorization header
     const token = req.cookies.manu;
     
     if (token) {
       try {
         // Verify and decode token to get userId
         const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-        console.log(`✅ User logout: ${decodedToken.userId}`);
         
         // Add token to blacklist
         invalidateToken(token);
@@ -825,8 +739,6 @@ router.post('/logout', async (req, res) => {
 
     // Clear the cookie securely (cross-domain support)
     clearAuthCookie(res);
-
-    console.log('✅ Logout successful, cookie cleared');
 
     res.status(200).json({
       success: true,
@@ -1241,7 +1153,6 @@ router.get('/user-info', async (req, res) => {
       for (const ru of restaurantUsers) {
         
         const convertedImageUrl = await convertImageKeyToSignedUrl(ru.restaurant.profileImageUrl).catch(error => {
-          console.error('❌ Error converting restaurant image URL:', ru.restaurant.profileImageUrl, error);
           return '/default-restaurant.png';
         });
         
@@ -1267,7 +1178,6 @@ router.get('/user-info', async (req, res) => {
         if (!exists) {
           
           const convertedImageUrl = await convertImageKeyToSignedUrl(restaurant.profileImageUrl).catch(error => {
-            console.error('❌ Error converting owned restaurant image URL:', restaurant.profileImageUrl, error);
             return '/default-restaurant.png';
           });
           
@@ -1495,7 +1405,6 @@ router.get('/check-login-status', async (req, res) => {
           }
         });
       } else {
-        console.log('❌ check-login-status: User not found in database');
         return res.json({
           success: true,
           isLoggedIn: false,
@@ -1503,8 +1412,6 @@ router.get('/check-login-status', async (req, res) => {
         });
       }
     } catch (tokenError) {
-      console.log('❌ check-login-status: Token verification failed:', tokenError.message);
-      // Invalid token
       return res.json({
         success: true,
         isLoggedIn: false,
@@ -1512,7 +1419,6 @@ router.get('/check-login-status', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error checking login status:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

@@ -19,12 +19,6 @@ const router = express.Router();
 // GET /admin/users - Get all users for the company
 router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
-    console.log('🔐 SECURITY CHECK - User attempting to access admin/users:');
-    console.log(`   User ID: ${req.userId}`);
-    console.log(`   User Role: ${req.role}`);
-    console.log(`   Restaurant ID: ${req.restaurantId}`);
-    console.log(`   Restaurant User ID: ${req.restaurantUserId}`);
-    console.log('🔍 Fetching users for restaurant:', req.restaurantId);
     
     // Get all users associated with this restaurant
     const restaurantUsers = await prisma.restaurantUser.findMany({
@@ -44,16 +38,11 @@ router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromC
       }
     });
 
-    console.log('🔍 Found restaurant users:', restaurantUsers.length);
-    console.log('🔍 Restaurant users data:', JSON.stringify(restaurantUsers, null, 2));
-
     const users = restaurantUsers.map(ru => ({
       ...ru.user,
       restaurantUserId: ru.id,
       role: ru.role
     }));
-
-    console.log('🔍 Processed users data:', JSON.stringify(users, null, 2));
 
     res.status(200).json({ 
       success: true,
@@ -75,8 +64,6 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
     const { name, email, phoneNumber } = req.body;
     const restaurantId = req.restaurantId;
 
-    console.log('🔍 Creating user:', { name, email, phoneNumber, restaurantId });
-
     // Validate required fields
     if (!name || !email || !phoneNumber) {
       return res.status(400).json({
@@ -97,22 +84,17 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
       });
     }
 
-    // Generate temporary password
     const tempPassword = crypto.randomBytes(10).toString('hex');
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    console.log('🔍 Generated temporary password for:', email);
-    console.log('🔑 Temporary password:', tempPassword); // Log for development
-
-    // Create new user
     const newUser = await prisma.user.create({
       data: {
         name,
         email,
         phoneNumber,
         password: hashedPassword,
-        userType: 'empresas', // Restaurant staff, not job applicants
-        role: 'staff', // Restaurant staff role
+        userType: 'empresas', 
+        role: 'staff', 
         mfaEnabled: false,
         accountLocked: false,
         loginAttempts: 0,
@@ -120,9 +102,6 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
       }
     });
 
-    console.log('✅ User created successfully:', newUser.id);
-
-    // Associate user with restaurant
     const restaurantUser = await prisma.restaurantUser.create({
       data: {
         userId: newUser.id,
@@ -131,9 +110,6 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
       }
     });
 
-    console.log('✅ User associated with restaurant:', restaurantUser.id);
-
-    // Generate JWT token for password setup
     const token = jwt.sign({ 
       userId: newUser.id, 
       userType: 'empresas',
@@ -168,22 +144,8 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
         `
       });
       
-      if (emailResult && emailResult.success) {
-        console.log('✅ Email sent successfully to:', email);
-        console.log('  - Method:', emailResult.method);
-        console.log('  - Message ID:', emailResult.messageId);
-      } else {
-        console.error('❌ Error sending email to:', email);
-        console.error('  - Error:', emailResult?.error || 'Unknown error');
-        console.error('  - Method attempted:', emailResult?.method || 'unknown');
-        console.error('  - Full result:', JSON.stringify(emailResult, null, 2));
-        // Don't fail the user creation if email fails
-      }
     } catch (emailError) {
       console.error('❌ Exception while sending email:', emailError);
-      console.error('  - Error message:', emailError.message);
-      console.error('  - Error stack:', emailError.stack);
-      // Don't fail the user creation if email fails
     }
 
     res.status(201).json({
@@ -211,10 +173,7 @@ router.patch(
   try {
     const { id, name, email, phoneNumber } = req.body;
     
-    console.log('🔍 Updating user with data:', { id, name, email, phoneNumber });
-
     if (!id) {
-      console.log('❌ No user ID provided in request body');
       return res.status(400).json({
         success: false,
         message: 'User ID is required'
@@ -230,16 +189,12 @@ router.patch(
     });
 
     if (!restaurantUser) {
-      console.log('❌ User not found or not associated with restaurant:', { userId: id, restaurantId: req.restaurantId });
       return res.status(404).json({
         success: false,
         message: 'User not found or not associated with this restaurant'
       });
     }
 
-    console.log('✅ Found restaurant user association:', restaurantUser.id);
-
-    // Update user
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(id) },
       data: {
@@ -248,8 +203,6 @@ router.patch(
         phoneNumber: phoneNumber || undefined
       }
     });
-
-    console.log('✅ User updated successfully:', updatedUser.id);
 
     res.status(200).json({
       success: true,
@@ -272,8 +225,6 @@ router.delete('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserI
     const { id } = req.params;
     const restaurantId = req.restaurantId;
 
-    console.log('🗑️ Deleting user:', { userId: id, restaurantId });
-
     // Check if user belongs to this restaurant
     const restaurantUser = await prisma.restaurantUser.findFirst({
       where: {
@@ -292,38 +243,28 @@ router.delete('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserI
     });
 
     if (!restaurantUser) {
-      console.log('❌ User not found or not associated with restaurant:', { userId: id, restaurantId });
       return res.status(404).json({
         success: false,
         message: 'User not found or not associated with this restaurant'
       });
     }
 
-    // Prevent deleting the admin user (restaurant owner)
     if (restaurantUser.user.role === 'admin') {
-      console.log('❌ Cannot delete admin user:', restaurantUser.user.email);
       return res.status(403).json({
         success: false,
         message: 'Cannot delete the restaurant owner (admin user)'
       });
     }
 
-    console.log('✅ Found restaurant user association:', restaurantUser.id);
-
-    // Delete the restaurant user association first
     await prisma.restaurantUser.delete({
       where: { id: restaurantUser.id }
     });
 
-    console.log('✅ Restaurant user association deleted');
-
-    // Delete the user
     await prisma.user.delete({
       where: { id: parseInt(id) }
     });
 
-    console.log('✅ User deleted successfully:', restaurantUser.user.email);
-
+  
     res.status(200).json({
       success: true,
       message: 'User deleted successfully',
@@ -395,10 +336,6 @@ router.get('/user/:id', checkCompany, getUserIdFromCookie, getRestaurantUserIdFr
     });
   }
 });
-
-// ============================================================================
-// DASHBOARD ENDPOINTS
-// ============================================================================
 
 // GET /admin/total-counts - Get total counts for dashboard
 router.get('/total-counts', async (req, res) => {
@@ -639,17 +576,11 @@ router.get('/metrics', async (req, res) => {
       ? Math.round((activeProfessionalsCount / registeredProfessionalsCount) * 100) 
       : 0;
 
-    // Calculate average time metrics
-    // NOTE: Employee and Application models don't have createdAt fields in the schema
-    // We need to add createdAt to Employee and Application models for these metrics to work
-    // For now, we'll try to use raw SQL to check if the columns exist in the database
-    
     let avgSignupToProfileDays = null;
     let avgProfileToApplicationDays = null;
 
     try {
-      // Metric 1: Average time from signup (User.createdAt) to profile creation (Employee.createdAt)
-      // Check if Employee table has createdAt column
+     
       const signupToProfileResult = await prisma.$queryRaw`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (e."createdAt" - u."createdAt"))) / 86400 as avg_days
@@ -668,8 +599,7 @@ router.get('/metrics', async (req, res) => {
     }
 
     try {
-      // Metric 2: Average time from profile creation to first application
-      // Requires both Employee.createdAt and Application.createdAt
+
       const profileToApplicationResult = await prisma.$queryRaw`
         SELECT 
           AVG(EXTRACT(EPOCH FROM (
@@ -718,11 +648,6 @@ router.get('/metrics', async (req, res) => {
   }
 });
 
-// ============================================================================
-// SECURITY MONITORING ENDPOINTS
-// ============================================================================
-
-// GET /admin/security/ddos-stats - Get real-time DDoS monitoring statistics
 router.get('/security/ddos-stats', (req, res) => {
   try {
     const stats = getMonitoringStats();
@@ -800,11 +725,6 @@ router.get('/security/alert-config', (req, res) => {
   }
 });
 
-// ============================================================================
-// PERFORMANCE MONITORING ENDPOINTS
-// ============================================================================
-
-// GET /admin/performance/stats - Get performance statistics
 router.get('/performance/stats', (req, res) => {
   try {
     const stats = getPerformanceStats();
@@ -838,9 +758,6 @@ router.get('/performance/health', (req, res) => {
   }
 });
 
-// ============================================================================
-// ERROR TRACKING ENDPOINTS
-// ============================================================================
 
 // GET /admin/errors/stats - Get error statistics
 router.get('/errors/stats', (req, res) => {
@@ -888,9 +805,6 @@ router.get('/errors/search', (req, res) => {
   }
 });
 
-// ============================================================================
-// SYSTEM MONITORING ENDPOINTS
-// ============================================================================
 
 // GET /admin/system/overview - Complete system overview
 router.get('/system/overview', async (req, res) => {
@@ -997,14 +911,6 @@ router.get('/system/logs', (req, res) => {
   }
 });
 
-// ============================================================================
-// FLAGGED USERS MANAGEMENT ENDPOINTS
-// ============================================================================
-
-/**
- * Get all flagged/locked users
- * GET /api/admin/flagged-users
- */
 router.get('/flagged-users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     console.log('🔍 Admin fetching flagged users');
@@ -1037,8 +943,6 @@ router.get('/flagged-users', checkCompany, getUserIdFromCookie, getRestaurantUse
       }
     }
 
-    console.log(`🔍 Found ${flaggedUsers.length} flagged users`);
-
     res.status(200).json({
       success: true,
       flaggedUsers: flaggedUsers,
@@ -1054,10 +958,7 @@ router.get('/flagged-users', checkCompany, getUserIdFromCookie, getRestaurantUse
   }
 });
 
-/**
- * Unflag/unlock a user
- * POST /api/admin/unflag-user
- */
+
 router.post('/unflag-user', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
     const { userId } = req.body;
@@ -1069,8 +970,7 @@ router.post('/unflag-user', checkCompany, getUserIdFromCookie, getRestaurantUser
       });
     }
 
-    console.log(`🔍 Admin attempting to unflag user: ${userId}`);
-
+  
     // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: parseInt(userId) },
@@ -1121,13 +1021,7 @@ router.post('/unflag-user', checkCompany, getUserIdFromCookie, getRestaurantUser
  */
 router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRole('admin'), async (req, res) => {
   try {
-    console.log('🔍 [Admin All Users] Request received');
-    console.log('🔍 [Admin All Users] User ID:', req.userId);
-    console.log('🔍 [Admin All Users] User Role:', req.role);
-    
-    // Get users with specific criteria:
-    // 1. All users with userType: 'profesionales' (all professionals)
-    // 2. Only users with userType: 'empresas' AND role: 'admin' (only admin companies)
+  
     const users = await prisma.user.findMany({
       where: {
         OR: [
@@ -1189,8 +1083,6 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
         message: 'User ID is required'
       });
     }
-
-    console.log(`🔍 Admin attempting to delete user: ${userId}`);
 
     // Check if user exists
     const user = await prisma.user.findUnique({
@@ -1369,8 +1261,6 @@ router.delete('/delete-user', checkAdmin, getUserIdFromCookie, setUserRole, requ
       // Finally, delete the user
       await tx.user.delete({ where: { id: parseInt(userId) } });
     });
-
-    console.log(`✅ Admin delete: User ${user.email} (ID: ${userId}) and all related data deleted successfully`);
     
     res.status(200).json({
       success: true,

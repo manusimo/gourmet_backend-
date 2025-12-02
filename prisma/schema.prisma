@@ -8,494 +8,487 @@ datasource db {
 }
 
 model User {
-  id               Int      @id @default(autoincrement())
-  email            String   @unique
-  password         String
-  userType         String
-  name             String  @default("Juanito")
-  surname          String  @default("Pérez")
-  phoneNumber      String  @default("+56976212644")
-  role             String   @default("admin")
-  payment_status   String   @default("starter")
-  last_payment     DateTime?
-  
-  // Security fields
-  mfaEnabled       Boolean  @default(false)
-  mfaSecret        String?
-  mfaBackupCodes   String?
-  accountLocked    Boolean  @default(false)
-  lastLoginAt      DateTime?
-  loginAttempts    Int      @default(0)
-  securityNotifications Boolean @default(true)
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  employee         Employee?
-  restaurants      Restaurant[]  // Changed from restaurant to restaurants (one-to-many)
-  restaurantUsers  RestaurantUser[]
-  
-  // AI Agent relations
-  agentConversations  AgentConversation[]
-  createdAgents       AiAgent[]
-  
-  // Notifications
-  notifications       Notification[]
+  id                    Int                 @id @default(autoincrement())
+  password              String
+  userType              String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  email                 String              @unique
+  role                  String              @default("admin")
+  name                  String              @default("Juanito")
+  phoneNumber           String              @default("+56976212644")
+  surname               String              @default("Pérez")
+  last_payment          DateTime?
+  payment_status        String              @default("starter")
+  accountLocked         Boolean             @default(false)
+  lastLoginAt           DateTime?
+  loginAttempts         Int                 @default(0)
+  mfaBackupCodes        String?
+  mfaEnabled            Boolean             @default(false)
+  mfaSecret             String?
+  securityNotifications Boolean             @default(true)
+  agentConversations    AgentConversation[]
+  createdAgents         AiAgent[]
+  employee              Employee?
+  notifications         Notification[]
+  restaurants           Restaurant[]
+  restaurantUsers       RestaurantUser[]
 }
 
 model TokenDenyList {
   id            Int      @id @default(autoincrement())
   token         String   @unique
   invalidatedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model KnowledgeDocument {
-  id        Int      @id @default(autoincrement())
-  content   String   @db.Text
-  embedding String   // JSON string of vector
-  metadata  String   // JSON string of metadata
-  type      String   // 'hiring_criteria', 'interview_questions', etc.
-  qualityScore Int    @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  content      String
+  embedding    String
+  metadata     String
+  type         String
+  qualityScore Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("KnowledgeDocument")
 }
 
 model Employee {
-  id           Int      @id @default(autoincrement())
-  name         String
-  surname      String   @default("Pérez")
-  country      String
-  location     String?
-  position     String
-  genre        String  @default("not declared")
-  civilState   String  @default("single")
-  aboutMe      String
-  schedule     String
-  region       String  @default("No hay")
-  comuna       String  @default("No hay")
-  available    String
-  profileImageUrl String  @default("No photo")
-  period       String  @default("No mencionado")
-  birthDate    DateTime @default(dbgenerated("timestamp '1996-02-02 00:00:00'"))
-  phoneNumber  String @default("+56912345678")
-  yearsOfExperience String @default("No experience")
-
-  skills       String[]
-  userId       Int         @unique
-  user         User        @relation(fields: [userId], references: [id])
-  conversations Conversation[]
-  talentPools     TalentPool[]
-  favouriteJobs      FavouriteJob[]
-  applications Application[]
-  experiences  Experience[]
-  educations   Education[]
-  messagesSent  Message[] @relation("SenderEmployee")
-  messagesReceived Message[] @relation("ReceiverEmployee")
-  
-  // AI Agent relations
-  scheduledCalls      ScheduledCall[]
-  
-  // Hiring relations
-  hirings       Hiring[]
-  reviews       Review[]
+  id                Int             @id @default(autoincrement())
+  name              String
+  country           String
+  location          String?
+  position          String
+  aboutMe           String
+  schedule          String
+  available         String
+  skills            String[]
+  userId            Int             @unique
+  birthDate         DateTime        @default(dbgenerated("'1996-02-02 00:00:00'::timestamp without time zone"))
+  phoneNumber       String          @default("+56912345678")
+  civilState        String          @default("single")
+  genre             String          @default("not declared")
+  yearsOfExperience String          @default("No experience")
+  period            String          @default("No mencionado")
+  profileImageUrl   String          @default("No photo")
+  comuna            String          @default("No hay")
+  region            String          @default("No hay")
+  surname           String          @default("Pérez")
+  applications      Application[]
+  conversations     Conversation[]
+  educations        Education[]
+  user              User            @relation(fields: [userId], references: [id])
+  experiences       Experience[]
+  favouriteJobs     FavouriteJob[]
+  hirings           Hiring[]
+  messagesReceived  Message[]       @relation("ReceiverEmployee")
+  messagesSent      Message[]       @relation("SenderEmployee")
+  reviews           Review[]
+  scheduledCalls    ScheduledCall[]
+  talentPools       TalentPool[]
   
   // Timestamps
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model Experience {
-  id           Int      @id @default(autoincrement())
-  companyName  String
-  description  String
-  startDate    DateTime
-  endDate      DateTime
-  role         String @default("No position")
-  employeeId   Int
-  employee     Employee @relation(fields: [employeeId], references: [id])
+  id          Int      @id @default(autoincrement())
+  companyName String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  employeeId  Int
+  role        String   @default("No position")
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Education {
-  id           Int         @id @default(autoincrement())
-  institution  String
-  startDate    DateTime
-  study        String      @default("")
-  endDate      DateTime
-  description  String
-  employeeId   Int
-  employee     Employee    @relation(fields: [employeeId], references: [id])
+  id          Int      @id @default(autoincrement())
+  institution String
+  startDate   DateTime
+  endDate     DateTime
+  description String
+  employeeId  Int
+  study       String   @default("")
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Restaurant {
-  id                   Int       @id @default(autoincrement())
-  name                 String
+  id                   Int              @id @default(autoincrement())
   specialty            String
   format               String
-  region               String   @default("No hay")
-  comuna               String   @default("No hay")
-  description          String   @default("No description to show")
-  rut                  String   @default("No rut to show")
-  legalName            String   @default("No legal name to show")
   numberOfRestaurants  Int
-  profileImageUrl String   @default("No photo")
-  profileCarouselUrls String[] @default([])
   workers              String
   weeklyAverageClients String
   benefits             String[]
-  locations            Location[]
-  jobOffers            JobOffer[]
-  userId               Int       // Removed @unique constraint to allow multiple restaurants per user
-  user                 User      @relation(fields: [userId], references: [id])
-  restaurantUsers      RestaurantUser[]
-  talentPools     TalentPool[]
-  conversations        Conversation[]
-  
-  // AI Agent relations
-  aiAgents            AiAgent[]
-  scheduledCalls      ScheduledCall[]
-  
-  // Hiring relations
-  hirings             Hiring[]
-  reviews             Review[]
-  
-  // Soft delete
+  name                 String
+  userId               Int
+  description          String           @default("No description to show")
+  legalName            String           @default("No legal name to show")
+  rut                  String           @default("No rut to show")
+  profileImageUrl      String           @default("No photo")
+  comuna               String           @default("No hay")
+  region               String           @default("No hay")
+  profileCarouselUrls  String[]         @default([])
   deletedAt            DateTime?
+  aiAgents             AiAgent[]
+  conversations        Conversation[]
+  hirings              Hiring[]
+  jobOffers            JobOffer[]
+  locations            Location[]
+  user                 User             @relation(fields: [userId], references: [id])
+  restaurantUsers      RestaurantUser[]
+  reviews              Review[]
+  scheduledCalls       ScheduledCall[]
+  talentPools          TalentPool[]
+  
+  // Timestamps
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 }
 
 model Location {
   id           Int        @id @default(autoincrement())
   address      String
-  latitude Float @default(0)
-  longitude Float @default(0)
   restaurantId Int
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  latitude     Float      @default(0)
+  longitude    Float      @default(0)
   jobOffers    JobOffer[]
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  
+  // Timestamps
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model JobOffer {
-  id                 Int              @id @default(autoincrement())
-  position           String
-  locationId         Int?
-  location           Location?         @relation(fields: [locationId], references: [id])
-  schedule           String
-  period             String           @default("Sin información")
-  contract           String
-  salary             Int              @default(0)
-  tips               Boolean          @default(true)
-  functions          String           @default("No functions to show")
-  requirements       String           @default("No requirements to show")
-  vacancies          Int
-  yearsOfExperience  Int
-  description        String
-  startDate          DateTime?        // When the job position starts
-  endDate            DateTime?        // When the job position ends (null = ongoing/permanent)
-  questions          Question[]
-  restaurantId       Int
-  restaurant         Restaurant       @relation(fields: [restaurantId], references: [id])
-  applications       Application[]
-  conversations      Conversation[]
-  favouriteJobs      FavouriteJob[]
-  hirings            Hiring[]
-  createdAt          DateTime         @default(now())
-  restaurantUserId   Int?
-  restaurantUser     RestaurantUser?  @relation(fields: [restaurantUserId], references: [id])
-  deletedAt          DateTime?
+  id                Int             @id @default(autoincrement())
+  position          String
+  schedule          String
+  contract          String
+  yearsOfExperience Int
+  description       String
+  restaurantId      Int
+  vacancies         Int
+  functions         String          @default("No functions to show")
+  requirements      String          @default("No requirements to show")
+  salary            Int             @default(0)
+  tips              Boolean         @default(true)
+  restaurantUserId  Int?
+  period            String          @default("Sin información")
+  locationId        Int?
+  deletedAt         DateTime?
+  endDate           DateTime?
+  startDate         DateTime?
+  
+  // Timestamps
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  applications      Application[]
+  conversations     Conversation[]
+  favouriteJobs     FavouriteJob[]
+  hirings           Hiring[]
+  location          Location?       @relation(fields: [locationId], references: [id])
+  restaurant        Restaurant      @relation(fields: [restaurantId], references: [id])
+  restaurantUser    RestaurantUser? @relation(fields: [restaurantUserId], references: [id])
+  questions         Question[]
 }
 
 model Question {
-  id          Int     @id @default(autoincrement())
-  question    String
-  jobOfferId  Int
-  jobOffer    JobOffer @relation(fields: [jobOfferId], references: [id])
-  answers     Answer[]
+  id         Int      @id @default(autoincrement())
+  jobOfferId Int
+  question   String
+  answers    Answer[]
+  jobOffer   JobOffer @relation(fields: [jobOfferId], references: [id])
+  
+  // Timestamps
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Application {
-  id            Int       @id @default(autoincrement())
-  jobPostId     Int
-  employeeId    Int
-  jobPost       JobOffer   @relation(fields: [jobPostId], references: [id])
-  employee      Employee   @relation(fields: [employeeId], references: [id])
-  answers       Answer[]
-  deletedAt     DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id         Int       @id @default(autoincrement())
+  jobPostId  Int
+  employeeId Int
+  deletedAt  DateTime?
+  answers    Answer[]
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  jobPost    JobOffer  @relation(fields: [jobPostId], references: [id])
+  
+  // Timestamps
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model Answer {
-  id            Int       @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   questionId    Int
   answer        String
-  application   Application @relation(fields: [applicationId], references: [id])
   applicationId Int
-  question      Question @relation(fields: [questionId], references: [id])
+  application   Application @relation(fields: [applicationId], references: [id])
+  question      Question    @relation(fields: [questionId], references: [id])
+  
+  // Timestamps
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
 
 model Conversation {
-  id               Int            @id @default(autoincrement())
-  messages         Message[]
-  employeeId       Int
-  restaurantUserId Int
-  restaurantId     Int            // Direct reference to restaurant for cleaner filtering
-  type             String         @default("none")
-  jobOfferId       Int?
-  jobOffer         JobOffer?      @relation(fields: [jobOfferId], references: [id])
-
-  talentPoolId     Int?
-  talentPool       TalentPool?    @relation(fields: [talentPoolId], references: [id])
-
-  employee         Employee       @relation(fields: [employeeId], references: [id])
-  restaurantUser   RestaurantUser @relation(fields: [restaurantUserId], references: [id])
-  restaurant       Restaurant     @relation(fields: [restaurantId], references: [id])
-  deletedAt        DateTime?
+  id                 Int                 @id @default(autoincrement())
+  employeeId         Int
+  restaurantUserId   Int
+  jobOfferId         Int?
+  type               String              @default("none")
+  talentPoolId       Int?
+  deletedAt          DateTime?
+  restaurantId       Int
+  agentConversations AgentConversation[]
+  employee           Employee            @relation(fields: [employeeId], references: [id])
+  jobOffer           JobOffer?           @relation(fields: [jobOfferId], references: [id])
+  restaurant         Restaurant          @relation(fields: [restaurantId], references: [id])
+  restaurantUser     RestaurantUser      @relation(fields: [restaurantUserId], references: [id])
+  talentPool         TalentPool?         @relation(fields: [talentPoolId], references: [id])
+  hiring             Hiring?
+  messages           Message[]
   
-  // AI Agent relations
-  agentConversations  AgentConversation[]
-  
-  // Hiring relations
-  hiring              Hiring?
+  // Timestamps
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model Message {
-  id                        Int              @id @default(autoincrement())
-  text                      String
-  conversationId            Int
-  conversation              Conversation     @relation(fields: [conversationId], references: [id])
-
-  senderEmployeeId          Int?
-  senderEmployee            Employee?        @relation("SenderEmployee", fields: [senderEmployeeId], references: [id])
-
-  senderRestaurantUserId    Int?
-  senderRestaurantUser      RestaurantUser?  @relation("SenderRestaurantUser", fields: [senderRestaurantUserId], references: [id])
-
-  receiverEmployeeId        Int?
-  receiverEmployee          Employee?        @relation("ReceiverEmployee", fields: [receiverEmployeeId], references: [id])
-
-  receiverRestaurantUserId  Int?
-  receiverRestaurantUser    RestaurantUser?  @relation("ReceiverRestaurantUser", fields: [receiverRestaurantUserId], references: [id])
-
-  createdAt                 DateTime         @default(now())
+  id                       Int             @id @default(autoincrement())
+  text                     String
+  conversationId           Int
+  receiverEmployeeId       Int?
+  receiverRestaurantUserId Int?
+  senderEmployeeId         Int?
+  senderRestaurantUserId   Int?
+  agentMessages            AgentMessage[]
+  conversation             Conversation    @relation(fields: [conversationId], references: [id])
+  receiverEmployee         Employee?       @relation("ReceiverEmployee", fields: [receiverEmployeeId], references: [id])
+  receiverRestaurantUser   RestaurantUser? @relation("ReceiverRestaurantUser", fields: [receiverRestaurantUserId], references: [id])
+  senderEmployee           Employee?       @relation("SenderEmployee", fields: [senderEmployeeId], references: [id])
+  senderRestaurantUser     RestaurantUser? @relation("SenderRestaurantUser", fields: [senderRestaurantUserId], references: [id])
   
-  // AI Agent relations
-  agentMessages       AgentMessage[]
+  // Timestamps
+  createdAt                DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 }
 
 model RestaurantUser {
-  id            Int            @id @default(autoincrement())
-  userId        Int
-  restaurantId  Int
-  role          String         @default("staff")
-  user          User           @relation(fields: [userId], references: [id])
-  restaurant    Restaurant     @relation(fields: [restaurantId], references: [id])
-  conversations Conversation[]
-  addedTalent   TalentPool[]   @relation("AddedByUser")
-  jobOffers     JobOffer[]
-  messagesSent     Message[] @relation("SenderRestaurantUser")
-  messagesReceived Message[] @relation("ReceiverRestaurantUser")
+  id               Int             @id @default(autoincrement())
+  userId           Int
+  restaurantId     Int
+  role             String          @default("staff")
+  conversations    Conversation[]
+  jobOffers        JobOffer[]
+  messagesReceived Message[]       @relation("ReceiverRestaurantUser")
+  messagesSent     Message[]       @relation("SenderRestaurantUser")
+  restaurant       Restaurant      @relation(fields: [restaurantId], references: [id])
+  user             User            @relation(fields: [userId], references: [id])
+  scheduledCalls   ScheduledCall[]
+  addedTalent      TalentPool[]    @relation("AddedByUser")
   
-  // AI Agent relations
-  scheduledCalls      ScheduledCall[]
+  // Timestamps
+  createdAt        DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model TalentPool {
-  id             Int           @id @default(autoincrement())
-  employeeId     Int
-  restaurantId   Int
-  addedByUserId  Int?
-  status         String       @default("pendent")
-  conversations      Conversation[]
-  createdAt      DateTime     @default(now())
-  deletedAt      DateTime?
-  employee       Employee     @relation(fields: [employeeId], references: [id])
-  restaurant     Restaurant   @relation(fields: [restaurantId], references: [id])
-  addedByUser    RestaurantUser? @relation("AddedByUser", fields: [addedByUserId], references: [id])
+  id            Int             @id @default(autoincrement())
+  employeeId    Int
+  restaurantId  Int
+  addedByUserId Int?
+  status        String          @default("pendent")
+  deletedAt     DateTime?
+  conversations Conversation[]
+  addedByUser   RestaurantUser? @relation("AddedByUser", fields: [addedByUserId], references: [id])
+  employee      Employee        @relation(fields: [employeeId], references: [id])
+  restaurant    Restaurant      @relation(fields: [restaurantId], references: [id])
+  
+  // Timestamps
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 }
 
 model FavouriteJob {
   id         Int       @id @default(autoincrement())
   employeeId Int
-  jobOfferId  Int?
-  createdAt  DateTime  @default(now())
+  jobOfferId Int?
   employee   Employee  @relation(fields: [employeeId], references: [id])
-  jobOffer   JobOffer?     @relation(fields: [jobOfferId], references: [id])
+  jobOffer   JobOffer? @relation(fields: [jobOfferId], references: [id])
+  
+  // Timestamps
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model ContactSubmission {
-  id         Int      @id @default(autoincrement())
-  name       String?
-  email      String?
-  phone      String?
-  subject    String?
-  message    String?
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  name      String?
+  email     String?
+  phone     String?
+  subject   String?
+  message   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-// AI Agent System Models
 model AiAgent {
-  id                Int      @id @default(autoincrement())
-  name              String
-  description       String?
-  avatar            String?  // URL to agent avatar image
-  personality       String?  // JSON string with personality traits
-  capabilities      String[] // Array of capabilities: ["schedule_calls", "answer_questions", "collect_info"]
-  isActive          Boolean  @default(true)
-  restaurantId      Int?     // If null, agent is global
-  createdByUserId   Int
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  restaurant        Restaurant? @relation(fields: [restaurantId], references: [id])
-  createdBy         User        @relation(fields: [createdByUserId], references: [id])
-  conversations     AgentConversation[]
-  scheduledCalls    ScheduledCall[]
-  agentConfigs      AgentConfig[]
+  id              Int                 @id @default(autoincrement())
+  name            String
+  description     String?
+  avatar          String?
+  personality     String?
+  capabilities    String[]
+  isActive        Boolean             @default(true)
+  restaurantId    Int?
+  createdByUserId Int
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  agentConfigs    AgentConfig[]
+  conversations   AgentConversation[]
+  createdBy       User                @relation(fields: [createdByUserId], references: [id])
+  restaurant      Restaurant?         @relation(fields: [restaurantId], references: [id])
+  scheduledCalls  ScheduledCall[]
 }
 
 model AgentConversation {
-  id                Int      @id @default(autoincrement())
-  agentId           Int
-  userId            Int      // User talking to the agent
-  conversationId    Int      // Links to existing Conversation model
-  context           String?  // JSON string with conversation context
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  agent             AiAgent      @relation(fields: [agentId], references: [id])
-  user              User         @relation(fields: [userId], references: [id])
-  conversation      Conversation @relation(fields: [conversationId], references: [id])
-  messages          AgentMessage[]
-  
+  id             Int            @id @default(autoincrement())
+  agentId        Int
+  userId         Int
+  conversationId Int
+  context        String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  agent          AiAgent        @relation(fields: [agentId], references: [id])
+  conversation   Conversation   @relation(fields: [conversationId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
+  messages       AgentMessage[]
+
   @@unique([agentId, conversationId])
 }
 
 model AgentMessage {
-  id                    Int      @id @default(autoincrement())
-  agentConversationId   Int
-  messageId             Int      // Links to existing Message model
-  agentResponse         String?  // AI agent's response
-  intent                String?  // Detected intent: "schedule_call", "question", "greeting"
-  entities              String?  // JSON string with extracted entities
-  confidence            Float?   // Confidence score of the response
-  createdAt             DateTime @default(now())
+  id                  Int               @id @default(autoincrement())
+  agentConversationId Int
+  messageId           Int
+  agentResponse       String?
+  intent              String?
+  entities            String?
+  confidence          Float?
+  agentConversation   AgentConversation @relation(fields: [agentConversationId], references: [id])
+  message             Message           @relation(fields: [messageId], references: [id])
   
-  // Relations
-  agentConversation     AgentConversation @relation(fields: [agentConversationId], references: [id])
-  message               Message           @relation(fields: [messageId], references: [id])
+  // Timestamps
+  createdAt           DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 }
 
 model ScheduledCall {
-  id                Int      @id @default(autoincrement())
-  agentId           Int
-  restaurantId      Int
-  employeeId        Int?     // If scheduling with an employee
-  restaurantUserId  Int?     // If scheduling with restaurant staff
-  title             String
-  description       String?
-  scheduledDate     DateTime
-  duration          Int      @default(30) // Duration in minutes
-  status            String   @default("scheduled") // scheduled, completed, cancelled, rescheduled
-  meetingLink       String?  // Zoom, Google Meet, etc.
-  notes             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  agent             AiAgent        @relation(fields: [agentId], references: [id])
-  restaurant        Restaurant     @relation(fields: [restaurantId], references: [id])
-  employee          Employee?      @relation(fields: [employeeId], references: [id])
-  restaurantUser    RestaurantUser? @relation(fields: [restaurantUserId], references: [id])
+  id               Int             @id @default(autoincrement())
+  agentId          Int
+  restaurantId     Int
+  employeeId       Int?
+  restaurantUserId Int?
+  title            String
+  description      String?
+  scheduledDate    DateTime
+  duration         Int             @default(30)
+  status           String          @default("scheduled")
+  meetingLink      String?
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  agent            AiAgent         @relation(fields: [agentId], references: [id])
+  employee         Employee?       @relation(fields: [employeeId], references: [id])
+  restaurant       Restaurant      @relation(fields: [restaurantId], references: [id])
+  restaurantUser   RestaurantUser? @relation(fields: [restaurantUserId], references: [id])
 }
 
 model AgentConfig {
-  id                Int      @id @default(autoincrement())
-  agentId           Int
-  configKey         String   // e.g., "openai_model", "max_tokens", "temperature"
-  configValue       String   // JSON string for complex values
-  description       String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relations
-  agent             AiAgent  @relation(fields: [agentId], references: [id])
-  
+  id          Int      @id @default(autoincrement())
+  agentId     Int
+  configKey   String
+  configValue String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  agent       AiAgent  @relation(fields: [agentId], references: [id])
+
   @@unique([agentId, configKey])
 }
 
 model Notification {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  type        String   // 'job_application', 'message', 'job_offer', 'system'
-  title       String
-  message     String
-  isRead      Boolean  @default(false)
-  data        String?  // JSON string with additional data
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  data      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, isRead])
   @@index([userId, createdAt])
 }
 
-// Hiring System Models
 model Hiring {
-  id                  Int       @id @default(autoincrement())
+  id                  Int           @id @default(autoincrement())
   employeeId          Int
   restaurantId        Int
-  jobOfferId          Int?      // Reference to JobOffer (contains: position, salary, contract, schedule, startDate, endDate, etc.)
-  conversationId      Int?      @unique // One-to-one relation with Conversation
-  
-  // Hiring process dates
-  offerDate           DateTime  @default(now()) // When the offer was made
-  acceptanceDate      DateTime? // When the employee accepted the offer
-  offerExpirationDate DateTime? // When the offer expires (optional)
-  
-  // Status workflow
-  status              String    @default("offered") // offered, pending, accepted, active, completed, cancelled, rejected, negotiating
-  
-  // Message tracking
-  startMessageSent    Boolean   @default(false) // Track if start message was sent
-  endMessageSent      Boolean   @default(false) // Track if end message was sent
-  
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  
-  // Relations
-  employee        Employee  @relation(fields: [employeeId], references: [id])
-  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
-  jobOffer        JobOffer? @relation(fields: [jobOfferId], references: [id])
-  conversation    Conversation? @relation(fields: [conversationId], references: [id])
-  reviews         Review[]
-  
+  jobOfferId          Int?
+  conversationId      Int?          @unique
+  offerDate           DateTime      @default(now())
+  acceptanceDate      DateTime?
+  offerExpirationDate DateTime?
+  status              String        @default("offered")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  endMessageSent      Boolean       @default(false)
+  startMessageSent    Boolean       @default(false)
+  conversation        Conversation? @relation(fields: [conversationId], references: [id])
+  employee            Employee      @relation(fields: [employeeId], references: [id])
+  jobOffer            JobOffer?     @relation(fields: [jobOfferId], references: [id])
+  restaurant          Restaurant    @relation(fields: [restaurantId], references: [id])
+  reviews             Review[]
+
   @@index([employeeId, status])
   @@index([restaurantId, status])
   @@index([offerExpirationDate])
 }
 
 model Review {
-  id              Int       @id @default(autoincrement())
-  hiringId        Int
-  employeeId      Int
-  restaurantId    Int
-  reviewType      String    // "employee_review" (restaurant reviewing employee) or "restaurant_review" (employee reviewing restaurant)
-  rating          Int       // 1-5 stars
-  comment         String?   @db.Text
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
-  // Relations
-  hiring          Hiring    @relation(fields: [hiringId], references: [id])
-  employee        Employee  @relation(fields: [employeeId], references: [id])
-  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
-  
+  id           Int        @id @default(autoincrement())
+  hiringId     Int
+  employeeId   Int
+  restaurantId Int
+  reviewType   String
+  rating       Int
+  comment      String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  employee     Employee   @relation(fields: [employeeId], references: [id])
+  hiring       Hiring     @relation(fields: [hiringId], references: [id])
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+
   @@index([employeeId])
   @@index([restaurantId])
   @@index([hiringId])
 }
-

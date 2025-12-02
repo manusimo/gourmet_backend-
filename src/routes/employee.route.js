@@ -44,29 +44,23 @@ const { uploadFile, extractKeyFromUrl } = require('../services/uploadService.js'
 router.get('/employee/:id', async (req, res) => {
   try {
     const employeeId = parseInt(req.params.id, 10);
-    console.log('🔍 GET /employee/:id - Requested employee ID:', employeeId);
 
     if (isNaN(employeeId)) {
-      console.log('❌ Invalid employee ID:', req.params.id);
       return res.status(400).json({ 
         success: false,
         error: 'Invalid employee ID' 
       });
     }
 
-    console.log('🔍 Fetching employee profile for ID:', employeeId);
     const employeeProfile = await getEmployeeById(employeeId);
-    console.log('🔍 Employee profile found:', employeeProfile ? 'Yes' : 'No');
 
     if (!employeeProfile) {
-      console.log('❌ Employee profile not found for ID:', employeeId);
       return res.status(404).json({ 
         success: false,
         error: 'Employee profile not found' 
       });
     }
 
-    console.log('✅ Employee profile found, returning data');
     
     // Convert image keys to actual signed URLs
     const employeeWithSignedUrls = await convertImageUrls(employeeProfile, ['profileImageUrl']);
@@ -76,7 +70,6 @@ router.get('/employee/:id', async (req, res) => {
       data: employeeWithSignedUrls 
     });
   } catch (error) {
-    console.error('❌ Error fetching employee profile:', error.message);
     res.status(500).json({ 
       success: false,
       error: 'Internal Server Error' 
@@ -133,12 +126,11 @@ router.post('/employee', ...createEmployeeMiddleware, async (req, res) => {
     // Find profile image from global multer files array
     const profileImageFile = req.files && req.files.find(file => file.fieldname === 'profileImage');
     if (profileImageFile) {
-      console.log('📤 Uploading employee profile image...');
+    
       const profileImageResult = await uploadFile(profileImageFile, 'employee-profiles');
       if (profileImageResult.success) {
         // Store the key (not full URL), same as company route
         finalProfileImageUrl = profileImageResult.key;
-        console.log('✅ Employee profile image uploaded, key stored:', finalProfileImageUrl);
       } else {
         console.error('❌ Employee profile image upload failed:', profileImageResult.error);
         return res.status(400).json({
@@ -453,7 +445,7 @@ router.get('/employees/:employeeId/job-posts/:jobPostId/application', async (req
 // GET /employees/search - Search employees
 router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, setUserRole, async (req, res) => {
   try {
-    console.log('Here we start the search');
+
     const { position, experience, region, comuna, available, schedule } = req.query;
 
     const userId = req.userId;
@@ -469,7 +461,6 @@ router.get('/employees/search', checkCompany, getUserIdFromCookie, getRestaurant
       schedule
     });
 
-    console.log('These are the results', employees);
     
     // Convert image keys to actual signed URLs for each employee
     const employeesWithSignedUrls = await convertImageUrls(employees, ['profileImageUrl']);

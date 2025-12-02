@@ -40,20 +40,7 @@ const {
 const csrfProtection = csrf({ cookie: true });
 const router = express.Router();
 
-// Test endpoint to check database connection
-router.get('/test-db', async (req, res) => {
-  try {
-    console.log('🔍 Testing database connection...');
-    const result = await prisma.$queryRaw`SELECT 1 as test`;
-    console.log('✅ Database connection successful:', result);
-    res.json({ success: true, message: 'Database connection working', result });
-  } catch (error) {
-    console.error('❌ Database connection failed:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
-// GET /companies - Get companies with filters and pagination
 router.get('/companies', async (req, res) => {
   try {
     const {
@@ -210,7 +197,6 @@ router.get('/company/locations', getAuthFromCookie, async (req, res) => {
     // Return empty array if no locations found (instead of 404)
     // This allows the frontend to handle empty state gracefully
     if (!locations.length) {
-      console.log('⚠️ No locations found for restaurantId:', restaurantId, '- returning empty array');
       return res.status(200).json({
         success: true,
         data: []
@@ -218,14 +204,12 @@ router.get('/company/locations', getAuthFromCookie, async (req, res) => {
     }
 
     const formattedLocations = formatLocations(locations);
-    console.log('🔍 Formatted locations:', formattedLocations.length);
 
     return res.status(200).json({
       success: true,
       data: formattedLocations
     });
   } catch (error) {
-    console.error('❌ Error fetching company locations:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
@@ -280,13 +264,8 @@ router.get('/company/talents-application', getAuthFromCookie, async (req, res) =
     
     // Use restaurantId from query parameter if provided, otherwise use from JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : req.restaurantId;
-    
-    console.log('🔍 [Talents Application API] Fetching applications for restaurantId:', restaurantId);
-    console.log('🔍 [Talents Application API] Using restaurantId from:', queryRestaurantId ? 'query parameter' : 'JWT token');
-    
+      
     const talents = await getTalentsApplications(restaurantId);
-
-    console.log('🔍 [Talents Application API] Found applications:', talents.length);
 
     res.status(200).json({ 
       success: true,
@@ -362,9 +341,7 @@ router.post('/company', (req, res, next) => {
     if (typeof profileCarouselUrls === 'string') {
       try {
         profileCarouselUrls = JSON.parse(profileCarouselUrls);
-        console.log('🏢 [POST /company] Parsed profileCarouselUrls from JSON string');
       } catch (error) {
-        console.error('🏢 [POST /company] Error parsing profileCarouselUrls:', error.message);
         profileCarouselUrls = [];
       }
     }
@@ -503,9 +480,7 @@ router.get('/company/:id', async (req, res) => {
     const restaurant = await getCompanyById(id);
 
     if (restaurant) {
-      console.log('🔍 [GET /company/:id] Company found:', restaurant.name);
-      console.log('🔍 [GET /company/:id] Converting image URLs to signed URLs...');
-      
+     
       // Convert image keys to signed URLs
       const companyWithSignedUrls = await convertImageUrls(restaurant, ['profileImageUrl', 'profileCarouselUrls']);
       
@@ -520,7 +495,6 @@ router.get('/company/:id', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('❌ [GET /company/:id] Error:', error);
     res.status(500).json({ 
       success: false,
       message: 'Internal Server Error' 
@@ -744,11 +718,7 @@ router.delete('/company/:id', getAuthFromCookie, async (req, res) => {
       });
     }
 
-    console.log('🗑️ [Delete Restaurant] Attempting to delete restaurant:', {
-      restaurantId,
-      userId
-    });
-
+  
     // Verify the restaurant exists and user owns it
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
