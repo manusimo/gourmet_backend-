@@ -403,14 +403,14 @@ router.get('/total-counts', async (req, res) => {
         }
       }),
       // Count distinct professional users with completed profiles who have applied to ≥1 job
-      prisma.user.count({
+      // Query from Employee since it has direct relation to applications
+      prisma.employee.count({
         where: {
-          userType: 'profesionales',
-          employee: {
-            isNot: null,
-            applications: {
-              some: {}
-            }
+          user: {
+            userType: 'profesionales'
+          },
+          applications: {
+            some: {}
           }
         }
       }),
@@ -595,14 +595,14 @@ router.get('/metrics', async (req, res) => {
         }
       }),
       // Count distinct professional users with completed profiles who have applied to ≥1 job
-      prisma.user.count({
+      // Query from Employee since it has direct relation to applications
+      prisma.employee.count({
         where: {
-          userType: 'profesionales',
-          employee: {
-            isNot: null,
-            applications: {
-              some: {}
-            }
+          user: {
+            userType: 'profesionales'
+          },
+          applications: {
+            some: {}
           }
         }
       }),
