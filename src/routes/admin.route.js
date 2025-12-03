@@ -436,6 +436,8 @@ router.get('/total-counts', async (req, res) => {
     console.log('[METRICS] Calculating average time metrics...');
     let avgSignupToProfileDays = null;
     let avgProfileToApplicationDays = null;
+    let avgSignupToRestaurantDays = null;
+    let avgRestaurantToJobDays = null;
 
     try {
       console.log('[METRICS] Fetching avgSignupToProfileDays...');
@@ -484,6 +486,51 @@ router.get('/total-counts', async (req, res) => {
       console.warn('[METRICS] Add createdAt to both models for this metric.');
     }
 
+    try {
+      console.log('[METRICS] Fetching avgSignupToRestaurantDays...');
+      const signupToRestaurantResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (r."createdAt" - u."createdAt"))) / 86400 as avg_days
+        FROM "User" u
+        INNER JOIN "Restaurant" r ON r."userId" = u.id
+        WHERE u."userType" = 'empresas'
+          AND r."createdAt" IS NOT NULL
+      `;
+      
+      if (signupToRestaurantResult && signupToRestaurantResult[0]?.avg_days !== null) {
+        avgSignupToRestaurantDays = Math.round(parseFloat(signupToRestaurantResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgSignupToRestaurantDays:', avgSignupToRestaurantDays);
+      } else {
+        console.log('[METRICS] avgSignupToRestaurantDays: No data available (null result)');
+      }
+    } catch (error) {
+      console.warn('[METRICS] Restaurant.createdAt field does not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to Restaurant model for this metric.');
+    }
+
+    try {
+      console.log('[METRICS] Fetching avgRestaurantToJobDays...');
+      const restaurantToJobResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (
+            (SELECT MIN(j."createdAt") FROM "JobOffer" j WHERE j."restaurantId" = r.id) - r."createdAt"
+          ))) / 86400 as avg_days
+        FROM "Restaurant" r
+        WHERE r."createdAt" IS NOT NULL
+          AND EXISTS (SELECT 1 FROM "JobOffer" j WHERE j."restaurantId" = r.id AND j."createdAt" IS NOT NULL)
+      `;
+      
+      if (restaurantToJobResult && restaurantToJobResult[0]?.avg_days !== null) {
+        avgRestaurantToJobDays = Math.round(parseFloat(restaurantToJobResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgRestaurantToJobDays:', avgRestaurantToJobDays);
+      } else {
+        console.log('[METRICS] avgRestaurantToJobDays: No data available (null result)');
+      }
+    } catch (error) {
+      console.warn('[METRICS] Restaurant.createdAt or JobOffer.createdAt fields do not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to both models for this metric.');
+    }
+
     const totalCounts = {
       registeredCompanies: (registeredCompanies || 0) + (adminCompanyUsers || 0),
       // registeredProfessionals = Users with userType 'profesionales' who created Employee profile
@@ -501,6 +548,9 @@ router.get('/total-counts', async (req, res) => {
         // Average time metrics (requires createdAt on Employee and Application)
         avgSignupToProfileDays: avgSignupToProfileDays,
         avgProfileToApplicationDays: avgProfileToApplicationDays,
+        // Average time metrics for companies (requires createdAt fields on Restaurant and JobOffer)
+        avgSignupToRestaurantDays: avgSignupToRestaurantDays,
+        avgRestaurantToJobDays: avgRestaurantToJobDays,
         // Urgent metrics
         jobsWithNoApplicationsAfter48h: jobsWithNoApplicationsAfter48h || 0,
         workersWhoNeverCameBack: workersWhoNeverCameBack || 0
@@ -637,6 +687,8 @@ router.get('/metrics', async (req, res) => {
     console.log('[METRICS] Calculating average time metrics...');
     let avgSignupToProfileDays = null;
     let avgProfileToApplicationDays = null;
+    let avgSignupToRestaurantDays = null;
+    let avgRestaurantToJobDays = null;
 
     try {
       console.log('[METRICS] Fetching avgSignupToProfileDays...');
@@ -687,6 +739,51 @@ router.get('/metrics', async (req, res) => {
       console.warn('[METRICS] Add createdAt to both models for this metric.');
     }
 
+    try {
+      console.log('[METRICS] Fetching avgSignupToRestaurantDays...');
+      const signupToRestaurantResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (r."createdAt" - u."createdAt"))) / 86400 as avg_days
+        FROM "User" u
+        INNER JOIN "Restaurant" r ON r."userId" = u.id
+        WHERE u."userType" = 'empresas'
+          AND r."createdAt" IS NOT NULL
+      `;
+      
+      if (signupToRestaurantResult && signupToRestaurantResult[0]?.avg_days !== null) {
+        avgSignupToRestaurantDays = Math.round(parseFloat(signupToRestaurantResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgSignupToRestaurantDays:', avgSignupToRestaurantDays);
+      } else {
+        console.log('[METRICS] avgSignupToRestaurantDays: No data available (null result)');
+      }
+    } catch (error) {
+      console.warn('[METRICS] Restaurant.createdAt field does not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to Restaurant model for this metric.');
+    }
+
+    try {
+      console.log('[METRICS] Fetching avgRestaurantToJobDays...');
+      const restaurantToJobResult = await prisma.$queryRaw`
+        SELECT 
+          AVG(EXTRACT(EPOCH FROM (
+            (SELECT MIN(j."createdAt") FROM "JobOffer" j WHERE j."restaurantId" = r.id) - r."createdAt"
+          ))) / 86400 as avg_days
+        FROM "Restaurant" r
+        WHERE r."createdAt" IS NOT NULL
+          AND EXISTS (SELECT 1 FROM "JobOffer" j WHERE j."restaurantId" = r.id AND j."createdAt" IS NOT NULL)
+      `;
+      
+      if (restaurantToJobResult && restaurantToJobResult[0]?.avg_days !== null) {
+        avgRestaurantToJobDays = Math.round(parseFloat(restaurantToJobResult[0].avg_days) * 10) / 10;
+        console.log('[METRICS] avgRestaurantToJobDays:', avgRestaurantToJobDays);
+      } else {
+        console.log('[METRICS] avgRestaurantToJobDays: No data available (null result)');
+      }
+    } catch (error) {
+      console.warn('[METRICS] Restaurant.createdAt or JobOffer.createdAt fields do not exist. Error:', error.message);
+      console.warn('[METRICS] Add createdAt to both models for this metric.');
+    }
+
     const executionTime = Date.now() - startTime;
     console.log('[METRICS] Calculated activeProfessionalsPercentage:', activeProfessionalsPercentage + '%');
     console.log('[METRICS] Total execution time:', executionTime + 'ms');
@@ -709,6 +806,9 @@ router.get('/metrics', async (req, res) => {
         // Average time metrics (requires createdAt fields on Employee and Application)
         avgSignupToProfileDays: avgSignupToProfileDays,
         avgProfileToApplicationDays: avgProfileToApplicationDays,
+        // Average time metrics for companies (requires createdAt fields on Restaurant and JobOffer)
+        avgSignupToRestaurantDays: avgSignupToRestaurantDays,
+        avgRestaurantToJobDays: avgRestaurantToJobDays,
         // Urgent metrics
         jobsWithNoApplicationsAfter48h: jobsWithNoApplicationsAfter48h || 0,
         workersWhoNeverCameBack: workersWhoNeverCameBack || 0
