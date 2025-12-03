@@ -1219,20 +1219,31 @@ router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRo
         createdAt: true,
         lastLoginAt: true,
         accountLocked: true,
-        mfaEnabled: true
+        mfaEnabled: true,
+        employee: {
+          select: {
+            id: true
+          }
+        }
       },
       orderBy: {
         id: 'desc' // Order by ID desc to show newest users first (IDs are auto-incrementing)
       }
     });
 
-    console.log(`🔍 [Admin All Users] Found ${users.length} filtered users`);
-    console.log('🔍 [Admin All Users] Users:', users.map(u => ({ id: u.id, email: u.email, userType: u.userType, role: u.role })));
+    // Map users to include hasEmployeeProfile flag
+    const usersWithProfileInfo = users.map(user => ({
+      ...user,
+      hasEmployeeProfile: user.userType === 'profesionales' ? (user.employee !== null) : null
+    }));
+
+    console.log(`🔍 [Admin All Users] Found ${usersWithProfileInfo.length} filtered users`);
+    console.log('🔍 [Admin All Users] Users:', usersWithProfileInfo.map(u => ({ id: u.id, email: u.email, userType: u.userType, role: u.role, hasEmployeeProfile: u.hasEmployeeProfile })));
 
     res.status(200).json({
       success: true,
-      users: users,
-      total: users.length
+      users: usersWithProfileInfo,
+      total: usersWithProfileInfo.length
     });
 
   } catch (error) {
