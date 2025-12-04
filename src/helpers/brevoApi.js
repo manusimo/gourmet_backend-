@@ -27,8 +27,13 @@ async function sendEmailViaBrevoApi({ to, subject, text, html }) {
     apiInstance.setApiKey(0, process.env.BREVO_API_KEY);
 
     // Prepare email data
-    // Use verified sender email from env, or fallback to default
-    const senderEmail = process.env.BREVO_SENDER_EMAIL;
+    // Use verified sender email from env, or fallback to EMAIL_USER
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER;
+    
+    if (!senderEmail) {
+      console.error('❌ [BREVO API] No sender email configured. Set BREVO_SENDER_EMAIL or EMAIL_USER.');
+      return { success: false, error: 'Sender email not configured' };
+    }
     
     const emailPayload = {
       sender: {
