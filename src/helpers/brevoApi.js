@@ -27,10 +27,13 @@ async function sendEmailViaBrevoApi({ to, subject, text, html }) {
     apiInstance.setApiKey(0, process.env.BREVO_API_KEY);
 
     // Prepare email data
+    // Use verified sender email from env, or fallback to default
+    const senderEmail = process.env.BREVO_SENDER_EMAIL;
+    
     const emailPayload = {
       sender: {
         name: 'Gourmet Jobs',
-        email: 'vergarabarbosa@gmail.com' // Using verified email
+        email: senderEmail
       },
       to: [
         {
@@ -54,13 +57,17 @@ async function sendEmailViaBrevoApi({ to, subject, text, html }) {
     // Send email via Brevo API
     const result = await apiInstance.sendTransacEmail(emailPayload);
     
+    // Extract messageId from response (it's in result.body.messageId)
+    const messageId = result.body?.messageId || result.messageId || result.response?.body?.messageId;
+    
     console.log('✅ [BREVO API] Email sent successfully!');
-    console.log('  - Message ID:', result.messageId);
-    console.log('  - Result:', result);
+    console.log('  - Message ID:', messageId);
+    console.log('  - Status Code:', result.response?.statusCode || result.statusCode);
+    console.log('  - Full Response:', JSON.stringify(result, null, 2));
     
     return { 
       success: true, 
-      messageId: result.messageId,
+      messageId: messageId,
       method: 'brevo_api'
     };
     

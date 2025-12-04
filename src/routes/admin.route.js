@@ -25,7 +25,9 @@ router.get('/users', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromC
       where: {
         restaurantId: req.restaurantId
       },
-      include: {
+      select: {
+        id: true,
+        role: true,
         user: {
           select: {
             id: true,
@@ -131,10 +133,7 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
             <h2 style="color: #fb5424;">Bienvenido a GourmetJobs</h2>
             <p>Hola <strong>${name}</strong>,</p>
             <p>Tu cuenta ha sido creada exitosamente en GourmetJobs.</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>Tu contraseña temporal es:</strong></p>
-              <p style="font-size: 18px; font-weight: bold; color: #fb5424; margin: 10px 0;">${tempPassword}</p>
-            </div>
+        
             <div style="text-align: center; margin: 30px 0;">
               <a href="${setupUrl}" style="background-color: #fb5424; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Configurar Contraseña</a>
             </div>

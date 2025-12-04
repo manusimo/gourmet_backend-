@@ -1097,6 +1097,19 @@ router.get('/user-info', async (req, res) => {
     try {
       const decodedToken = jwt.verify(token, process.env.JWT_SECRET); 
       const userId = decodedToken.userId;
+      
+      // Verify user still exists
+      const userExists = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true }
+      });
+      
+      if (!userExists) {
+        return res.status(401).json({
+          success: false,
+          message: 'User no longer exists'
+        });
+      }
       let restaurantUserId = null;
       let employeeId = null;
       let userRestaurants = [];
@@ -1109,7 +1122,9 @@ router.get('/user-info', async (req, res) => {
             deletedAt: null // Filter out soft-deleted restaurants
           }
         },
-        include: {
+        select: {
+          id: true,
+          role: true,
           restaurant: {
             select: {
               id: true,
@@ -1215,7 +1230,8 @@ router.get('/user-info', async (req, res) => {
 
       // Check if user has an employee profile
       const employee = await prisma.employee.findUnique({
-        where: { userId: userId }
+        where: { userId: userId },
+        select: { id: true } // Only select id to avoid createdAt column issue
       });
       
       if (employee) {
@@ -1232,9 +1248,11 @@ router.get('/user-info', async (req, res) => {
       });
       
     } catch (tokenError) {
+      console.error('❌ [user-info] Token verification error:', tokenError.name, tokenError.message);
       return res.status(401).json({
         success: false,
-        message: 'Invalid authentication token'
+        message: 'Invalid authentication token',
+        error: process.env.NODE_ENV === 'development' ? tokenError.message : undefined
       });
     }
   } catch (error) {
