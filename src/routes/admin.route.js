@@ -1246,14 +1246,51 @@ router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRo
       }
     });
 
-    // Map users to include hasEmployeeProfile flag
-    const usersWithProfileInfo = users.map(user => ({
-      ...user,
-      hasEmployeeProfile: user.userType === 'profesionales' ? (user.employee !== null) : null
+    // Map users to include hasEmployeeProfile flag and conversation counts
+    const usersWithProfileInfo = await Promise.all(users.map(async (user) => {
+      let conversationCount = 0;
+      
+      if (user.userType === 'profesionales' && user.employee) {
+        // For professionals: count conversations where employee.userId = user.id
+        conversationCount = await prisma.conversation.count({
+          where: {
+            employeeId: user.employee.id,
+            deletedAt: null
+          }
+        });
+      } else if (user.userType === 'empresas') {
+        // For companies: count conversations where restaurantUser.userId = user.id
+        const restaurantUsers = await prisma.restaurantUser.findMany({
+          where: {
+            userId: user.id
+          },
+          select: {
+            id: true
+          }
+        });
+        
+        if (restaurantUsers.length > 0) {
+          const restaurantUserIds = restaurantUsers.map(ru => ru.id);
+          conversationCount = await prisma.conversation.count({
+            where: {
+              restaurantUserId: {
+                in: restaurantUserIds
+              },
+              deletedAt: null
+            }
+          });
+        }
+      }
+      
+      return {
+        ...user,
+        hasEmployeeProfile: user.userType === 'profesionales' ? (user.employee !== null) : null,
+        conversationCount: conversationCount
+      };
     }));
 
     console.log(`🔍 [Admin All Users] Found ${usersWithProfileInfo.length} filtered users`);
-    console.log('🔍 [Admin All Users] Users:', usersWithProfileInfo.map(u => ({ id: u.id, email: u.email, userType: u.userType, role: u.role, hasEmployeeProfile: u.hasEmployeeProfile })));
+    console.log('🔍 [Admin All Users] Users:', usersWithProfileInfo.map(u => ({ id: u.id, email: u.email, userType: u.userType, role: u.role, hasEmployeeProfile: u.hasEmployeeProfile, conversationCount: u.conversationCount })));
 
     res.status(200).json({
       success: true,
