@@ -421,6 +421,12 @@ router.get('/total-counts', async (req, res) => {
             is: null
           }
         }
+      }),
+      // Count all conversations (excluding soft-deleted ones)
+      prisma.conversation.count({
+        where: {
+          deletedAt: null
+        }
       })
     ]);
 
@@ -536,6 +542,7 @@ router.get('/total-counts', async (req, res) => {
       registeredProfessionals: registeredProfessionalsCount,
       publishedOffers: publishedOffers || 0,
       totalApplications: totalApplications || 0,
+      totalConversations: totalConversations || 0,
       breakdown: {
         restaurantProfiles: registeredCompanies || 0,
         adminCompanyUsers: adminCompanyUsers || 0,
@@ -662,6 +669,12 @@ router.get('/metrics', async (req, res) => {
           employee: {
             is: null
           }
+        }
+      }),
+      // Count all conversations (excluding soft-deleted ones)
+      prisma.conversation.count({
+        where: {
+          deletedAt: null
         }
       })
     ]);
@@ -794,6 +807,7 @@ router.get('/metrics', async (req, res) => {
       registeredProfessionals: registeredProfessionalsCount,
       publishedOffers: publishedOffers || 0,
       totalApplications: totalApplications || 0,
+      totalConversations: totalConversations || 0,
       breakdown: {
         restaurantProfiles: registeredCompanies || 0,
         adminCompanyUsers: adminCompanyUsers || 0,
