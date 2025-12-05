@@ -626,7 +626,8 @@ router.get('/metrics', async (req, res) => {
       professionalUsers,
       adminCompanyUsers,
       activeProfessionals,
-      workersWhoNeverCameBack
+      workersWhoNeverCameBack,
+      totalConversations
     ] = await Promise.all([
       prisma.restaurant.count(),
       // Count Users with userType 'profesionales' who have created an Employee profile
