@@ -119,7 +119,7 @@ router.post('/create-user', checkCompany, getUserIdFromCookie, getRestaurantUser
       restaurantId: restaurantId,
       restaurantUserId: restaurantUser.id
     }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    const baseUrl = 'https://www.gourmetjobs.cl';
+    const baseUrl = 'http://localhost:3001';
     const setupUrl = `${baseUrl}/set-password?token=${token}`;
 
     // Send email with temporary password and setup link
@@ -1213,6 +1213,7 @@ router.get('/all-users', checkAdmin, getUserIdFromCookie, setUserRole, requireRo
         name: true,
         surname: true,
         email: true,
+        phoneNumber: true,
         userType: true,
         role: true,
         createdAt: true,
