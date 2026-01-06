@@ -1,4 +1,10 @@
+const Logger = require('../utils/logger.js');
 const { prisma } = require('../db.js');
+const {
+  getNotificationsForUser,
+  getUnreadNotificationCount,
+  markNotificationAsRead
+} = require('../helpers/notificationHelpers.js');
 
 /**
  * Create a notification for a user
@@ -205,21 +211,102 @@ const createSystemNotification = async (systemData) => {
 };
 
 /**
+ * Get notifications for a user with unread count
+ * @param {Object} params - Get notifications parameters
+ * @param {number} params.userId - User ID
+ * @param {number} [params.limit] - Maximum number of notifications to return (default: 50)
+ * @returns {Promise<Object>} Object with notifications array and unreadCount
+ * @throws {Error} If validation fails or fetching fails
+ */
+const getNotifications = async ({ userId, limit = 50 }) => {
+  Logger.info('Getting notifications for user', { userId, limit });
+
+  if (!userId) {
+    const error = new Error('User ID is required');
+    error.statusCode = 401;
+    error.code = 'MISSING_USER_ID';
+    throw error;
+  }
+
+  // Fetch notifications and unread count in parallel
+  const [notifications, unreadCount] = await Promise.all([
+    getNotificationsForUser(userId, limit),
+    getUnreadNotificationCount(userId)
+  ]);
+
+  Logger.info('Notifications retrieved successfully', {
+    userId,
+    count: notifications.length,
+    unreadCount
+  });
+
+  return {
+    notifications,
+    unreadCount
+  };
+};
+
+/**
  * Get unread notification count for a user
  * @param {number} userId - User ID
+ * @deprecated Use getNotifications instead
  */
 const getUnreadCount = async (userId) => {
   try {
-    return await prisma.notification.count({
-      where: { 
-        userId,
-        isRead: false 
-      }
-    });
+    return await getUnreadNotificationCount(userId);
   } catch (error) {
-    console.error('❌ Error getting unread count:', error);
+    Logger.error('Error getting unread count', { userId, error: error.message });
     return 0;
   }
+};
+
+/**
+ * Mark a notification as read
+ * @param {Object} params - Mark notification as read parameters
+ * @param {string|number} params.notificationId - Notification ID
+ * @param {number} params.userId - User ID (for authorization)
+ * @returns {Promise<void>}
+ * @throws {Error} If validation fails or notification not found
+ */
+const markNotificationAsReadById = async ({ notificationId, userId }) => {
+  Logger.info('Marking notification as read', { notificationId, userId });
+
+  if (!notificationId) {
+    const error = new Error('Notification ID is required');
+    error.statusCode = 400;
+    error.code = 'MISSING_NOTIFICATION_ID';
+    throw error;
+  }
+
+  if (!userId) {
+    const error = new Error('User ID is required');
+    error.statusCode = 401;
+    error.code = 'MISSING_USER_ID';
+    throw error;
+  }
+
+  const parsedNotificationId = parseInt(notificationId, 10);
+  if (isNaN(parsedNotificationId)) {
+    const error = new Error('Invalid notification ID');
+    error.statusCode = 400;
+    error.code = 'INVALID_NOTIFICATION_ID';
+    throw error;
+  }
+
+  // Mark notification as read
+  const result = await markNotificationAsRead(parsedNotificationId, userId);
+
+  if (result.count === 0) {
+    const error = new Error('Notification not found');
+    error.statusCode = 404;
+    error.code = 'NOTIFICATION_NOT_FOUND';
+    throw error;
+  }
+
+  Logger.info('Notification marked as read successfully', {
+    notificationId: parsedNotificationId,
+    userId
+  });
 };
 
 /**
@@ -235,9 +322,9 @@ const markAllAsRead = async (userId) => {
       },
       data: { isRead: true }
     });
-    console.log(`✅ All notifications marked as read for user ${userId}`);
+    Logger.info(`All notifications marked as read for user ${userId}`);
   } catch (error) {
-    console.error('❌ Error marking all notifications as read:', error);
+    Logger.error('Error marking all notifications as read', { userId, error: error.message });
     throw error;
   }
 };
@@ -249,6 +336,8 @@ module.exports = {
   createMessageNotification,
   createJobOfferNotification,
   createSystemNotification,
+  getNotifications,
   getUnreadCount,
+  markNotificationAsReadById,
   markAllAsRead
 };

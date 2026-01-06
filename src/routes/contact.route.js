@@ -1,6 +1,8 @@
 const express = require('express');
-const { prisma } = require('../db.js');
 const { validateContact } = require('../middleware/validation.js');
+const { sendSuccessResponse, handleContactError } = require('../utils/responseHelpers.js');
+const Logger = require('../utils/logger.js');
+const ContactService = require('../services/contactService.js');
 
 const router = express.Router();
 
@@ -8,58 +10,23 @@ const router = express.Router();
 router.post('/contact', validateContact, async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
-    
-    // Additional server-side validation (defense in depth)
-    if (!name || !email || !subject || !message) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'All required fields must be provided' 
-      });
-    }
 
-    // Create contact submission
-    const submission = await prisma.contactSubmission.create({
-      data: { 
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        phone: phone ? phone.trim() : null,
-        subject: subject.trim(),
-        message: message.trim()
-      },
+    const result = await ContactService.submitContact({
+      name,
+      email,
+      phone,
+      subject,
+      message
     });
 
-    // Success response
-    res.status(201).json({ 
-      success: true,
-      message: 'Contact form submitted successfully',
-      data: {
-        submissionId: submission.id,
-        timestamp: submission.createdAt
-      }
-    });
-
+    sendSuccessResponse(res, 201, 'Contact form submitted successfully', result);
   } catch (error) {
-    console.error('Contact submission error:', error);
-    
-    // Handle specific Prisma errors
-    if (error.code === 'P2002') {
-      return res.status(409).json({ 
-        success: false,
-        message: 'Duplicate submission detected' 
-      });
-    }
-    
-    if (error.code === 'P2000') {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Invalid data format' 
-      });
-    }
-
-    // Generic error response
-    res.status(500).json({ 
-      success: false,
-      message: 'Unable to process contact form. Please try again later.' 
+    handleContactError(res, error, {
+      context: {
+        email: req.body.email,
+        subject: req.body.subject
+      },
+      logger: Logger
     });
   }
 });

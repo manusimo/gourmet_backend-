@@ -467,20 +467,20 @@ const validateJobOffer = [
 const validateApplication = [
   body('jobPostId')
     .isInt({ min: 1 })
-    .withMessage('Job post ID must be a valid number'),
+    .withMessage('El ID del trabajo debe ser un número válido'),
   
   body('answers')
     .isArray({ min: 1 })
-    .withMessage('At least one answer is required'),
+    .withMessage('Se requiere al menos una respuesta'),
   
   body('answers.*.questionId')
     .isInt({ min: 1 })
-    .withMessage('Question ID must be a valid number'),
+    .withMessage('El ID de la pregunta debe ser un número válido'),
   
   body('answers.*.answer')
     .trim()
     .isLength({ min: 1, max: 10000 })
-    .withMessage('Answer must be between 1 and 10000 characters')
+    .withMessage('La respuesta debe tener entre 1 y 10,000 caracteres')
     .customSanitizer(sanitizeAndTrim),
   
   handleValidationErrors

@@ -334,6 +334,43 @@ const getRestaurantUserConversations = async (restaurantUserId, type, restaurant
 };
 
 /**
+ * Get conversation with messages for deletion authorization
+ * @param {number} conversationId - Conversation ID
+ * @returns {Promise<Object|null>} Conversation with messages or null
+ */
+const getConversationForDeletion = async (conversationId) => {
+  return await prisma.conversation.findUnique({
+    where: { id: parseInt(conversationId) },
+    include: {
+      messages: {
+        include: {
+          sender: true,
+          receiver: true
+        }
+      }
+    }
+  });
+};
+
+/**
+ * Check if admin/staff user has access to delete conversation
+ * @param {Object} conversation - Conversation with messages
+ * @param {number} userId - User ID
+ * @param {number} restaurantUserId - Restaurant user ID from conversation
+ * @returns {boolean} True if user has access
+ */
+const hasAdminDeleteAccess = (conversation, userId, restaurantUserId) => {
+  if (!conversation || !conversation.messages) {
+    return false;
+  }
+
+  return conversation.messages.some(message => {
+    return message.senderId === userId || 
+           (message.senderRestaurantUserId && message.senderRestaurantUserId === restaurantUserId);
+  });
+};
+
+/**
  * Delete conversation and all its messages
  * @param {number} conversationId - Conversation ID
  * @returns {Object} Deleted conversation
@@ -367,7 +404,287 @@ const validateConversationAccess = (conversation, employeeId, restaurantUserId) 
   }
   
   return true;
-}; 
+};
+
+/**
+ * Get employee by user ID
+ * @param {number} userId - User ID
+ * @returns {Promise<Object|null>} Employee or null
+ */
+const getEmployeeByUserId = async (userId) => {
+  return await prisma.employee.findUnique({
+    where: { userId: parseInt(userId) }
+  });
+};
+
+/**
+ * Get restaurant user by user ID
+ * @param {number} userId - User ID
+ * @returns {Promise<Object|null>} Restaurant user or null
+ */
+const getRestaurantUserByUserId = async (userId) => {
+  return await prisma.restaurantUser.findFirst({
+    where: { userId: parseInt(userId) }
+  });
+};
+
+/**
+ * Get all restaurant users for a user ID
+ * @param {number} userId - User ID
+ * @returns {Promise<Array>} Array of restaurant users
+ */
+const getAllRestaurantUsersByUserId = async (userId) => {
+  return await prisma.restaurantUser.findMany({
+    where: { userId: parseInt(userId) }
+  });
+};
+
+/**
+ * Get user by ID
+ * @param {number} userId - User ID
+ * @returns {Promise<Object|null>} User or null
+ */
+const getUserById = async (userId) => {
+  return await prisma.user.findUnique({
+    where: { id: parseInt(userId) }
+  });
+};
+
+/**
+ * Check if admin/staff user has sent messages in conversation
+ * @param {Object} conversation - Conversation with messages
+ * @param {Array<number>} restaurantUserIds - Array of restaurant user IDs
+ * @returns {boolean} True if user has sent messages
+ */
+const hasAdminSentMessages = (conversation, restaurantUserIds) => {
+  if (!conversation.messages || conversation.messages.length === 0) {
+    return false;
+  }
+
+  return conversation.messages.some(message => 
+    message.senderRestaurantUserId && restaurantUserIds.includes(message.senderRestaurantUserId)
+  );
+};
+
+/**
+ * Verify user access to conversation
+ * @param {Object} conversation - Conversation object with messages
+ * @param {number} userId - User ID
+ * @returns {Promise<boolean>} True if user has access
+ */
+const verifyConversationAccess = async (conversation, userId) => {
+  try {
+    // Check if user is an employee in this conversation
+    if (conversation.employeeId) {
+      const employee = await getEmployeeByUserId(userId);
+      if (employee && employee.id === conversation.employeeId) {
+        return true;
+      }
+    }
+    
+    // Check if user is a restaurant user in this conversation
+    if (conversation.restaurantUserId) {
+      const restaurantUser = await getRestaurantUserByUserId(userId);
+      if (restaurantUser && restaurantUser.id === conversation.restaurantUserId) {
+        return true;
+      }
+    }
+    
+    // For admin users: check if they have sent messages in this conversation
+    if (conversation.messages && conversation.messages.length > 0) {
+      const adminRestaurantUsers = await getAllRestaurantUsersByUserId(userId);
+      
+      if (adminRestaurantUsers.length > 0) {
+        const adminRestaurantUserIds = adminRestaurantUsers.map(ru => ru.id);
+        if (hasAdminSentMessages(conversation, adminRestaurantUserIds)) {
+          return true;
+        }
+      }
+    }
+    
+    // Temporary: allow access for admin/staff users even if they haven't sent messages yet
+    const user = await getUserById(userId);
+    if (user && (user.role === 'admin' || user.role === 'staff')) {
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    // On error, default to allowing access (graceful degradation)
+    // This matches the original behavior where accessError resulted in hasAccess = true
+    return true;
+  }
+};
+
+/**
+ * Get user info for sender/receiver based on type
+ * @param {number} userId - User/Employee/RestaurantUser ID
+ * @param {string} type - Type: 'restaurant', 'employee', or 'user'
+ * @returns {Promise<Object|null>} User info with id, name, email, and optional restaurantName
+ */
+const getUserInfoByType = async (userId, type) => {
+  if (type === 'restaurant') {
+    const restaurantUser = await prisma.restaurantUser.findUnique({
+      where: { id: parseInt(userId) },
+      select: { 
+        user: { select: { id: true, name: true, email: true } },
+        restaurant: { select: { name: true } }
+      }
+    });
+    if (restaurantUser) {
+      return { 
+        ...restaurantUser.user, 
+        restaurantName: restaurantUser.restaurant.name 
+      };
+    }
+    return null;
+  } else if (type === 'employee') {
+    const employee = await prisma.employee.findUnique({
+      where: { id: parseInt(userId) },
+      select: { 
+        user: { select: { id: true, name: true, email: true } }
+      }
+    });
+    return employee ? employee.user : null;
+  } else {
+    // Fallback: try as direct User.id
+    return await prisma.user.findUnique({
+      where: { id: parseInt(userId) },
+      select: { id: true, name: true, email: true }
+    });
+  }
+};
+
+/**
+ * Get restaurant name from conversation
+ * @param {number} conversationId - Conversation ID
+ * @returns {Promise<string|null>} Restaurant name or null
+ */
+const getRestaurantNameFromConversation = async (conversationId) => {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: parseInt(conversationId) },
+    select: { 
+      restaurant: { 
+        select: { name: true } 
+      } 
+    }
+  });
+  return conversation?.restaurant?.name || null;
+};
+
+/**
+ * Find or create restaurant user for a user and restaurant
+ * @param {number} userId - User ID
+ * @param {number} restaurantId - Restaurant ID
+ * @returns {Promise<number>} Restaurant user ID
+ */
+const findOrCreateRestaurantUser = async (userId, restaurantId) => {
+  // Try to find existing restaurant user
+  const restaurantUser = await prisma.restaurantUser.findFirst({
+    where: {
+      userId: parseInt(userId),
+      restaurantId: parseInt(restaurantId)
+    }
+  });
+
+  if (restaurantUser) {
+    return restaurantUser.id;
+  }
+
+  // Create new restaurant user if not found
+  const newRestaurantUser = await prisma.restaurantUser.create({
+    data: {
+      userId: parseInt(userId),
+      restaurantId: parseInt(restaurantId),
+      role: 'admin'
+    }
+  });
+
+  return newRestaurantUser.id;
+};
+
+/**
+ * Convert image URLs in employee conversations (restaurant images)
+ * @param {Array} conversations - Array of conversations
+ * @param {Function} convertImageUrls - Function to convert image URLs
+ * @returns {Promise<Array>} Conversations with converted image URLs
+ */
+const convertEmployeeConversationImages = async (conversations, convertImageUrls) => {
+  return await Promise.all(
+    conversations.map(async (conversation) => {
+      try {
+        const convertedConversation = { ...conversation };
+        if (conversation.restaurantUser?.restaurant) {
+          convertedConversation.restaurantUser.restaurant = await convertImageUrls(
+            conversation.restaurantUser.restaurant, 
+            ['profileImageUrl', 'profileCarouselUrls']
+          );
+        }
+        return convertedConversation;
+      } catch (error) {
+        // Return original conversation if conversion fails
+        return conversation;
+      }
+    })
+  );
+};
+
+/**
+ * Convert image URLs in restaurant user conversations (employee images)
+ * @param {Array} conversations - Array of conversations
+ * @param {Function} convertImageUrls - Function to convert image URLs
+ * @returns {Promise<Array>} Conversations with converted image URLs
+ */
+const convertRestaurantConversationImages = async (conversations, convertImageUrls) => {
+  return await Promise.all(
+    conversations.map(async (conversation) => {
+      try {
+        const convertedConversation = { ...conversation };
+        if (conversation.employee) {
+          convertedConversation.employee = await convertImageUrls(
+            conversation.employee, 
+            ['profileImageUrl']
+          );
+        }
+        return convertedConversation;
+      } catch (error) {
+        // Return original conversation if conversion fails
+        return conversation;
+      }
+    })
+  );
+};
+
+/**
+ * Generate JWT token for chat socket authentication
+ * @param {number} userId - User ID
+ * @param {string} userType - User type
+ * @returns {string} JWT token
+ */
+const generateChatToken = (userId, userType) => {
+  const jwt = require('jsonwebtoken');
+
+  if (!process.env.JWT_SECRET) {
+    const error = new Error('Error en la configuración del servidor. Por favor, contacta al soporte.');
+    error.statusCode = 500;
+    throw error;
+  }
+
+  const payload = {
+    userId,
+    userType,
+    tokenType: 'socket',
+    timestamp: Date.now()
+  };
+
+  const options = {
+    expiresIn: '15m',
+    audience: 'chat',
+    issuer: process.env.NODE_ENV === 'production' ? process.env.JWT_ISSUER : 'localhost'
+  };
+
+  return jwt.sign(payload, process.env.JWT_SECRET, options);
+};
 
 module.exports = {
   getConversationById,
@@ -385,4 +702,13 @@ module.exports = {
   getRestaurantUserConversations,
   deleteConversation,
   validateConversationAccess,
+  verifyConversationAccess,
+  getUserInfoByType,
+  getRestaurantNameFromConversation,
+  findOrCreateRestaurantUser,
+  convertEmployeeConversationImages,
+  convertRestaurantConversationImages,
+  getConversationForDeletion,
+  hasAdminDeleteAccess,
+  generateChatToken,
 }; 

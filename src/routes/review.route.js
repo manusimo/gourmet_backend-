@@ -9,7 +9,9 @@ const {
   getReviewsForRestaurant,
   getReviewById,
   getEmployeeAverageRating,
-  getRestaurantAverageRating
+  getRestaurantAverageRating,
+  getReviewsForHiring,
+  checkUserHasReviewed
 } = require('../helpers/reviewHelpers.js');
 
 const router = express.Router();
@@ -179,6 +181,63 @@ router.get('/reviews/:reviewId', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching review:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
+});
+
+// GET /reviews/hiring/:hiringId - Get reviews for a specific hiring
+router.get('/reviews/hiring/:hiringId', async (req, res) => {
+  try {
+    const { hiringId } = req.params;
+    const reviews = await getReviewsForHiring(parseInt(hiringId));
+
+    res.status(200).json({
+      success: true,
+      data: reviews
+    });
+  } catch (error) {
+    console.error('Error fetching reviews for hiring:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
+    });
+  }
+});
+
+// GET /reviews/hiring/:hiringId/check - Check if current user has reviewed this hiring
+router.get('/reviews/hiring/:hiringId/check', getAuthFromCookie, async (req, res) => {
+  try {
+    const { hiringId } = req.params;
+    const { userId, userType } = req;
+
+    if (!userId || !userType) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    // Verify hiring exists
+    const hiring = await getHiringById(parseInt(hiringId));
+    if (!hiring) {
+      return res.status(404).json({
+        success: false,
+        message: 'Hiring not found'
+      });
+    }
+
+    // Check if user has reviewed
+    const hasReviewed = await checkUserHasReviewed(userId, userType, hiring);
+
+    res.status(200).json({
+      success: true,
+      data: { hasReviewed }
+    });
+  } catch (error) {
+    console.error('Error checking user review:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Internal Server Error'

@@ -32,6 +32,135 @@ const getOrCreateAllBranchesLocation = async (restaurantId) => {
 };
 
 /**
+ * Parse numeric fields from job offer data
+ * @param {string|number} vacancies - Vacancies count
+ * @param {string|number} yearsOfExperience - Years of experience
+ * @param {string|number} salary - Salary amount
+ * @returns {Object} Parsed numeric fields
+ */
+const parseJobOfferNumericFields = (vacancies, yearsOfExperience, salary) => {
+  const parsedVacancies = parseInt(vacancies, 10);
+  const parsedYearsOfExperience = parseInt(yearsOfExperience, 10);
+  const parsedSalary = parseInt(salary, 10);
+
+  return {
+    vacancies: isNaN(parsedVacancies) ? null : parsedVacancies,
+    yearsOfExperience: isNaN(parsedYearsOfExperience) ? null : parsedYearsOfExperience,
+    salary: isNaN(parsedSalary) ? null : parsedSalary
+  };
+};
+
+/**
+ * Convert propina string to boolean
+ * @param {string} propina - Propina value ('Si' or other)
+ * @returns {boolean} Tips enabled
+ */
+const convertPropinaToBoolean = (propina) => {
+  return propina === 'Si';
+};
+
+/**
+ * Resolve location ID for job offer
+ * Handles special cases:
+ * - -1: "todas las sucursales" (all branches) - get or create special location
+ * - null: "no especificado" (not specified) - return null
+ * - positive integer: specific location - return as is
+ * @param {number|null} locationId - Location ID
+ * @param {number} restaurantId - Restaurant ID
+ * @returns {Promise<number|null>} Resolved location ID
+ */
+const resolveJobOfferLocationId = async (locationId, restaurantId) => {
+  if (locationId === -1) {
+    const allBranchesLocation = await getOrCreateAllBranchesLocation(restaurantId);
+    return allBranchesLocation.id;
+  }
+  
+  return locationId && locationId > 0 ? locationId : null;
+};
+
+/**
+ * Build job offer data object for Prisma
+ * @param {Object} params - Job offer parameters
+ * @param {string} params.position - Job position
+ * @param {string} params.schedule - Work schedule
+ * @param {string} params.contract - Contract type
+ * @param {string} params.description - Job description
+ * @param {Array} params.questions - Job questions
+ * @param {string} params.requirements - Job requirements
+ * @param {string} params.functions - Job functions
+ * @param {boolean} params.tips - Tips enabled
+ * @param {number} params.restaurantId - Restaurant ID
+ * @param {number|null} params.locationId - Resolved location ID
+ * @param {number|null} params.restaurantUserId - Restaurant user ID (optional)
+ * @param {Date|string|null} params.startDate - Start date
+ * @param {Date|string|null} params.endDate - End date
+ * @param {number|null} params.vacancies - Vacancies count
+ * @param {number|null} params.yearsOfExperience - Years of experience
+ * @param {number|null} params.salary - Salary amount
+ * @returns {Object} Prisma data object
+ */
+const buildJobOfferData = ({
+  position,
+  schedule,
+  contract,
+  description,
+  questions,
+  requirements,
+  functions,
+  tips,
+  restaurantId,
+  locationId,
+  restaurantUserId,
+  startDate,
+  endDate,
+  vacancies,
+  yearsOfExperience,
+  salary
+}) => {
+  const data = {
+    position,
+    schedule,
+    contract,
+    description,
+    restaurant: { connect: { id: parseInt(restaurantId, 10) } },
+    requirements,
+    functions,
+    tips,
+    questions: { create: questions },
+    yearsOfExperience
+  };
+
+  // Handle dates - convert string to Date if provided
+  if (startDate) {
+    data.startDate = startDate instanceof Date ? startDate : new Date(startDate);
+  }
+  if (endDate) {
+    data.endDate = endDate instanceof Date ? endDate : new Date(endDate);
+  }
+
+  // Connect location if locationId is provided
+  if (locationId) {
+    data.location = { connect: { id: locationId } };
+  }
+
+  // Connect restaurantUser if restaurantUserId is provided (for staff members)
+  // Restaurant owners don't have restaurantUserId
+  if (restaurantUserId) {
+    data.restaurantUser = { connect: { id: restaurantUserId } };
+  }
+
+  // Add optional numeric fields only if they have valid values
+  if (vacancies !== null) {
+    data.vacancies = vacancies;
+  }
+  if (salary !== null) {
+    data.salary = salary;
+  }
+
+  return data;
+};
+
+/**
  * Create job offer
  * @param {Object} jobData - Job offer data
  * @returns {Object} Created job offer
@@ -56,59 +185,28 @@ const createJobOffer = async (jobData) => {
     endDate
   } = jobData;
 
-  const tips = propina === 'Si';
+  // Parse and convert data
+  const numericFields = parseJobOfferNumericFields(vacancies, yearsOfExperience, salary);
+  const tips = convertPropinaToBoolean(propina);
+  const resolvedLocationId = await resolveJobOfferLocationId(locationId, parseInt(restaurantId, 10));
 
-  // Parse numeric fields
-  const parsedVacancies = parseInt(vacancies, 10);
-  const parsedYearsOfExperience = parseInt(yearsOfExperience, 10);
-  const parsedSalary = parseInt(salary, 10);
-
-  // Build data object, only including valid numeric fields
-  const data = {
+  // Build Prisma data object
+  const data = buildJobOfferData({
     position,
     schedule,
     contract,
     description,
-    restaurant: { connect: { id: parseInt(restaurantId, 10) } },
+    questions,
     requirements,
     functions,
     tips,
-    questions: { create: questions },
-  };
-
-  // Handle dates - convert string to Date if provided
-  if (startDate) {
-    data.startDate = startDate instanceof Date ? startDate : new Date(startDate);
-  }
-  if (endDate) {
-    data.endDate = endDate instanceof Date ? endDate : new Date(endDate);
-  }
-
-  // Handle locationId:
-  // -1 means "todas las sucursales" (all branches) - get or create special location
-  // null means "no especificado" (not specified) - don't set location
-  // positive integer means specific location
-  let finalLocationId = locationId;
-  if (locationId === -1) {
-    const allBranchesLocation = await getOrCreateAllBranchesLocation(parseInt(restaurantId, 10));
-    finalLocationId = allBranchesLocation.id;
-  }
-
-  if (finalLocationId && finalLocationId > 0) {
-    data.location = { connect: { id: finalLocationId } };
-  }
-  // If locationId is null, we don't set the location field, so it defaults to null
-  
-  // Only connect restaurantUser if restaurantUserId is provided (for staff members)
-  // Restaurant owners don't have restaurantUserId
-  if (restaurantUserId) {
-    data.restaurantUser = { connect: { id: restaurantUserId } };
-  }
-  
-  if (!isNaN(parsedVacancies)) data.vacancies = parsedVacancies;
-  // yearsOfExperience: always present, number or null
-  data.yearsOfExperience = isNaN(parsedYearsOfExperience) ? null : parsedYearsOfExperience;
-  if (!isNaN(parsedSalary)) data.salary = parsedSalary;
+    restaurantId,
+    locationId: resolvedLocationId,
+    restaurantUserId,
+    startDate,
+    endDate,
+    ...numericFields
+  });
 
   return await prisma.jobOffer.create({ data });
 };
@@ -458,6 +556,33 @@ const generateCompletePlanInfo = (planData) => {
   };
 }; 
 
+/**
+ * Get all restaurant IDs a user has access to (staff access + owned)
+ * @param {number} userId - User ID
+ * @returns {Promise<Array<number>>} Array of restaurant IDs
+ */
+const getUserRestaurantIds = async (userId) => {
+  // Get restaurants from RestaurantUser table (staff access)
+  const userRestaurants = await prisma.restaurantUser.findMany({
+    where: { userId: parseInt(userId) },
+    select: { restaurantId: true }
+  });
+  
+  // Get restaurants where the user is the direct owner
+  const ownedRestaurants = await prisma.restaurant.findMany({
+    where: { userId: parseInt(userId) },
+    select: { id: true }
+  });
+  
+  // Combine all restaurant IDs the user has access to
+  const allRestaurantIds = [
+    ...userRestaurants.map(ur => ur.restaurantId),
+    ...ownedRestaurants.map(or => or.id)
+  ];
+  
+  return allRestaurantIds;
+};
+
 module.exports = {
   createJobOffer,
   getOrCreateAllBranchesLocation,
@@ -478,4 +603,5 @@ module.exports = {
   getRestaurantWithLocations,
   formatJobOffersForPlanInfo,
   generateCompletePlanInfo,
+  getUserRestaurantIds,
 }; 

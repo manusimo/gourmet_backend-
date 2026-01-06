@@ -205,19 +205,6 @@ const getRestaurantUserIdFromCookie = async (req, res, next) => {
   }
 }
 
-const identifyUser = (decodedToken, req) => {
-  req.userId = decodedToken.userId;
-  req.userType = decodedToken.userType;
-
-  if (decodedToken.employeeId) {
-    req.employeeId = decodedToken.employeeId;
-  }
-
-  if (decodedToken.restaurantUserId) {
-    req.restaurantUserId = decodedToken.restaurantUserId;
-  }
-};
-
 const optionalAuth = (req, res, next) => {
   const token = req.cookies.manu; 
 
@@ -238,72 +225,10 @@ const optionalAuth = (req, res, next) => {
   }
 };
 
-const validateTokenAndIdentifyUser = async (req, res, next) => {
-  try {
-    const token = req.cookies.manu;
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
-    }
-
-    const decodedToken = validateToken(token);
-    identifyUser(decodedToken, req);
-
-    // For restaurant users, we need to look up the restaurantUserId if not in token
-    if (decodedToken.userType === 'empresas' && !req.restaurantUserId) {
-      console.log('🔍 Looking up restaurantUserId for user:', decodedToken.userId);
-      
-      const restaurantUser = await prisma.restaurantUser.findFirst({
-        where: { userId: decodedToken.userId },
-        select: { id: true }
-      });
-      
-      if (restaurantUser) {
-        req.restaurantUserId = restaurantUser.id;
-        console.log('✅ Found restaurantUserId:', restaurantUser.id);
-      } else {
-        console.log('❌ No restaurantUser found for userId:', decodedToken.userId);
-      }
-    }
-
-    // For professional users, we need to look up the employeeId if not in token
-    if (decodedToken.userType === 'profesionales' && !req.employeeId) {
-      console.log('🔍 Looking up employeeId for user:', decodedToken.userId);
-      
-      const employee = await prisma.employee.findFirst({
-        where: { userId: decodedToken.userId },
-        select: { id: true }
-      });
-      
-      if (employee) {
-        req.employeeId = employee.id;
-        console.log('✅ Found employeeId:', employee.id);
-      } else {
-        console.log('❌ No employee found for userId:', decodedToken.userId);
-      }
-    }
-
-    next();
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-};
-
-const validateToken = (token) => {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET); 
-  } catch (error) {
-    console.error('Error in token validation:', error);
-    throw error;
-  }
-};
 
 module.exports = {
   getAuthFromCookie, 
   getRestaurantIdFromCookie: getAuthFromCookie, // Alias for backward compatibility
-  validateTokenAndIdentifyUser,
   getEmployeeIdFromCookie, 
   getUserIdFromCookie, 
   getRestaurantUserIdFromCookie, 

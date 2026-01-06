@@ -458,6 +458,8 @@ model Hiring {
   offerDate           DateTime      @default(now())
   acceptanceDate      DateTime?
   offerExpirationDate DateTime?
+  startDate           DateTime?
+  endDate             DateTime?
   status              String        @default("offered")
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
@@ -472,6 +474,7 @@ model Hiring {
   @@index([employeeId, status])
   @@index([restaurantId, status])
   @@index([offerExpirationDate])
+  @@index([endDate])
 }
 
 model Review {

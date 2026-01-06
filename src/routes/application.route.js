@@ -1,142 +1,64 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
-const { getEmployeeIdFromCookie, getRestaurantIdFromCookie } = require('../helpers/cookies.js');
-const { checkEmployee, checkCompany } = require('../helpers/authenticateToken.js');
+const { getRestaurantIdFromCookie, getAuthFromCookie } = require('../helpers/cookies.js');
+const { checkCompany } = require('../helpers/authenticateToken.js');
+const ApplicationService = require('../services/applicationService.js');
+const { authenticateAndValidateApplication } = require('../middleware/application.js');
 const {
-  validateApplicationInput,
-  getJobPost,
-  getExistingApplication,
-  createApplication,
-  getApplicationById,
-  getJobOfferForRestaurant,
-  getApplicationsForJobOffer
-} = require('../helpers/applicationHelpers.js');
-const { processApplicationNotifications } = require('../services/applicationNotificationService.js');
-const { convertImageUrls } = require('../utils/imageUrlUtils.js');
-
-const prisma = new PrismaClient();
+  requireValidId,
+  sendSuccessResponse,
+  handleApplicationError
+} = require('../utils/responseHelpers.js');
+const { Logger } = require('../middleware/errorTracking.js');
 
 const router = express.Router();
 
 // POST /application - Create a new application
-router.post('/application', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
+router.post('/application', authenticateAndValidateApplication, async (req, res) => {
+  const { jobPostId, answers } = req.body;
+  const employeeId = req.employeeId;
+
   try {
-    const { jobPostId, answers } = req.body;
-    const employeeId = req.employeeId;
-
-    // Validate employee authentication
-    if (!employeeId) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Debes hacer log in para postular' 
-      });
-    }
-
-    // Validate input data
-    const validation = validateApplicationInput({ jobPostId, answers });
-    if (!validation.isValid) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Datos inválidos',
-        errors: validation.errors 
-      });
-    }
-
-    // Check if job post exists
-    const jobPost = await getJobPost(jobPostId);
-    if (!jobPost) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Trabajo no encontrado.' 
-      });
-    }
-
-    // Check if employee has already applied
-    const existingApplication = await getExistingApplication(jobPostId, employeeId);
-    if (existingApplication) {
-      return res.status(409).json({ 
-        success: false,
-        message: 'Ya postulaste a este trabajo.' 
-      });
-    }
-
-    // Create application
-    const application = await createApplication(jobPostId, employeeId, answers);
-
-    // Process notifications (milestone emails + in-app notifications)
-    await processApplicationNotifications({
+    const application = await ApplicationService.createApplication({
       jobPostId,
       employeeId,
-      applicationId: application.id,
-      jobPost
+      answers
     });
 
-    res.status(201).json({ 
-      success: true,
-      message: 'Postulaste exitosamente.', 
-      data: application
-    });
+    sendSuccessResponse(res, 201, 'Postulaste exitosamente.', application);
   } catch (error) {
-    console.error('Error creating application:', error);
-
-    if (error.code === 'P2025') {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Este trabajo ya no está disponible.' 
-      });
-    }
-
-    res.status(500).json({ 
-      success: false,
-      message: 'Hemos tenido un error, intenta más tarde.' 
+    handleApplicationError(res, error, {
+      context: { jobPostId, employeeId },
+      customMessages: {
+        'P2025': 'Este trabajo ya no está disponible.',
+        'P2003': 'Referencia inválida al trabajo o empleado.'
+      },
+      logger: Logger
     });
   }
 });
 
 // GET /applications/:applicationId - Get application by ID
-router.get('/applications/:applicationId', async (req, res) => {
+router.get('/applications/:applicationId', getAuthFromCookie, async (req, res) => {
   try {
     const { applicationId } = req.params;
 
     // Validate application ID
-    const parsedId = parseInt(applicationId);
-    if (!applicationId || isNaN(parsedId) || parsedId <= 0 || parsedId > Number.MAX_SAFE_INTEGER) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'ID de postulación inválido' 
-      });
-    }
+    const parsedId = requireValidId(res, applicationId, 'ID de postulación');
+    if (!parsedId) return;
 
-    const application = await getApplicationById(parsedId);
-
-    if (!application) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Postulación no encontrada' 
-      });
-    }
-
-    // Convert image URLs to signed URLs
-    const applicationWithSignedUrls = { ...application };
-    if (application.employee) {
-      applicationWithSignedUrls.employee = await convertImageUrls(application.employee, ['profileImageUrl']);
-    }
-    if (application.jobPost?.restaurant) {
-      applicationWithSignedUrls.jobPost.restaurant = await convertImageUrls(
-        application.jobPost.restaurant, 
-        ['profileImageUrl', 'profileCarouselUrls']
-      );
-    }
-
-    res.status(200).json({ 
-      success: true,
-      data: applicationWithSignedUrls 
+    // Get application with authorization check and image URL conversion
+    const application = await ApplicationService.getApplication({
+      applicationId: parsedId,
+      employeeId: req.employeeId,
+      restaurantId: req.restaurantId,
+      userType: req.userType
     });
+
+    sendSuccessResponse(res, 200, null, application);
   } catch (error) {
-    
-    res.status(500).json({ 
-      success: false,
-      message: 'Error interno del servidor' 
+    handleApplicationError(res, error, {
+      context: { applicationId: req.params.applicationId, userId: req.userId },
+      logger: Logger
     });
   }
 });
@@ -148,59 +70,31 @@ router.get('/job-offers/:jobOfferId/applicants', checkCompany, getRestaurantIdFr
     const { restaurantId: queryRestaurantId } = req.query;
     const { restaurantId: jwtRestaurantId } = req;
 
+    // Validate job offer ID
+    const parsedJobOfferId = requireValidId(res, jobOfferId, 'ID de oferta de trabajo');
+    if (!parsedJobOfferId) return;
+
     // Use restaurantId from query parameter if provided, otherwise use from JWT token
     const restaurantId = queryRestaurantId ? parseInt(queryRestaurantId) : jwtRestaurantId;
 
-    // Validate job offer ID
-    const parsedJobOfferId = parseInt(jobOfferId);
-    if (!jobOfferId || isNaN(parsedJobOfferId) || parsedJobOfferId <= 0 || parsedJobOfferId > Number.MAX_SAFE_INTEGER) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'ID de oferta de trabajo inválido' 
-      });
-    }
+    // Get applicants with authorization check
+    const applications = await ApplicationService.getApplicantsForJobOffer({
+      jobOfferId: parsedJobOfferId,
+      restaurantId
+    });
 
-    // Validate restaurant ID
-    if (!restaurantId) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'ID del restaurante es requerido' 
-      });
-    }
-
-    // Check if job offer exists and belongs to restaurant
-    const jobOffer = await getJobOfferForRestaurant(parsedJobOfferId, restaurantId);
-    if (!jobOffer) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Oferta de trabajo no encontrada o no tienes permiso para ver los postulantes.' 
-      });
-    }
-
-    // Get applications for this job offer
-    const applications = await getApplicationsForJobOffer(parsedJobOfferId);
-
-    // Convert employee profile image URLs to actual signed URLs
-    const applicationsWithSignedUrls = await Promise.all(
-      applications.map(async (application) => {
-        const convertedApplication = { ...application };
-        if (application.employee) {
-          convertedApplication.employee = await convertImageUrls(application.employee, ['profileImageUrl']);
-        }
-        return convertedApplication;
-      })
-    );
-
-    res.json({ 
-      success: true,
-      data: applicationsWithSignedUrls,
-      count: applicationsWithSignedUrls.length
+    sendSuccessResponse(res, 200, null, {
+      data: applications,
+      count: applications.length
     });
   } catch (error) {
-    console.error('Error getting applicants:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error interno del servidor' 
+    handleApplicationError(res, error, {
+      context: { 
+        jobOfferId: req.params.jobOfferId, 
+        restaurantId: req.restaurantId,
+        userId: req.userId 
+      },
+      logger: Logger
     });
   }
 });

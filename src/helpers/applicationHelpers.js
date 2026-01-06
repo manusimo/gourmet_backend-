@@ -61,7 +61,7 @@ const validateApplicationInput = (data) => {
 };
 
 /**
- * Check if job post exists and is active
+ * Check if job post exists
  * @param {number} jobPostId - Job post ID
  * @returns {Object|null} Job post or null if not found
  */
@@ -73,6 +73,28 @@ const getJobPost = async (jobPostId) => {
       questions: true,
     },
   });
+};
+
+/**
+ * Check if job post is available for applications
+ * @param {Object} jobPost - Job post object
+ * @returns {Object} { isAvailable: boolean, reason: string|null }
+ */
+const isJobPostAvailable = (jobPost) => {
+  if (!jobPost) {
+    return { isAvailable: false, reason: 'Trabajo no encontrado.' };
+  }
+
+  if (jobPost.deletedAt) {
+    return { isAvailable: false, reason: 'Este trabajo ya no está disponible.' };
+  }
+
+  // Check if job has an end date and if it has passed
+  if (jobPost.endDate && new Date(jobPost.endDate) < new Date()) {
+    return { isAvailable: false, reason: 'Este trabajo ya no está disponible.' };
+  }
+
+  return { isAvailable: true, reason: null };
 };
 
 /**
@@ -203,6 +225,7 @@ const getApplicationsForJobOffer = async (jobOfferId) => {
 module.exports = {
   validateApplicationInput,
   getJobPost,
+  isJobPostAvailable,
   getExistingApplication,
   createApplication,
   getApplicationById,

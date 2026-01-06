@@ -1,26 +1,12 @@
 const express = require('express');
-const { prisma } = require('../db.js');
 const { checkCompany, checkEmployee } = require('../helpers/authenticateToken.js');
 const { getUserIdFromCookie, getAuthFromCookie, getEmployeeIdFromCookie, getRestaurantUserIdFromCookie, optionalAuth } = require('../helpers/cookies.js');
-const { buildFilters, buildSearchConditions } = require('../helpers/filterHelpers.js');
 const { checkJobOfferLimit } = require('../middleware/checkPlan.js');
-const { convertImageUrls } = require('../utils/imageUrlUtils.js');
 const {
-  fetchTopRatedJobs,
   fetchJobsByNameAndLocation,
-  softDeleteJobCascade,
-  updateJobOffer,
 } = require('../helpers/jobs.js');
 const {
-  createJobOffer,
-  getJobOfferWithLocation,
   generateJobPlanInfo,
-  getEmployeeById,
-  getEmployeeApplications,
-  getJobsWithFilters,
-  getTotalJobsCount,
-  getRestaurantJobOffers,
-  getJobOfferById,
   getRestaurantUserWithDetails,
   getRestaurantWithLocations,
   generateCompletePlanInfo
@@ -28,68 +14,32 @@ const {
 
 const router = express.Router();
 
+const JobService = require('../services/jobService.js');
+const EmployeeService = require('../services/employeeService.js');
+const {
+  sendSuccessResponse,
+  handleCompanyError,
+  handleEmployeeError
+} = require('../utils/responseHelpers.js');
+const { Logger } = require('../middleware/errorTracking.js');
+
 // POST /job - Create job offer
 router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCookie, checkJobOfferLimit(), async (req, res) => {
   try {
-    const {
-      position,
-      locationId,
-      schedule,
-      contract,
-      vacancies,
-      yearsOfExperience,
-      description,
-      questions,
-      requirements,
-      salary,
-      propina,
-      functions,
-      restaurantId: requestRestaurantId,
-      startDate,
-      endDate
-    } = req.body;
-
-    const restaurantId = requestRestaurantId || req.restaurantId;
-    const restaurantUserId = req.restaurantUserId;
-
-    if (locationId !== null && locationId !== -1 && (!locationId || locationId <= 0)) {
-      return res.status(400).json({
-        success: false,
-        message: 'locationId must be a valid location ID, -1 (todas las sucursales), or null (no especificado)',
-      });
-    }
-
-    const jobOffer = await createJobOffer({
-      position,
-      locationId,
-      schedule,
-      contract,
-      vacancies,
-      yearsOfExperience,
-      description,
-      questions,
-      requirements,
-      salary,
-      propina,
-      functions,
-      restaurantId,
-      restaurantUserId,
-      startDate,
-      endDate
+    const jobOffer = await JobService.createJob({
+      body: req.body,
+      restaurantId: req.restaurantId,
+      restaurantUserId: req.restaurantUserId
     });
 
-    const jobOfferCheck = await getJobOfferWithLocation(jobOffer.id);
-
-    res.status(201).json({
-      success: true,
-      message: 'Job offer created successfully',
-      data: jobOffer
-    });
+    sendSuccessResponse(res, 201, 'Job offer created successfully', jobOffer);
   } catch (error) {
-    console.error('Error creating job offer:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Internal Server Error' 
+    handleCompanyError(res, error, {
+      context: {
+        restaurantId: req.restaurantId,
+        restaurantUserId: req.restaurantUserId
+      },
+      logger: Logger
     });
   }
 });
@@ -97,35 +47,21 @@ router.post('/job', checkCompany, getAuthFromCookie, getRestaurantUserIdFromCook
 // GET /jobs/recommended-jobs - Get recommended jobs
 router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
   try {
-    const { jobName, location, limit = 4 } = req.query;
-    const userId = req.userId;
-    const userType = req.userType;
-    const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 30));
-
-    let formattedJobs;
-
-    formattedJobs = await fetchJobsByNameAndLocation(jobName, location, null, finishedDateParsed);
-
-    // Convert restaurant image URLs to actual signed URLs for each job
-    const jobsWithSignedUrls = await Promise.all(
-      formattedJobs.map(async (job) => {
-        const updatedJob = { ...job };
-        if (updatedJob.restaurant) {
-          updatedJob.restaurant = await convertImageUrls(updatedJob.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        }
-        return updatedJob;
-      })
-    );
-
-    res.json({
-      success: true,
-      data: jobsWithSignedUrls, // Use consistent 'data' property
+    const jobs = await JobService.getRecommendedJobs({
+      jobName: req.query.jobName,
+      location: req.query.location,
+      limit: req.query.limit ? parseInt(req.query.limit, 10) : 4
     });
+
+    sendSuccessResponse(res, 200, null, jobs);
   } catch (error) {
-    console.error('Error fetching recommended jobs:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal Server Error' 
+    handleCompanyError(res, error, {
+      context: {
+        userId: req.userId,
+        userType: req.userType,
+        query: req.query
+      },
+      logger: Logger
     });
   }
 });
@@ -133,34 +69,19 @@ router.get('/jobs/recommended-jobs', optionalAuth, async (req, res) => {
 // GET /jobs/top-rated-jobs-carousel - Get top rated jobs
 router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
   try {
-    const { limit = 4 } = req.query; 
-    const userId = req.userId;
-    const userType = req.userType;
-    const finishedDateParsed = new Date(new Date().setDate(new Date().getDate() - 60)); 
-
-    let formattedJobs;
-
-    formattedJobs = await fetchTopRatedJobs(limit, finishedDateParsed);
-    
-    const jobsWithSignedUrls = await Promise.all(
-      formattedJobs.map(async (job) => {
-        const updatedJob = { ...job };
-        if (updatedJob.restaurant) {
-          updatedJob.restaurant = await convertImageUrls(updatedJob.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        }
-        return updatedJob;
-      })
-    );
-    
-    res.json({
-      success: true,
-      data: jobsWithSignedUrls, // Use consistent 'data' property
+    const jobs = await JobService.getTopRatedJobs({
+      limit: req.query.limit ? parseInt(req.query.limit, 10) : 4
     });
+
+    sendSuccessResponse(res, 200, null, jobs);
   } catch (error) {
-    console.error('Error fetching top-rated jobs:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal Server Error' 
+    handleCompanyError(res, error, {
+      context: {
+        userId: req.userId,
+        userType: req.userType,
+        limit: req.query.limit
+      },
+      logger: Logger
     });
   }
 });
@@ -168,18 +89,20 @@ router.get('/jobs/top-rated-jobs-carousel', optionalAuth, async (req, res) => {
 // PATCH /job/:id - Update job offer
 router.patch('/job/:id', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
-    const jobId = parseInt(req.params.id, 10);
-    const updated = await updateJobOffer(jobId, req.restaurantId, req.body);
-    res.status(200).json({
-      success: true,
-      message: 'Job offer updated successfully',
-      data: updated,
+    const updated = await JobService.updateJob({
+      jobId: req.params.id,
+      restaurantId: req.restaurantId,
+      body: req.body
     });
+
+    sendSuccessResponse(res, 200, 'Job offer updated successfully', updated);
   } catch (error) {
-    console.error('[PATCH /job/:id]', error);
-    res.status(400).json({ 
-      success: false,
-      message: error.message 
+    handleCompanyError(res, error, {
+      context: {
+        jobId: req.params.id,
+        restaurantId: req.restaurantId
+      },
+      logger: Logger
     });
   }
 });
@@ -187,40 +110,17 @@ router.patch('/job/:id', checkCompany, getAuthFromCookie, async (req, res) => {
 // GET /jobs/applied - Get applied jobs for employee
 router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, res) => {
   try {
-    const employeeId = req.employeeId;
-
-    const employeeExists = await getEmployeeById(employeeId);
-    console.log('herok');
-    
-    if (!employeeExists) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Employee not found' 
-      });
-    }
-
-    const applications = await getEmployeeApplications(employeeId);
-
-    // Convert restaurant image URLs to actual signed URLs for each application
-    const applicationsWithSignedUrls = await Promise.all(
-      applications.map(async (application) => {
-        const convertedApplication = { ...application };
-        if (application.jobPost && application.jobPost.restaurant) {
-          convertedApplication.jobPost.restaurant = await convertImageUrls(application.jobPost.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        }
-        return convertedApplication;
-      })
-    );
-
-    res.json({
-      success: true,
-      data: applicationsWithSignedUrls
+    const applications = await EmployeeService.getEmployeeApplications({
+      employeeId: req.employeeId
     });
+
+    sendSuccessResponse(res, 200, null, applications);
   } catch (error) {
-    console.error('Error fetching applications:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Internal Server Error' 
+    handleEmployeeError(res, error, {
+      context: {
+        employeeId: req.employeeId
+      },
+      logger: Logger
     });
   }
 });
@@ -228,92 +128,15 @@ router.get('/jobs/applied', checkEmployee, getEmployeeIdFromCookie, async (req, 
 // GET /jobs - Get jobs with filters and pagination
 router.get('/jobs', async (req, res) => {
   try {
-    const {
-      locationId,
-      schedule,
-      period,
-      format,
-      contract,
-      region,
-      comuna,
-      position,
-      q,
-      page,
-      limit = 10,
-      orderBy,
-      finishedDate,
-    } = req.query;
+    const result = await JobService.getJobs({ query: req.query });
 
-    const finishedDateParsed = finishedDate
-      ? new Date(finishedDate)
-      : new Date(new Date().setDate(new Date().getDate() - 30));
-
-    const pageNumber = Math.max(parseInt(page, 10), 1);
-    const limitNumber = Math.max(parseInt(limit, 10), 1);
-    const skip = (pageNumber - 1) * limitNumber;
-
-    const restaurantFilterFields = [
-      'specialty',
-      'format',
-      'benefits',
-      'region',
-      'comuna',
-    ];
-    const restaurantFilter = buildFilters(req.query, restaurantFilterFields);
-    
-    // Build search conditions - prioritize position filter if provided, otherwise use search term
-    let searchConditions = {};
-    if (position) {
-      searchConditions = buildSearchConditions(position, 'position');
-    } else if (q) {
-      searchConditions = buildSearchConditions(q, 'position');
-    }
-
-    let orderByCriteria = { createdAt: 'desc' };
-
-    if (orderBy === 'applications') {
-      orderByCriteria = {
-        applications: {
-          _count: 'desc',
-        },
-      };
-    }
-
-    if (orderBy === 'date') {
-      orderByCriteria = {
-        createdAt: 'desc',
-      };
-    }
-
-    const [jobs, totalJobs] = await Promise.all([
-      getJobsWithFilters(restaurantFilter, searchConditions, orderByCriteria, limitNumber, skip),
-      getTotalJobsCount(restaurantFilter, searchConditions),
-    ]);
-
-    // Convert image keys to actual signed URLs for each job's restaurant
-    const jobsWithSignedUrls = await Promise.all(
-      jobs.map(async (job) => {
-        const convertedJob = { ...job };
-        if (job.restaurant) {
-          convertedJob.restaurant = await convertImageUrls(job.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        }
-        return convertedJob;
-      })
-    );
-
-    const totalPages = Math.ceil(totalJobs / limitNumber);
-
-    res.status(200).json({
-      success: true,
-      data: jobsWithSignedUrls,
-      totalPages,
-      totalJobs,
-      currentPage: pageNumber,
-    });
+    sendSuccessResponse(res, 200, null, result);
   } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      message: error.message || 'Internal Server Error' 
+    handleCompanyError(res, error, {
+      context: {
+        query: req.query
+      },
+      logger: Logger
     });
   }
 });
@@ -321,79 +144,19 @@ router.get('/jobs', async (req, res) => {
 // GET /jobs/restaurant - Get restaurant job offers
 router.get('/jobs/restaurant', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
-    const userId = req.userId;
-    const { restaurantId } = req.query; // Get restaurant ID from query parameter
-    
-    // Get all restaurants the user has access to
-    const userRestaurants = await prisma.restaurantUser.findMany({
-      where: { userId: userId },
-      select: { restaurantId: true }
+    const jobOffers = await JobService.getRestaurantJobOffers({
+      userId: req.userId,
+      restaurantId: req.query.restaurantId
     });
-    
-    // Also check if user owns restaurants directly
-    const ownedRestaurants = await prisma.restaurant.findMany({
-      where: { userId: userId },
-      select: { id: true }
-    });
-    
-    // Combine all restaurant IDs the user has access to
-    const allRestaurantIds = [
-      ...userRestaurants.map(ur => ur.restaurantId),
-      ...ownedRestaurants.map(or => or.id)
-    ];
-    
-    // If a specific restaurant ID is provided, filter to that restaurant
-    let targetRestaurantIds = allRestaurantIds;
-    if (restaurantId) {
-      const requestedRestaurantId = parseInt(restaurantId);
-      
-      // Verify the user has access to the requested restaurant
-      if (!allRestaurantIds.includes(requestedRestaurantId)) {
-        return res.status(403).json({
-          success: false,
-          error: 'You do not have access to this restaurant'
-        });
-      }
-      
-      targetRestaurantIds = [requestedRestaurantId];
-    }
-    
-    // Get jobs for the target restaurants
-    const jobOffers = await prisma.jobOffer.findMany({
-      where: {
-        restaurantId: { in: targetRestaurantIds },
-        deletedAt: null,
-      },
-      include: {
-        restaurant: true,
-        questions: true,
-        location: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-    
-    // Convert image keys to actual signed URLs for each job's restaurant
-    const jobOffersWithSignedUrls = await Promise.all(
-      jobOffers.map(async (job) => {
-        const convertedJob = { ...job };
-        if (job.restaurant) {
-          convertedJob.restaurant = await convertImageUrls(job.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        }
-        return convertedJob;
-      })
-    );
-    
-    res.status(200).json({
-      success: true,
-      data: jobOffersWithSignedUrls
-    });
+
+    sendSuccessResponse(res, 200, null, jobOffers);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal Server Error' 
+    handleCompanyError(res, error, {
+      context: {
+        userId: req.userId,
+        restaurantId: req.query.restaurantId
+      },
+      logger: Logger
     });
   }
 });
@@ -401,40 +164,17 @@ router.get('/jobs/restaurant', checkCompany, getAuthFromCookie, async (req, res)
 // GET /jobs/:jobId - Get job offer by ID
 router.get('/jobs/:jobId', async (req, res) => {
   try {
-    const { jobId } = req.params;
+    const jobOffer = await JobService.getJobById({
+      jobId: req.params.jobId
+    });
 
-    const jobOffer = await getJobOfferById(jobId);
-
-    if (jobOffer) {
-      // Convert image keys to actual signed URLs for the job's restaurant
-      const convertedJob = { ...jobOffer };
-      if (jobOffer.restaurant) {
-        convertedJob.restaurant = await convertImageUrls(jobOffer.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-        console.log('🔍 [GET /jobs/:jobId] After image conversion - Restaurant benefits:', convertedJob.restaurant?.benefits)      }
-      
-      const responseData = {
-        success: true,
-        data: {
-          ...convertedJob,
-          applicationsCount: jobOffer.applications.length,
-          createdAt: jobOffer.createdAt.toISOString().slice(0, 10),
-        }
-      };
-      
-      console.log('🔍 [GET /jobs/:jobId] Final response data:', JSON.stringify(responseData, null, 2));
-      console.log('🔍 [GET /jobs/:jobId] Final response restaurant benefits:', responseData.data?.restaurant?.benefits);
-      
-      res.json(responseData);
-    } else {
-      res.status(404).json({
-        success: false,
-        error: 'Job offer not found'
-      });
-    }
+    sendSuccessResponse(res, 200, null, jobOffer);
   } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      error: error.message 
+    handleCompanyError(res, error, {
+      context: {
+        jobId: req.params.jobId
+      },
+      logger: Logger
     });
   }
 });
@@ -442,67 +182,19 @@ router.get('/jobs/:jobId', async (req, res) => {
 // DELETE /job/:id - Delete job offer
 router.delete('/job/:id', checkCompany, getAuthFromCookie, async (req, res) => {
   try {
-    const jobId = parseInt(req.params.id, 10);
-    const restaurantId = req.restaurantId;
-
-    const deletedJob = await softDeleteJobCascade(jobId, restaurantId);
-
-    res.status(200).json({
-      success: true,
-      message: 'Job offer soft deleted successfully',
-      data: deletedJob,
+    const deletedJob = await JobService.deleteJob({
+      jobId: req.params.id,
+      restaurantId: req.restaurantId
     });
+
+    sendSuccessResponse(res, 200, 'Job offer soft deleted successfully', deletedJob);
   } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      message: error.message || 'Internal Server Error' 
-    });
-  }
-});
-
-// GET /my-plan-info - Get plan info and job offers
-router.get('/my-plan-info', checkCompany, getRestaurantUserIdFromCookie, async (req, res) => {
-  try {
-    const restaurantUserId = req.restaurantUserId;
-
-    if (!restaurantUserId) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'No autenticado como usuario de restaurante' 
-      });
-    }
-
-    // Buscar el usuario de restaurante y su usuario asociado
-    const restaurantUser = await getRestaurantUserWithDetails(restaurantUserId);
-
-    if (!restaurantUser || !restaurantUser.user) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Usuario de restaurante no encontrado' 
-      });
-    }
-
-    const user = restaurantUser.user;
-    const currentJobOffers = restaurantUser.jobOffers.length;
-
-    // Obtener información de ubicaciones
-    const restaurant = await getRestaurantWithLocations(restaurantUser.restaurantId);
-    const currentLocations = restaurant ? restaurant.locations.length : 0;
-
-    const planInfo = generateCompletePlanInfo({
-      user,
-      restaurantUser,
-      restaurant,
-      currentJobOffers,
-      currentLocations
-    });
-
-    res.status(200).json(planInfo);
-  } catch (error) {
-    console.error('Error getting plan info:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error interno del servidor' 
+    handleCompanyError(res, error, {
+      context: {
+        jobId: req.params.id,
+        restaurantId: req.restaurantId
+      },
+      logger: Logger
     });
   }
 });

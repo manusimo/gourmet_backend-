@@ -1,44 +1,27 @@
 const express = require('express');
-const { prisma } = require('../db.js');
 const { getUserIdFromCookie } = require('../helpers/cookies.js');
+const { sendSuccessResponse, handleNotificationError } = require('../utils/responseHelpers.js');
+const Logger = require('../utils/logger.js');
+const { getNotifications, markNotificationAsReadById } = require('../services/notificationService.js');
 const router = express.Router();
-
-// Test route to verify notification routes are working
-router.get('/test', (req, res) => {
-  console.log('🔔 Notification test route hit!');
-  res.json({ success: true, message: 'Notification routes are working!' });
-});
 
 /**
  * Get all notifications for the authenticated user
  */
 router.get('/', getUserIdFromCookie, async (req, res) => {
-  try { 
-    const userId = req.userId;
-    const notifications = await prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50 // Limit to last 50 notifications
-    });
- 
-    const unreadCount = await prisma.notification.count({
-      where: { 
-        userId,
-        isRead: false 
-      }
+  try {
+    const result = await getNotifications({
+      userId: req.userId,
+      limit: 50
     });
 
-    const response = {
-      success: true,
-      notifications,
-      unreadCount
-    };
-   
-    res.json(response);
+    sendSuccessResponse(res, 200, null, result);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch notifications'
+    handleNotificationError(res, error, {
+      context: {
+        userId: req.userId
+      },
+      logger: Logger
     });
   }
 });
@@ -48,33 +31,19 @@ router.get('/', getUserIdFromCookie, async (req, res) => {
  */
 router.put('/:id/read', getUserIdFromCookie, async (req, res) => {
   try {
-    const userId = req.userId;
-    const notificationId = parseInt(req.params.id);
-
-    const notification = await prisma.notification.updateMany({
-      where: { 
-        id: notificationId,
-        userId // Ensure user can only update their own notifications
-      },
-      data: { isRead: true }
+    await markNotificationAsReadById({
+      notificationId: req.params.id,
+      userId: req.userId
     });
 
-    if (notification.count === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Notification not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Notification marked as read'
-    });
+    sendSuccessResponse(res, 200, 'Notification marked as read');
   } catch (error) {
-    console.error('❌ Error marking notification as read:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to mark notification as read'
+    handleNotificationError(res, error, {
+      context: {
+        notificationId: req.params.id,
+        userId: req.userId
+      },
+      logger: Logger
     });
   }
 });

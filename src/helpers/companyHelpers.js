@@ -7,15 +7,23 @@ const jwt = require('jsonwebtoken');
  * @param {Object} searchConditions - Search conditions
  * @param {number} limit - Number of items per page
  * @param {number} skip - Number of items to skip
+ * @param {Object} [orderByCriteria] - Optional order by criteria (e.g., { id: { in: [...] } })
  * @returns {Array} Array of companies
  */
-const getCompanies = async (filters, searchConditions, limit, skip) => {
+const getCompanies = async (filters, searchConditions, limit, skip, orderByCriteria = null) => {
+  const whereClause = {
+    ...searchConditions,
+    ...filters,
+    deletedAt: null, // Filter out soft-deleted restaurants
+  };
+
+  // Merge orderByCriteria if provided (used for popularity/scale ordering)
+  if (orderByCriteria && Object.keys(orderByCriteria).length > 0) {
+    Object.assign(whereClause, orderByCriteria);
+  }
+
   return await prisma.restaurant.findMany({
-    where: {
-      ...searchConditions,
-      ...filters,
-      deletedAt: null, // Filter out soft-deleted restaurants
-    },
+    where: whereClause,
     include: {
       locations: true,
       jobOffers: {
@@ -26,7 +34,7 @@ const getCompanies = async (filters, searchConditions, limit, skip) => {
       },
       _count: { select: { jobOffers: true } },
     },
-    orderBy: { id: 'desc' },
+    orderBy: orderByCriteria && orderByCriteria.id ? undefined : { id: 'desc' },
     skip,
     take: limit,
   });

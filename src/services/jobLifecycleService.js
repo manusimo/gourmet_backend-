@@ -15,17 +15,15 @@ class JobLifecycleService {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Find hirings with jobs starting today
+      // Find hirings with jobs starting today (using hiring.startDate)
       const hiringsStartingToday = await prisma.hiring.findMany({
         where: {
           status: {
             in: ['active', 'accepted']
           },
-          jobOffer: {
-            startDate: {
-              gte: today,
-              lt: tomorrow
-            }
+          startDate: {
+            gte: today,
+            lt: tomorrow
           },
           conversationId: {
             not: null
@@ -76,17 +74,15 @@ class JobLifecycleService {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Find hirings with jobs ending today
+      // Find hirings with jobs ending today (using hiring.endDate)
       const hiringsEndingToday = await prisma.hiring.findMany({
         where: {
           status: {
             in: ['active', 'accepted']
           },
-          jobOffer: {
-            endDate: {
-              gte: today,
-              lt: tomorrow
-            }
+          endDate: {
+            gte: today,
+            lt: tomorrow
           },
           conversationId: {
             not: null

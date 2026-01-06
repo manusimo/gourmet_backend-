@@ -130,7 +130,72 @@ const approveTalentPoolEntry = async (talentId, restaurantUserId) => {
     where: { id: parseInt(talentId) },
     data: updateData
   });
-}; 
+};
+
+/**
+ * Find or create restaurant user for a user and restaurant
+ * @param {number} userId - User ID
+ * @param {number} restaurantId - Restaurant ID
+ * @returns {Promise<number>} Restaurant user ID
+ */
+const findOrCreateRestaurantUser = async (userId, restaurantId) => {
+  // Try to find existing restaurant user
+  const restaurantUser = await prisma.restaurantUser.findFirst({
+    where: {
+      userId: parseInt(userId),
+      restaurantId: parseInt(restaurantId)
+    }
+  });
+
+  if (restaurantUser) {
+    return restaurantUser.id;
+  }
+
+  // Create new restaurant user if not found
+  const newRestaurantUser = await prisma.restaurantUser.create({
+    data: {
+      userId: parseInt(userId),
+      restaurantId: parseInt(restaurantId),
+      role: 'admin'
+    }
+  });
+
+  return newRestaurantUser.id;
+};
+
+/**
+ * Get restaurant owned by user (for legacy JWT fallback)
+ * @param {number} userId - User ID
+ * @returns {Promise<Object|null>} Restaurant or null
+ */
+const getRestaurantByUserId = async (userId) => {
+  return await prisma.restaurant.findFirst({
+    where: { userId: parseInt(userId) }
+  });
+};
+
+/**
+ * Upsert restaurant user for admin (for legacy JWT fallback)
+ * @param {number} userId - User ID
+ * @param {number} restaurantId - Restaurant ID
+ * @returns {Promise<Object>} Restaurant user
+ */
+const upsertAdminRestaurantUser = async (userId, restaurantId) => {
+  return await prisma.restaurantUser.upsert({
+    where: {
+      userId_restaurantId: {
+        userId: parseInt(userId),
+        restaurantId: parseInt(restaurantId)
+      }
+    },
+    update: {},
+    create: {
+      userId: parseInt(userId),
+      restaurantId: parseInt(restaurantId),
+      role: 'admin'
+    }
+  });
+};
 
 module.exports = {
   checkTalentPoolEntry,
@@ -139,4 +204,7 @@ module.exports = {
   getTalentPoolEntryWithConversations,
   deleteTalentPoolEntry,
   approveTalentPoolEntry,
+  findOrCreateRestaurantUser,
+  getRestaurantByUserId,
+  upsertAdminRestaurantUser,
 }; 

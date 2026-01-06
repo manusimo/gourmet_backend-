@@ -30,6 +30,8 @@ const createHiringOffer = async (hiringData) => {
     restaurantId,
     jobOfferId,
     conversationId,
+    startDate,
+    endDate,
     offerExpirationDate
   } = hiringData;
 
@@ -40,8 +42,9 @@ const createHiringOffer = async (hiringData) => {
       jobOfferId: jobOfferId ? parseInt(jobOfferId) : null,
       conversationId: conversationId ? parseInt(conversationId) : null,
       status: 'offered',
-      offerExpirationDate: offerExpirationDate ? new Date(offerExpirationDate) : null
-      // All job details (position, salary, contract, startDate, endDate) come from JobOffer
+      offerExpirationDate: offerExpirationDate ? new Date(offerExpirationDate) : null,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null
     },
     include: {
       employee: {
@@ -102,9 +105,12 @@ const getHiringByConversationId = async (conversationId) => {
 /**
  * Accept hiring offer
  * @param {number} hiringId - Hiring ID
+ * @param {Object} options - Optional dates to use
+ * @param {string|Date} options.startDate - Optional start date (will use job offer date if not provided)
+ * @param {string|Date} options.endDate - Optional end date (will use job offer date if not provided)
  * @returns {Object} Updated hiring
  */
-const acceptHiringOffer = async (hiringId) => {
+const acceptHiringOffer = async (hiringId, options = {}) => {
   const hiring = await getHiringById(hiringId);
   
   if (!hiring) {
@@ -119,13 +125,34 @@ const acceptHiringOffer = async (hiringId) => {
   const effectiveValues = getEffectiveHiringValues(hiring);
   const acceptanceDate = new Date();
 
-  // Update status to active (dates come from JobOffer, no need to store separately)
+  // Use provided dates or fallback to JobOffer dates
+  let startDate = null;
+  let endDate = null;
+
+  if (options.startDate) {
+    startDate = options.startDate instanceof Date ? options.startDate : new Date(options.startDate);
+  } 
+  
+  if (effectiveValues.startDate) {
+    startDate = new Date(effectiveValues.startDate);
+  }
+
+  if (options.endDate) {
+    endDate = options.endDate instanceof Date ? options.endDate : new Date(options.endDate);
+  } 
+  
+  if (effectiveValues.endDate) {
+    endDate = new Date(effectiveValues.endDate);
+  }
+
+  // Update status to active and store startDate and endDate
   const updatedHiring = await prisma.hiring.update({
     where: { id: parseInt(hiringId) },
     data: {
       status: 'active',
-      acceptanceDate
-      // startDate and endDate come from JobOffer, not stored in Hiring
+      acceptanceDate,
+      startDate,
+      endDate
     },
     include: {
       employee: {
@@ -196,14 +223,44 @@ const sendHiringOfferMessage = async (messageData, hiring = null) => {
   // Use effective values from hiring if provided, otherwise use passed values
   let effectivePosition = jobPosition;
   let effectivePeriod = period;
+  let effectiveStartDate = null;
+  let effectiveEndDate = null;
   
   if (hiring) {
     const effectiveValues = getEffectiveHiringValues(hiring);
     effectivePosition = effectivePosition || effectiveValues.position;
     effectivePeriod = effectivePeriod || effectiveValues.period;
+    effectiveStartDate = effectiveValues.startDate;
+    effectiveEndDate = effectiveValues.endDate;
   }
 
-  const messageText = `Te han intentado contratar para el trabajo de ${effectivePosition || 'trabajo'}. El período de contratación es de ${effectivePeriod || 30} días. Puedes aceptar o rechazar esta oferta.`;
+  // Format dates for the message
+  let dateMessage = '';
+  if (effectiveStartDate) {
+    const startDate = new Date(effectiveStartDate);
+    const formattedStartDate = startDate.toLocaleDateString('es-ES', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    
+    if (effectiveEndDate) {
+      const endDate = new Date(effectiveEndDate);
+      const formattedEndDate = endDate.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      dateMessage = ` El período de trabajo comenzará el ${formattedStartDate} y terminará el ${formattedEndDate}.`;
+    } else {
+      dateMessage = ` El período de trabajo comenzará el ${formattedStartDate}.`;
+    }
+  } else {
+    // Fallback if no dates - use period in days
+    dateMessage = ` El período de contratación es de ${effectivePeriod || 30} días.`;
+  }
+
+  const messageText = `Te han intentado contratar para el trabajo de ${effectivePosition || 'trabajo'}.${dateMessage} Puedes aceptar o rechazar esta oferta.`;
 
   const message = await createMessage({
     text: messageText,
@@ -264,6 +321,34 @@ const getActiveHiringsForRestaurant = async (restaurantId) => {
 };
 
 /**
+ * Get hirings by job offer ID
+ * @param {number} jobOfferId - Job offer ID
+ * @returns {Array} Array of hirings for the job offer
+ */
+const getHiringsByJobOfferId = async (jobOfferId) => {
+  return await prisma.hiring.findMany({
+    where: {
+      jobOfferId: parseInt(jobOfferId),
+      status: {
+        in: ['active', 'accepted', 'completed'] // Show active, accepted, and completed hirings
+      }
+    },
+    include: {
+      employee: {
+        include: {
+          user: true
+        }
+      },
+      restaurant: true,
+      jobOffer: true
+    },
+    orderBy: {
+      acceptanceDate: 'desc'
+    }
+  });
+};
+
+/**
  * Get expired hirings that need to be completed
  * @returns {Array} Array of expired active hirings
  */
@@ -274,6 +359,7 @@ const getExpiredActiveHirings = async () => {
     where: {
       status: 'active',
       endDate: {
+        not: null,
         lte: now
       }
     },
@@ -312,10 +398,95 @@ const completeHiring = async (hiringId) => {
   });
 };
 
+/**
+ * Update a hiring offer (only startDate and endDate)
+ * @param {number} hiringId - Hiring ID
+ * @param {Object} updateData - Data to update (startDate, endDate)
+ * @returns {Object} Updated hiring
+ */
+const updateHiringOffer = async (hiringId, updateData) => {
+  const hiring = await getHiringById(hiringId);
+  
+  if (!hiring) {
+    throw new Error('Hiring offer not found');
+  }
+
+  if (hiring.status !== 'offered' && hiring.status !== 'pending') {
+    throw new Error(`Cannot update hiring offer with status: ${hiring.status}`);
+  }
+
+  const dataToUpdate = {};
+  
+  if (updateData.startDate !== undefined) {
+    dataToUpdate.startDate = updateData.startDate ? new Date(updateData.startDate) : null;
+  }
+  
+  if (updateData.endDate !== undefined) {
+    dataToUpdate.endDate = updateData.endDate ? new Date(updateData.endDate) : null;
+  }
+
+  const updatedHiring = await prisma.hiring.update({
+    where: { id: parseInt(hiringId) },
+    data: dataToUpdate,
+    include: {
+      employee: {
+        include: {
+          user: true
+        }
+      },
+      restaurant: true,
+      jobOffer: true,
+      conversation: true
+    }
+  });
+
+  return updatedHiring;
+};
+
+/**
+ * Find the last hiring offer message in a conversation
+ * @param {number} conversationId - Conversation ID
+ * @param {number} senderRestaurantUserId - Restaurant user ID who sent the message
+ * @returns {Object|null} Last hiring offer message or null if not found
+ */
+const findLastHiringOfferMessage = async (conversationId, senderRestaurantUserId) => {
+  const messages = await prisma.message.findMany({
+    where: {
+      conversationId: parseInt(conversationId),
+      senderRestaurantUserId: parseInt(senderRestaurantUserId),
+      text: {
+        contains: 'Te han intentado contratar'
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    },
+    take: 1
+  });
+
+  return messages.length > 0 ? messages[0] : null;
+};
+
+/**
+ * Update the hiring offer message text
+ * @param {number} messageId - Message ID
+ * @param {string} newText - New message text
+ * @returns {Object} Updated message
+ */
+const updateHiringOfferMessage = async (messageId, newText) => {
+  return await prisma.message.update({
+    where: { id: parseInt(messageId) },
+    data: {
+      text: newText
+    }
+  });
+};
+
 module.exports = {
   createHiringOffer,
   getHiringById,
   getHiringByConversationId,
+  getHiringsByJobOfferId,
   acceptHiringOffer,
   rejectHiringOffer,
   sendHiringOfferMessage,
@@ -323,6 +494,9 @@ module.exports = {
   getActiveHiringsForRestaurant,
   getExpiredActiveHirings,
   completeHiring,
-  getEffectiveHiringValues
+  getEffectiveHiringValues,
+  updateHiringOffer,
+  findLastHiringOfferMessage,
+  updateHiringOfferMessage
 };
 

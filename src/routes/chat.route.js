@@ -2,17 +2,16 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { checkJoinAuthorization, checkSendMessageAuthorization } = require('../helpers/chat.js');
 const { checkCompany, setUserRole } = require('../helpers/authenticateToken.js');
-const { processMessageNotifications } = require('../services/messageNotificationService');
-const { convertImageUrls } = require('../utils/imageUrlUtils.js');
-// Message notifications are now handled by messageNotificationService.js
+const ChatService = require('../services/chatService.js');
+const { sendSuccessResponse, handleChatError } = require('../utils/responseHelpers.js');
+const Logger = require('../utils/logger.js');
 
 const prisma = new PrismaClient();
 const {
   getUserIdFromCookie,
   getRestaurantIdFromCookie,
   getEmployeeIdFromCookie,
-  getRestaurantUserIdFromCookie,
-  validateTokenAndIdentifyUser
+  getRestaurantUserIdFromCookie
 } = require('../helpers/cookies.js');
 const {
   getConversationById,
@@ -26,53 +25,27 @@ const {
   findConversationByTalentPool,
   createConversation,
   getRestaurantConversations,
-  getEmployeeConversations,
-  getRestaurantUserConversations,
   deleteConversation,
   validateConversationAccess
 } = require('../helpers/chatHelpers.js');
-const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
 // GET /chat-token - Generate chat socket token
-router.get('/chat-token', validateTokenAndIdentifyUser, async (req, res) => {
+router.get('/chat-token', getUserIdFromCookie, async (req, res) => {
   try {
-    
     const { userId, userType } = req;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-    }
 
-    // Generate a short-lived token for chat socket authentication
-    const chatToken = jwt.sign(
-      {
-        userId,
-        userType,
-        tokenType: 'socket', // Changed from 'type' to 'tokenType'
-        timestamp: Date.now()
-      },
-      process.env.JWT_SECRET,
-      { 
-        expiresIn: '15m', // Changed from '1h' to '15m' to match chat app
-        audience: 'chat', // Add audience for chat app validation
-        issuer: process.env.NODE_ENV === 'production' ? process.env.JWT_ISSUER : 'localhost'
-      }
-    );
+    const result = await ChatService.generateChatToken({ userId, userType });
 
-    res.json({
-      success: true,
-      token: chatToken
-    });
-    
+    sendSuccessResponse(res, 200, null, result);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
+    handleChatError(res, error, {
+      context: {
+        userId: req.userId,
+        userType: req.userType
+      },
+      logger: Logger
     });
   }
 });
@@ -104,98 +77,24 @@ router.get('/conversations/:conversationId', async (req, res) => {
 });
 
 // GET /conversations/:conversationId/messages - Get conversation messages
-router.get('/conversations/:conversationId/messages', validateTokenAndIdentifyUser, async (req, res) => {
+router.get('/conversations/:conversationId/messages', getUserIdFromCookie, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { userId } = req;
 
-    if (!userId) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'Unauthorized access. User ID not found.' 
-      });
-    }
-
-    const conversation = await getConversationWithMessages(conversationId);
-
-    if (!conversation) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Conversation not found.' 
-      });
-    }
-
-    let hasAccess = false;
-    
-    try { 
-      // Check if user is an employee in this conversation
-      if (conversation.employeeId) {
-        const employee = await prisma.employee.findUnique({
-          where: { userId: parseInt(userId) }
-        });
-        if (employee && employee.id === conversation.employeeId) {
-          hasAccess = true;
-        }
-      }
-      
-      // Check if user is a restaurant user in this conversation
-      if (!hasAccess && conversation.restaurantUserId) {
-        const restaurantUser = await prisma.restaurantUser.findFirst({
-          where: { userId: parseInt(userId) }
-        });
-
-        if (restaurantUser && restaurantUser.id === conversation.restaurantUserId) {
-          hasAccess = true;
-        }
-      }
-      
-      // For admin users: check if they have sent messages in this conversation
-      if (!hasAccess && conversation.messages && conversation.messages.length > 0) {
-        // Find any RestaurantUser records created for this admin user
-        const adminRestaurantUsers = await prisma.restaurantUser.findMany({
-          where: { userId: parseInt(userId) }
-        });
-            
-        if (adminRestaurantUsers.length > 0) {
-          const adminRestaurantUserIds = adminRestaurantUsers.map(ru => ru.id);
-          const hasSentMessages = conversation.messages.some(message => 
-            message.senderRestaurantUserId && adminRestaurantUserIds.includes(message.senderRestaurantUserId)
-          );
-          if (hasSentMessages) {
-            hasAccess = true;
-          }
-        }
-      }
-      
-      // Temporary: allow access for admin users even if they haven't sent messages yet
-      if (!hasAccess) {
-        const user = await prisma.user.findUnique({
-          where: { id: parseInt(userId) }
-        });
-        if (user && (user.role === 'admin' || user.role === 'staff')) {
-          hasAccess = true;
-        }
-      }
-    } catch (accessError) {
-      hasAccess = true;
-    }
-
-    if (!hasAccess) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'User not authorized for this conversation' 
-      });
-    }
-
-    res.status(200).json({ 
-      success: true,
-      data: conversation.messages 
+    const result = await ChatService.getConversationMessages({ 
+      conversationId, 
+      userId 
     });
+
+    sendSuccessResponse(res, 200, null, result.messages);
   } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal Server Error',
-      details: error.message 
+    handleChatError(res, error, {
+      context: {
+        conversationId: req.params.conversationId,
+        userId: req.userId
+      },
+      logger: Logger
     });
   }
 });
@@ -212,16 +111,7 @@ router.post('/send-message', async (req, res) => {
       receiverType 
     } = req.body;
 
-    const conversation = await getConversationById(conversationId);
-
-    if (!conversation) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Conversation not found.' 
-      });
-    }
-
-    const message = await createMessage({
+    const message = await ChatService.sendMessage({
       text,
       senderUserId,
       receiverUserId,
@@ -230,101 +120,15 @@ router.post('/send-message', async (req, res) => {
       receiverType
     });
 
-    try {
-      
-      let sender, receiver;
-      
-      // Lookup sender based on senderType
-      if (senderType === 'restaurant') {
-        const restaurantUser = await prisma.restaurantUser.findUnique({
-          where: { id: parseInt(senderUserId) },
-          select: { 
-            user: { select: { id: true, name: true, email: true } },
-            restaurant: { select: { name: true } }
-          }
-        });
-        sender = restaurantUser ? { ...restaurantUser.user, restaurantName: restaurantUser.restaurant.name } : null;
-      } else if (senderType === 'employee') {
-        const employee = await prisma.employee.findUnique({
-          where: { id: parseInt(senderUserId) },
-          select: { 
-            user: { select: { id: true, name: true, email: true } }
-          }
-        });
-        sender = employee ? employee.user : null;
-      } else {
-        // Fallback: try as direct User.id
-        sender = await prisma.user.findUnique({
-          where: { id: parseInt(senderUserId) },
-          select: { id: true, name: true, email: true }
-        });
-      }
-      
-      // Lookup receiver based on receiverType
-      if (receiverType === 'restaurant') {
-        const restaurantUser = await prisma.restaurantUser.findUnique({
-          where: { id: parseInt(receiverUserId) },
-          select: { 
-            user: { select: { id: true, name: true, email: true } }
-          }
-        });
-        receiver = restaurantUser ? restaurantUser.user : null;
-      } else if (receiverType === 'employee') {
-        const employee = await prisma.employee.findUnique({
-          where: { id: parseInt(receiverUserId) },
-          select: { 
-            user: { select: { id: true, name: true, email: true } }
-          }
-        });
-        receiver = employee ? employee.user : null;
-      } else {
-        // Fallback: try as direct User.id
-        receiver = await prisma.user.findUnique({
-          where: { id: parseInt(receiverUserId) },
-          select: { id: true, name: true, email: true }
-        });
-      }
-      
-      // Get restaurant info from conversation
-      const conversationWithRestaurant = await prisma.conversation.findUnique({
-        where: { id: parseInt(conversationId) },
-        select: { 
-          restaurant: { 
-            select: { name: true } 
-          } 
-        }
-      });
-      
-      if (sender && receiver && conversationWithRestaurant) {
-        
-        await processMessageNotifications({
-          senderUserId: sender.id, // Use the actual User.id
-          receiverUserId: receiver.id, // Use the actual User.id
-          conversationId,
-          messageText: text,
-          senderName: sender.name,
-          senderEmail: sender.email,
-          recipientName: receiver.name,
-          recipientEmail: receiver.email,
-          restaurantName: sender.restaurantName || conversationWithRestaurant.restaurant?.name || 'Restaurante'
-        });
-        
-        
-      } 
-    } catch (notificationError) {
-      console.error('❌ Failed to process message notifications:', notificationError);
-    }
-
-    res.status(200).json({ 
-      success: true,
-      message: 'Message sent successfully.', 
-      data: message 
-    });
+    sendSuccessResponse(res, 200, 'Mensaje enviado exitosamente.', message);
   } catch (error) {
-    console.error('Error sending message:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to send message.' 
+    handleChatError(res, error, {
+      context: {
+        conversationId: req.body?.conversationId,
+        senderUserId: req.body?.senderUserId,
+        receiverUserId: req.body?.receiverUserId
+      },
+      logger: Logger
     });
   }
 });
@@ -333,48 +137,30 @@ router.post('/send-message', async (req, res) => {
 router.get('/check-conversation/:employeeId/:type', checkCompany, getRestaurantUserIdFromCookie, async (req, res) => {
   try {
     const { employeeId, type } = req.params;
-    const { jobPostId } = req.query; // Get jobPostId from query parameters
+    const { jobPostId } = req.query;
     const restaurantUserId = req.restaurantUserId;
-    
-    if (!restaurantUserId) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Restaurant user ID not found in cookies.' 
-      });
-    }
 
-    let conversation;
-
-    if (type === 'talent') {
-      conversation = await checkTalentConversation(employeeId, restaurantUserId);
-    }
-
-    if (type === 'application') {
-      
-      if (jobPostId) {
-        conversation = await findConversationByJobPost(employeeId, parseInt(jobPostId), restaurantUserId, 'applicant');
-      } else {
-        conversation = await checkApplicationConversation(employeeId, restaurantUserId);
-      }
-    }
+    const conversation = await ChatService.checkConversation({
+      employeeId,
+      type,
+      restaurantUserId,
+      jobPostId
+    });
 
     if (conversation) {
-      res.status(200).json({ 
-        success: true,
-        message: 'Conversation found.', 
-        data: conversation 
-      });
+      sendSuccessResponse(res, 200, 'Conversación encontrada.', conversation);
     } else {
-      res.status(404).json({ 
-        success: false,
-        message: 'Conversation not found.' 
-      });
+      sendErrorResponse(res, 404, 'Conversación no encontrada.');
     }
   } catch (error) {
-    console.error('Error checking conversation:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to check conversation.' 
+    handleChatError(res, error, {
+      context: {
+        employeeId: req.params.employeeId,
+        type: req.params.type,
+        jobPostId: req.query.jobPostId,
+        restaurantUserId: req.restaurantUserId
+      },
+      logger: Logger
     });
   }
 });
@@ -386,144 +172,28 @@ router.post('/create-conversation', checkCompany, getUserIdFromCookie, async (re
   try {
     const { employeeId, jobPostId, talentPoolId, type, restaurantId } = req.body;
     const userId = req.userId;
-    let restaurantUserId;
 
-    if (restaurantId) {
-     
-      const restaurantUser = await prisma.restaurantUser.findFirst({
-        where: {
-          userId: userId,
-          restaurantId: parseInt(restaurantId)
-        }
-      });
-      
-      if (restaurantUser) {
-        restaurantUserId = restaurantUser.id;
-      } else {
-        // Create RestaurantUser record for this restaurant
-        const newRestaurantUser = await prisma.restaurantUser.create({
-          data: {
-            userId: userId,
-            restaurantId: parseInt(restaurantId),
-            role: 'admin'
-          }
-        });
-        restaurantUserId = newRestaurantUser.id;
-      }
-    } else {
-      // No restaurantId provided - this should not happen in the new multi-restaurant system
-      console.error('❌ No restaurantId provided in request body. This is required for multi-restaurant support.');
-      return res.status(400).json({ 
-        success: false,
-        error: 'Restaurant ID is required. Please ensure you are selecting a restaurant before creating conversations.' 
-      });
-    }
-
-    if (!restaurantUserId) {
-      console.error('❌ No restaurantUserId available for conversation creation');
-      return res.status(400).json({ 
-        success: false,
-        error: 'Restaurant user ID not found. Please ensure you are properly associated with a restaurant.' 
-      });
-    }
-
-    let conversation;
-    const parsedEmployeeId = parseInt(employeeId, 10);
-
-    // Check for existing conversation
-    if (jobPostId) {
-      conversation = await findConversationByJobPost(parsedEmployeeId, jobPostId, restaurantUserId, type);
-    }
-
-    if (talentPoolId) {
-      conversation = await findConversationByTalentPool(parsedEmployeeId, talentPoolId, restaurantUserId, type);
-    }
-
-    // Create new conversation if none exists
-    if (!conversation) {
-      
-      conversation = await createConversation({
-        employeeId: parsedEmployeeId,
-        jobPostId,
-        talentPoolId,
-        restaurantUserId,
-        restaurantId: restaurantId,
-        type
-      });
-      
-    } 
-
-    res.status(200).json({ 
-      success: true,
-      message: 'Conversation created/ensured.', 
-      data: conversation 
+    const conversation = await ChatService.createOrEnsureConversation({
+      userId,
+      employeeId,
+      jobPostId,
+      talentPoolId,
+      type,
+      restaurantId
     });
+
+    sendSuccessResponse(res, 200, 'Conversación creada/asegurada.', conversation);
   } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to create/ensure conversation.' 
-    });
-  }
-});
-
-// POST /contact-recommended-candidate - Create conversation with recommended candidate (from AI recommendations)
-router.post('/contact-recommended-candidate', checkCompany, getUserIdFromCookie, getRestaurantUserIdFromCookie, async (req, res) => {
-  try {
-    const { employeeId, jobPostId, restaurantId } = req.body;
-    const userId = req.userId;
-    const restaurantUserId = req.restaurantUserId;
-
-    if (!employeeId) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Employee ID is required' 
-      });
-    }
-
-    if (!restaurantId) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Restaurant ID is required' 
-      });
-    }
-
-    let conversation = null;
-    if (jobPostId) {
-      conversation = await findConversationByJobPost(
-        parseInt(employeeId),
-        parseInt(jobPostId),
-        restaurantUserId,
-        'applicant'
-      );
-    }
-
-    // If no conversation exists, create one
-    if (!conversation) {
-      // For recommended candidates, we can use 'talent' type or create without jobPostId
-      conversation = await createConversation({
-        employeeId: parseInt(employeeId),
-        jobPostId: jobPostId ? parseInt(jobPostId) : null,
-        talentPoolId: null,
-        restaurantUserId,
-        restaurantId: parseInt(restaurantId),
-        type: jobPostId ? 'applicant' : 'talent' // Use applicant if job exists, otherwise talent
-      });
-
-    } 
-
-    res.status(200).json({ 
-      success: true,
-      message: 'Conversation created successfully. You can now chat with this candidate.',
-      data: {
-        conversationId: conversation.id,
-        employeeId: parseInt(employeeId),
-        chatUrl: `/panel-empresa/inbox-empresa/${conversation.id}/${employeeId}`
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to create conversation with candidate.' 
+    handleChatError(res, error, {
+      context: {
+        userId: req.userId,
+        employeeId: req.body?.employeeId,
+        jobPostId: req.body?.jobPostId,
+        talentPoolId: req.body?.talentPoolId,
+        type: req.body?.type,
+        restaurantId: req.body?.restaurantId
+      },
+      logger: Logger
     });
   }
 });
@@ -550,150 +220,55 @@ router.get('/conversations/:employeeId/:type', checkCompany, getUserIdFromCookie
 });
 
 // GET /conversations - Get all conversations for current user
-router.get('/conversations', validateTokenAndIdentifyUser, async (req, res) => {
+router.get('/conversations', getUserIdFromCookie, getRestaurantUserIdFromCookie, getEmployeeIdFromCookie, async (req, res) => {
   try {
     const { type, restaurantId } = req.query;
-  
-    if (req.employeeId) {
-      const employeeConversations = await getEmployeeConversations(req.employeeId, type);
-      
-      // Convert restaurant image URLs to actual signed URLs in conversations
-      const conversationsWithSignedUrls = await Promise.all(
-        employeeConversations.map(async (conversation) => {
-          try {
-            const convertedConversation = { ...conversation };
-            if (conversation.restaurantUser?.restaurant) {
-              convertedConversation.restaurantUser.restaurant = await convertImageUrls(conversation.restaurantUser.restaurant, ['profileImageUrl', 'profileCarouselUrls']);
-            }
-            return convertedConversation;
-          } catch (error) {
-            console.error('❌ Error converting employee conversation images:', error);
-            return conversation; // Return original conversation if conversion fails
-          }
-        })
-      );
-      
-      return res.status(200).json({ 
-        success: true,
-        data: conversationsWithSignedUrls 
-      });
-    }
 
-    if (req.restaurantUserId) {
-      const restaurantConversations = await getRestaurantUserConversations(req.restaurantUserId, type, restaurantId);
-      
-      // Convert employee image URLs to actual signed URLs in conversations
-      const conversationsWithSignedUrls = await Promise.all(
-        restaurantConversations.map(async (conversation) => {
-          try {
-            const convertedConversation = { ...conversation };
-            if (conversation.employee) {
-              convertedConversation.employee = await convertImageUrls(conversation.employee, ['profileImageUrl']);
-            }
-            return convertedConversation;
-          } catch (error) {
-            console.error('❌ Error converting restaurant conversation images:', error);
-            return conversation; // Return original conversation if conversion fails
-          }
-        })
-      );
-      
-      return res.status(200).json({ 
-        success: true,
-        data: conversationsWithSignedUrls 
-      });
-    }
-
-    return res.status(400).json({ 
-      success: false,
-      message: 'Invalid user type or ID' 
+    const conversations = await ChatService.getConversations({
+      employeeId: req.employeeId,
+      restaurantUserId: req.restaurantUserId,
+      type,
+      restaurantId
     });
 
+    sendSuccessResponse(res, 200, null, conversations);
   } catch (error) {
-    console.error('🔍 [Conversations API] Error:', error);
-    return res.status(500).json({ 
-      success: false,
-      message: 'Internal Server Error' 
+    handleChatError(res, error, {
+      context: {
+        employeeId: req.employeeId,
+        restaurantUserId: req.restaurantUserId,
+        type: req.query?.type,
+        restaurantId: req.query?.restaurantId
+      },
+      logger: Logger
     });
   }
 });
 
 // DELETE /conversations/:conversationId - Delete conversation
-router.delete('/conversations/:conversationId', validateTokenAndIdentifyUser, async (req, res) => {
+router.delete('/conversations/:conversationId', getUserIdFromCookie, getRestaurantUserIdFromCookie, getEmployeeIdFromCookie, async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const userId = req.userId;
-    const userType = req.userType;
-    const role = req.role;
 
-    if (userType === 'empresas' && (role === 'admin' || role === 'staff')) {
-      
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: parseInt(conversationId) },
-        include: {
-          messages: {
-            include: {
-              sender: true,
-              receiver: true
-            }
-          }
-        }
-      });
-
-      if (!conversation) {
-        return res.status(404).json({ 
-          success: false,
-          error: 'Conversation not found.' 
-        });
-      }
-
-      // For admin/staff, allow deletion if they're part of the conversation
-      // Check if any messages were sent by this user or their restaurant
-      const hasAccess = conversation.messages.some(message => {
-        return message.senderId === userId || 
-               (message.senderRestaurantUserId && message.senderRestaurantUserId === conversation.restaurantUserId);
-      });
-
-      if (!hasAccess) {
-        return res.status(403).json({ 
-          success: false,
-          error: 'Unauthorized access to this conversation.' 
-        });
-      }
-
-    } else {
-      // For regular users, use the existing logic
-    const employeeId = req.employeeId;
-    const restaurantUserId = req.restaurantUserId;
-
-    if (!employeeId && !restaurantUserId) {
-      return res.status(403).json({ 
-        success: false,
-        error: 'Unauthorized access.' 
-      });
-      }
-    }
-
-    const conversation = await getConversationWithMessages(conversationId);
-
-    if (!conversation) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Conversation not found.' 
-      });
-    }
-
-    const conversationDeleted = await deleteConversation(conversationId);
-    
-    res.status(200).json({ 
-      success: true,
-      message: 'Conversation deleted successfully.' 
+    await ChatService.deleteConversation({
+      conversationId,
+      userId: req.userId,
+      userType: req.userType,
+      role: req.role,
+      employeeId: req.employeeId,
+      restaurantUserId: req.restaurantUserId
     });
+
+    sendSuccessResponse(res, 200, 'Conversación eliminada exitosamente.');
   } catch (error) {
-    console.error('Error deleting conversation:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to delete conversation.' 
+    handleChatError(res, error, {
+      context: {
+        conversationId: req.params.conversationId,
+        userId: req.userId,
+        userType: req.userType,
+        role: req.role
+      },
+      logger: Logger
     });
   }
 });

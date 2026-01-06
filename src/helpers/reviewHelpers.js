@@ -200,12 +200,93 @@ const getRestaurantAverageRating = async (restaurantId) => {
   };
 };
 
+/**
+ * Get reviews for a specific hiring
+ * @param {number} hiringId - Hiring ID
+ * @returns {Array} Array of reviews for this hiring
+ */
+const getReviewsForHiring = async (hiringId) => {
+  return await prisma.review.findMany({
+    where: {
+      hiringId: parseInt(hiringId)
+    },
+    include: {
+      employee: {
+        include: {
+          user: true
+        }
+      },
+      restaurant: true
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+};
+
+/**
+ * Check if a user has already reviewed a specific hiring
+ * @param {number} userId - User ID from token
+ * @param {string} userType - 'profesionales' or 'empresas'
+ * @param {Object} hiring - Hiring object (must include employeeId and restaurantId)
+ * @returns {Promise<boolean>} True if user has reviewed, false otherwise
+ */
+const checkUserHasReviewed = async (userId, userType, hiring) => {
+  if (!hiring) return false;
+
+  const expectedReviewType = userType === 'profesionales' ? 'restaurant_review' : 'employee_review';
+  
+  if (userType === 'profesionales') {
+    // Employee reviewing restaurant - verify employee belongs to this hiring
+    const employee = await prisma.employee.findFirst({
+      where: {
+        userId: parseInt(userId),
+        id: hiring.employeeId
+      }
+    });
+
+    if (!employee) return false;
+
+    const review = await prisma.review.findFirst({
+      where: {
+        hiringId: hiring.id,
+        employeeId: employee.id,
+        reviewType: expectedReviewType
+      }
+    });
+
+    return !!review;
+  } else {
+    // Company reviewing employee - verify restaurant belongs to this hiring
+    const restaurantUser = await prisma.restaurantUser.findFirst({
+      where: {
+        userId: parseInt(userId),
+        restaurantId: hiring.restaurantId
+      }
+    });
+
+    if (!restaurantUser) return false;
+
+    const review = await prisma.review.findFirst({
+      where: {
+        hiringId: hiring.id,
+        restaurantId: restaurantUser.restaurantId,
+        reviewType: expectedReviewType
+      }
+    });
+
+    return !!review;
+  }
+};
+
 module.exports = {
   createReview,
   getReviewsForEmployee,
   getReviewsForRestaurant,
   getReviewById,
   getEmployeeAverageRating,
-  getRestaurantAverageRating
+  getRestaurantAverageRating,
+  getReviewsForHiring,
+  checkUserHasReviewed
 };
 
